@@ -1,0 +1,211 @@
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  background: #091123;
+  color: #eef3ff;
+}
+
+.ext-shell {
+  min-width: 360px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(58, 135, 255, 0.26), transparent 24%),
+    linear-gradient(160deg, #091123, #0f1a39 60%, #08101f);
+}
+
+.ext-shell.compact {
+  min-height: auto;
+}
+
+.ext-card {
+  margin: 0 auto;
+  padding: 20px;
+  max-width: 860px;
+}
+
+.ext-card.wide {
+  max-width: 920px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.field span {
+  display: block;
+  margin-bottom: 6px;
+  color: #a9b4db;
+}
+
+.checkbox-field span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 1px solid rgba(126, 153, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: #eef3ff;
+  padding: 12px 14px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button.primary {
+  background: linear-gradient(135deg, #2d7cff, #7c5bff);
+}
+
+.actions {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.actions.inline {
+  grid-template-columns: 1fr;
+  margin-top: 10px;
+}
+
+.grid-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+
+.status {
+  min-height: 22px;
+  margin-bottom: 18px;
+  color: #85b7ff;
+}
+
+.status.error {
+  color: #ff7b95;
+}
+
+.status.ok {
+  color: #35d68e;
+}
+
+.muted {
+  color: #a9b4db;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.history-row {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.history-row.compact {
+  padding: 10px 12px;
+}
+
+.history-top {
+  display: flex;
+  gap: 12px;
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.history-actions button {
+  width: auto;
+  padding: 10px 12px;
+}
+
+.preview-card {
+  margin: 14px 0;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.preview-line {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.thumb {
+  width: 86px;
+  height: 86px;
+  border-radius: 14px;
+  object-fit: cover;
+  border: 1px solid rgba(126, 153, 255, 0.2);
+}
+
+.thumb.mini {
+  width: 52px;
+  height: 52px;
+}
+
+.thumb.placeholder {
+  display: grid;
+  place-items: center;
+  color: #a9b4db;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hidden {
+  display: none;
+}
+
+.playlist-preview {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.playlist-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mini-panel {
+  margin-top: 16px;
+}
+
+.history-list.compact {
+  gap: 8px;
+}
+
+@media (max-width: 700px) {
+  .grid-two,
+  .header-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+}

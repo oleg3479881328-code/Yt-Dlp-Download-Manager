@@ -1,0 +1,12 @@
+.venv/
+build/
+dist/
+dist_v2/
+downloads/
+graphify-out/
+data/app.db
+native_host/*.log
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "yt-dlp Quick Downloader",
+  "version": "0.1.0",
+  "description": "Standalone Chrome extension for quick yt-dlp downloads with mini and full modes.",
+  "icons": {
+    "16": "icons/notify-128.png",
+    "48": "icons/notify-128.png",
+    "128": "icons/notify-128.png"
+  },
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "notifications",
+    "tabs",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/notify-128.png",
+      "48": "icons/notify-128.png",
+      "128": "icons/notify-128.png"
+    },
+    "default_title": "yt-dlp Quick Downloader",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html"
+}

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>yt-dlp Download Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">Y</div>
+        <div>
+          <strong>yt-dlp</strong>
+          <p>Download Manager</p>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-link active" data-screen="dashboard">Dashboard</button>
+        <button class="nav-link" data-screen="queue">Queue</button>
+        <button class="nav-link" data-screen="history">History</button>
+        <button class="nav-link" data-screen="settings">Settings</button>
+      </nav>
+      <div class="sidebar-status">
+        <span id="worker-state">Worker: idle</span>
+        <span id="queue-size">Queue: 0</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="url-form">
+          <input id="url-input" type="url" placeholder="Enter media or playlist URL">
+          <button id="analyze-btn" class="accent-btn">Analyze</button>
+          <button id="queue-btn" class="ghost-btn">Add to Queue</button>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="screen active" id="screen-dashboard">
+          <div class="card analysis-card">
+            <div class="card-header">
+              <h2>Analysis</h2>
+              <span id="analysis-status">Waiting for URL</span>
+            </div>
+            <div id="analysis-result" class="analysis-empty">Analyze a URL to inspect metadata before queueing.</div>
+          </div>
+          <div class="dashboard-grid">
+            <div class="card">
+              <div class="card-header"><h2>Active Jobs</h2></div>
+              <div id="active-jobs" class="list"></div>
+            </div>
+            <div>
+              <div class="card compact">
+                <div class="card-header"><h2>Queue Preview</h2></div>
+                <div id="queue-preview" class="list"></div>
+              </div>
+              <div class="card compact">
+                <div class="card-header"><h2>System Status</h2></div>
+                <div id="system-status" class="system-status"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-queue">
+          <div class="card">
+            <div class="card-header"><h2>Queue</h2></div>
+            <div id="queue-list" class="table-list"></div>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-history">
+          <div class="card">
+            <div class="card-header">
+              <h2>History</h2>
+              <div class="filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="completed">Success</button>
+                <button class="filter-btn" data-filter="failed">Failed</button>
+              </div>
+            </div>
+            <div id="history-list" class="table-list"></div>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-settings">
+          <div class="card">
+            <div class="card-header"><h2>Settings</h2></div>
+            <form id="settings-form" class="settings-form"></form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="details">
+      <div class="card details-card">
+        <div class="card-header">
+          <h2>Details</h2>
+          <span id="details-title">No job selected</span>
+        </div>
+        <div id="details-body" class="details-body"></div>
+      </div>
+    </aside>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "path": "C:\\Users\\oleg3\\OneDrive\\Documents\\_PROJECTS\\Downloader yt-dlp\\dist_v2\\ytdlp_host\\ytdlp_host.exe",
+  "name": "com.oleg.ytdlp",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://onigbmlpdjafojaimlplcpnplbladecd/"
+  ],
+  "description": "yt-dlp native messaging host"
+}

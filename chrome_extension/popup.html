@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>yt-dlp Quick Downloader</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="ext-shell compact">
+  <div class="ext-card">
+    <h1>yt-dlp</h1>
+    <p class="muted">Mini mode for one-click downloads and full mode for manual control.</p>
+    <label class="field">
+      <span>Режим</span>
+      <select id="workMode">
+        <option value="mini">Mini</option>
+        <option value="full">Full</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>По умолчанию</span>
+      <select id="defaultMode">
+        <option value="video">Video</option>
+        <option value="audio">Audio</option>
+      </select>
+    </label>
+    <div class="actions">
+      <button id="openFull" class="primary">Открыть полный режим</button>
+      <button id="openFolder">Папка загрузок</button>
+      <button id="openLastFile">Последний файл</button>
+      <button id="openOptions">Настройки</button>
+    </div>
+    <div id="status" class="status"></div>
+    <div class="mini-panel">
+      <h2>Recent</h2>
+      <div id="miniHistory" class="history-list compact"></div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
