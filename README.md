@@ -68,6 +68,7 @@ Standalone extension extras:
 - metadata preview before download
 - recent local jobs
 - optional transcript generation after download
+- local audio/video file upload for transcription in full mode
 - open downloads folder
 - open last completed file
 - local status updates from `_logs\jobs_registry.json`

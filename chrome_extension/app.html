@@ -56,6 +56,17 @@
         Таймкоды по секундам
       </span>
     </label>
+    <section class="upload-panel">
+      <h2>Локальный файл для транскрибации</h2>
+      <p class="muted">Выберите свой аудио- или видеофайл. Расширение передаст его в native host и создаст рядом `.srt` и `.txt`.</p>
+      <label class="field">
+        <span>Файл</span>
+        <input id="localFile" type="file" accept="audio/*,video/*">
+      </label>
+      <div class="actions inline">
+        <button id="transcribeLocalFile">Загрузить файл и расшифровать</button>
+      </div>
+    </section>
     <div class="actions">
       <button id="download" class="primary">Скачать</button>
       <button id="probe">Проверить инструменты</button>

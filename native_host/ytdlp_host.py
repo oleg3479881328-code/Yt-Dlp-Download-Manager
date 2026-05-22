@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -26,6 +27,10 @@ MEDIA_EXTENSIONS = {
     ".ogg",
     ".flac",
     ".mov",
+    ".aac",
+    ".avi",
+    ".m4v",
+    ".wma",
 }
 
 
@@ -218,6 +223,18 @@ def write_log_line(log_path: Path, message: str) -> None:
         log_file.write(message.rstrip() + "\n")
 
 
+def build_uploaded_media_path(output_dir: Path, original_name: str | None) -> Path:
+    raw_name = Path(original_name or "uploaded_media").name
+    stem = Path(raw_name).stem or "uploaded_media"
+    suffix = Path(raw_name).suffix.lower()
+    if suffix not in MEDIA_EXTENSIONS:
+        raise ValueError("Supported file types: audio and video files")
+
+    safe_stem = re.sub(r"[^A-Za-z0-9._ -]+", "_", stem).strip(" .") or "uploaded_media"
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return output_dir / f"{safe_stem} [upload {stamp}]{suffix}"
+
+
 def _fmt_srt_time(seconds: float, second_marks: bool) -> str:
     if second_marks:
         total = max(0, int(round(seconds)))
@@ -300,6 +317,72 @@ def build_runner_command(job_file: Path) -> list[str]:
     if getattr(sys, "frozen", False):
         return [sys.executable, "--run-job", str(job_file)]
     return [sys.executable, str(Path(__file__).resolve()), "--run-job", str(job_file)]
+
+
+def queue_transcription_job(
+    output_dir: Path,
+    *,
+    input_path: Path,
+    title: str | None,
+    transcript_second_marks: bool,
+    transcription_language: str | None,
+    kind: str,
+) -> dict[str, Any]:
+    _, log_dir = ensure_output_dirs(output_dir)
+    job_id = str(uuid.uuid4())
+    log_path = log_dir / f"{job_id}.log"
+    job_file = log_dir / f"{job_id}.job.json"
+    job = {
+        "jobId": job_id,
+        "pid": None,
+        "url": None,
+        "mode": "local-file",
+        "quality": None,
+        "status": "queued",
+        "progress": 0,
+        "logPath": str(log_path),
+        "outputDirectory": str(output_dir),
+        "outputPath": str(input_path),
+        "transcribeAudio": True,
+        "transcriptSecondMarks": bool(transcript_second_marks),
+        "transcriptPath": None,
+        "transcriptTextPath": None,
+        "transcriptCount": 0,
+        "title": title or input_path.name,
+        "thumbnail": None,
+        "createdAt": utc_now(),
+        "updatedAt": utc_now(),
+    }
+    upsert_job(output_dir, job)
+    job_payload = {
+        "kind": kind,
+        "job": job,
+        "message": {
+            "transcriptSecondMarks": bool(transcript_second_marks),
+            "transcriptionLanguage": transcription_language or "auto",
+            "inputPath": str(input_path),
+        },
+        "command": None,
+    }
+    job_file.write_text(json.dumps(job_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    process = subprocess.Popen(
+        build_runner_command(job_file),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        creationflags=DETACHED_FLAGS,
+        close_fds=False,
+    )
+    update_job(output_dir, job_id, pid=process.pid, status="started")
+    return {
+        "ok": True,
+        "jobId": job_id,
+        "pid": process.pid,
+        "message": "Transcription started",
+        "logPath": str(log_path),
+        "outputDirectory": str(output_dir),
+        "outputPath": str(input_path),
+    }
 
 
 def handle_download(message: dict[str, Any]) -> dict[str, Any]:
@@ -461,12 +544,72 @@ def handle_open_job_folder(message: dict[str, Any]) -> dict[str, Any]:
     return {"ok": False, "error": "Job not found"}
 
 
-def run_job_file(job_file_arg: str) -> None:
-    job_file = Path(job_file_arg)
-    payload = json.loads(job_file.read_text(encoding="utf-8"))
-    job = payload["job"]
-    message = payload["message"]
-    command = payload["command"]
+def handle_upload_transcribe_stream(message: dict[str, Any]) -> None:
+    output_dir = Path(message["outputDirectory"])
+    output_dir.mkdir(parents=True, exist_ok=True)
+    target_path = build_uploaded_media_path(output_dir, str(message.get("filename") or "uploaded_media"))
+    temp_path = target_path.with_suffix(target_path.suffix + ".part")
+    upload_id = str(uuid.uuid4())
+    expected_size = int(message.get("size") or 0)
+    written = 0
+
+    temp_path.write_bytes(b"")
+    send_message({"ok": True, "stage": "ready", "uploadId": upload_id})
+
+    try:
+        while True:
+            chunk_message = read_message()
+            action = chunk_message.get("action")
+            if action == "upload_transcribe_chunk":
+                if chunk_message.get("uploadId") != upload_id:
+                    raise RuntimeError("Upload session mismatch")
+                chunk_bytes = base64.b64decode(chunk_message["chunkBase64"], validate=True)
+                with temp_path.open("ab") as upload_file:
+                    upload_file.write(chunk_bytes)
+                written += len(chunk_bytes)
+                send_message(
+                    {
+                        "ok": True,
+                        "stage": "chunk",
+                        "uploadId": upload_id,
+                        "receivedBytes": written,
+                    }
+                )
+                continue
+
+            if action == "upload_transcribe_finish":
+                if chunk_message.get("uploadId") != upload_id:
+                    raise RuntimeError("Upload session mismatch")
+                if expected_size and written != expected_size:
+                    raise RuntimeError(f"Uploaded size mismatch: expected {expected_size}, got {written}")
+                temp_path.replace(target_path)
+                response = queue_transcription_job(
+                    output_dir,
+                    input_path=target_path,
+                    title=target_path.name,
+                    transcript_second_marks=bool(message.get("transcriptSecondMarks", True)),
+                    transcription_language=str(message.get("transcriptionLanguage") or "auto"),
+                    kind="upload_transcription",
+                )
+                response["stage"] = "queued"
+                response["uploadId"] = upload_id
+                send_message(response)
+                return
+
+            if action == "upload_transcribe_abort":
+                if chunk_message.get("uploadId") == upload_id and temp_path.exists():
+                    temp_path.unlink()
+                send_message({"ok": False, "stage": "aborted", "uploadId": upload_id, "error": "Upload aborted"})
+                return
+
+            raise RuntimeError(f"Unsupported upload action: {action}")
+    except Exception as exc:  # noqa: BLE001
+        if temp_path.exists():
+            temp_path.unlink()
+        send_message({"ok": False, "stage": "error", "uploadId": upload_id, "error": str(exc)})
+
+
+def run_download_job(job: dict[str, Any], message: dict[str, Any], command: list[str]) -> None:
     output_dir = Path(job["outputDirectory"])
     log_path = Path(job["logPath"])
     started_ts = datetime.now().timestamp()
@@ -596,6 +739,86 @@ def run_job_file(job_file_arg: str) -> None:
     write_log_line(log_path, f"[transcribe] completed for {transcript_count} file(s)")
 
 
+def run_uploaded_transcription_job(job: dict[str, Any], message: dict[str, Any]) -> None:
+    output_dir = Path(job["outputDirectory"])
+    log_path = Path(job["logPath"])
+    input_path = Path(message["inputPath"])
+    if not input_path.exists():
+        update_job(
+            output_dir,
+            job["jobId"],
+            status="failed",
+            progress=0,
+            outputPath=str(input_path),
+            lastMessage="Uploaded input file not found",
+            pid=None,
+        )
+        write_log_line(log_path, "[transcribe] failed: uploaded input file not found")
+        return
+
+    update_job(
+        output_dir,
+        job["jobId"],
+        status="transcribing",
+        progress=100,
+        outputPath=str(input_path),
+        lastMessage="Transcription started",
+    )
+    write_log_line(log_path, f"[transcribe] processing uploaded file: {input_path.name}")
+
+    second_marks = bool(message.get("transcriptSecondMarks", True))
+    transcription_language = str(message.get("transcriptionLanguage") or "auto").strip().lower()
+    language_code = None if transcription_language == "auto" else transcription_language
+
+    try:
+        srt_path, txt_path = transcribe_to_srt(
+            input_path,
+            second_marks=second_marks,
+            language=language_code,
+        )
+    except Exception as exc:  # noqa: BLE001
+        update_job(
+            output_dir,
+            job["jobId"],
+            status="failed",
+            progress=100,
+            outputPath=str(input_path),
+            lastMessage=f"Transcription failed: {exc}",
+            pid=None,
+        )
+        write_log_line(log_path, f"[transcribe] failed: {exc}")
+        return
+
+    update_job(
+        output_dir,
+        job["jobId"],
+        status="completed",
+        progress=100,
+        outputPath=str(input_path),
+        transcriptPath=str(srt_path),
+        transcriptTextPath=str(txt_path),
+        transcriptCount=1,
+        lastMessage="Transcript created for uploaded file",
+        pid=None,
+    )
+    write_log_line(log_path, f"[transcribe] saved: {srt_path.name}, {txt_path.name}")
+    write_log_line(log_path, "[transcribe] completed for uploaded file")
+
+
+def run_job_file(job_file_arg: str) -> None:
+    job_file = Path(job_file_arg)
+    payload = json.loads(job_file.read_text(encoding="utf-8"))
+    job = payload["job"]
+    message = payload["message"]
+    kind = payload.get("kind", "download")
+    if kind == "upload_transcription":
+        run_uploaded_transcription_job(job, message)
+        return
+
+    command = payload["command"]
+    run_download_job(job, message, command)
+
+
 def main() -> None:
     try:
         if len(sys.argv) >= 3 and sys.argv[1] == "--run-job":
@@ -606,6 +829,9 @@ def main() -> None:
         action = message.get("action")
         if action == "download":
             send_message(handle_download(message))
+            return
+        if action == "upload_transcribe_start":
+            handle_upload_transcribe_stream(message)
             return
         if action == "open_folder":
             send_message(handle_open_folder(message))

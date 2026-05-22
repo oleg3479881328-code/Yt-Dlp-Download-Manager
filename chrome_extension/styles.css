@@ -149,6 +149,18 @@ button.primary {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.upload-panel {
+  margin: 18px 0;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(96, 220, 255, 0.35);
+  background: rgba(39, 180, 255, 0.08);
+}
+
+.upload-panel h2 {
+  margin: 0 0 8px;
+}
+
 .preview-line {
   display: flex;
   gap: 14px;

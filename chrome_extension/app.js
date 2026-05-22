@@ -1,10 +1,14 @@
 const FALLBACK = {
+  nativeHostName: "com.oleg.ytdlp",
+  outputDirectory: "C:\\yt-dlp\\DOWNLOADS",
   defaultMode: "video",
   quality: "best",
   defaultTranscribeAudio: false,
   defaultTranscriptionLanguage: "auto",
   defaultTranscriptSecondMarks: true
 };
+
+const UPLOAD_CHUNK_BYTES = 256 * 1024;
 
 let pollTimer = null;
 let currentAnalysis = null;
@@ -13,10 +17,53 @@ function qs(id) {
   return document.getElementById(id);
 }
 
+function syncTranscriptionControls() {
+  const hasLocalFile = Boolean(qs("localFile")?.files?.length);
+  const enabled = qs("transcribeAudio").checked || hasLocalFile;
+  qs("transcriptionLanguage").disabled = !enabled;
+  qs("transcriptSecondMarks").disabled = !enabled;
+}
+
 function setStatus(message, isError = false) {
   const node = qs("status");
   node.textContent = message;
   node.className = isError ? "status error" : "status ok";
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const step = 0x8000;
+  for (let index = 0; index < bytes.length; index += step) {
+    const slice = bytes.subarray(index, index + step);
+    binary += String.fromCharCode(...slice);
+  }
+  return btoa(binary);
+}
+
+function sendNativePortMessage(port, payload) {
+  return new Promise((resolve, reject) => {
+    const onMessage = (message) => {
+      cleanup();
+      resolve(message);
+    };
+    const onDisconnect = () => {
+      cleanup();
+      reject(new Error(chrome.runtime.lastError?.message || "Native host disconnected"));
+    };
+    const cleanup = () => {
+      port.onMessage.removeListener(onMessage);
+      port.onDisconnect.removeListener(onDisconnect);
+    };
+    port.onMessage.addListener(onMessage);
+    port.onDisconnect.addListener(onDisconnect);
+    port.postMessage(payload);
+  });
+}
+
+async function appendUploadedHistory(entry) {
+  const { history = [] } = await chrome.storage.local.get({ history: [] });
+  history.unshift(entry);
+  await chrome.storage.local.set({ history: history.slice(0, 50) });
 }
 
 async function loadState() {
@@ -28,8 +75,7 @@ async function loadState() {
   qs("transcribeAudio").checked = Boolean(settings.defaultTranscribeAudio);
   qs("transcriptionLanguage").value = settings.defaultTranscriptionLanguage || FALLBACK.defaultTranscriptionLanguage;
   qs("transcriptSecondMarks").checked = Boolean(settings.defaultTranscriptSecondMarks);
-  qs("transcriptionLanguage").disabled = !qs("transcribeAudio").checked;
-  qs("transcriptSecondMarks").disabled = !qs("transcribeAudio").checked;
+  syncTranscriptionControls();
   await refreshStatuses();
   const { history = [] } = await chrome.storage.local.get({ history: [] });
   qs("history").innerHTML = history.length ? history.map((item) => `
@@ -52,8 +98,11 @@ async function loadState() {
 }
 
 qs("transcribeAudio").addEventListener("change", () => {
-  qs("transcriptionLanguage").disabled = !qs("transcribeAudio").checked;
-  qs("transcriptSecondMarks").disabled = !qs("transcribeAudio").checked;
+  syncTranscriptionControls();
+});
+
+qs("localFile").addEventListener("change", () => {
+  syncTranscriptionControls();
 });
 
 function renderPreview(analysis) {
@@ -138,6 +187,87 @@ qs("download").addEventListener("click", async () => {
     await loadState();
   } catch (error) {
     setStatus(error.message || "Ошибка запуска", true);
+  }
+});
+
+qs("transcribeLocalFile").addEventListener("click", async () => {
+  const file = qs("localFile").files?.[0];
+  if (!file) {
+    setStatus("Сначала выберите аудио- или видеофайл", true);
+    return;
+  }
+
+  const settings = await chrome.storage.local.get(FALLBACK);
+  const port = chrome.runtime.connectNative(settings.nativeHostName || FALLBACK.nativeHostName);
+
+  try {
+    setStatus("Подготавливаю загрузку файла...");
+    const startResponse = await sendNativePortMessage(port, {
+      action: "upload_transcribe_start",
+      filename: file.name,
+      size: file.size,
+      mimeType: file.type,
+      outputDirectory: settings.outputDirectory || FALLBACK.outputDirectory,
+      transcriptSecondMarks: qs("transcriptSecondMarks").checked,
+      transcriptionLanguage: qs("transcriptionLanguage").value
+    });
+    if (!startResponse.ok) {
+      throw new Error(startResponse.error || "Не удалось начать передачу файла");
+    }
+
+    let uploadedBytes = 0;
+    for (let offset = 0; offset < file.size; offset += UPLOAD_CHUNK_BYTES) {
+      const chunkBuffer = await file.slice(offset, offset + UPLOAD_CHUNK_BYTES).arrayBuffer();
+      const chunkBytes = new Uint8Array(chunkBuffer);
+      uploadedBytes += chunkBytes.length;
+      const chunkResponse = await sendNativePortMessage(port, {
+        action: "upload_transcribe_chunk",
+        uploadId: startResponse.uploadId,
+        chunkBase64: bytesToBase64(chunkBytes)
+      });
+      if (!chunkResponse.ok) {
+        throw new Error(chunkResponse.error || "Ошибка передачи файла");
+      }
+      const percent = file.size ? Math.min(100, Math.round((uploadedBytes / file.size) * 100)) : 100;
+      setStatus(`Передача файла в native host: ${percent}%`);
+    }
+
+    const finishResponse = await sendNativePortMessage(port, {
+      action: "upload_transcribe_finish",
+      uploadId: startResponse.uploadId
+    });
+    if (!finishResponse.ok) {
+      throw new Error(finishResponse.error || "Не удалось поставить транскрибацию в очередь");
+    }
+
+    await appendUploadedHistory({
+      id: finishResponse.jobId,
+      url: "",
+      source: "local-upload",
+      mode: "local-file",
+      createdAt: new Date().toISOString(),
+      outputDirectory: finishResponse.outputDirectory || settings.outputDirectory || FALLBACK.outputDirectory,
+      status: "started",
+      progress: 0,
+      transcribeAudio: true,
+      transcriptionLanguage: qs("transcriptionLanguage").value,
+      transcriptSecondMarks: qs("transcriptSecondMarks").checked,
+      logPath: finishResponse.logPath,
+      outputPath: finishResponse.outputPath,
+      title: file.name,
+      thumbnail: null,
+      lastMessage: "Локальный файл поставлен в очередь на транскрибацию"
+    });
+
+    setStatus("Файл передан. Транскрибация запущена.");
+    await loadState();
+  } catch (error) {
+    setStatus(error.message || "Ошибка загрузки файла", true);
+  } finally {
+    try {
+      port.disconnect();
+    } catch (_error) {
+    }
   }
 });
 
