@@ -71,6 +71,54 @@
 - Implementation (реализация): not started (не начата).
 - Validation (проверка работы): not performed (не проводилась).
 
+---
+
+## 2026-05-25 — Phase 1 Codex execution handoff prepared
+
+### Goal
+
+Передать Codex узкую и проверяемую реализацию первого MVP модуля анимированных субтитров без изменения существующего downloader application (приложения-загрузчика).
+
+### Research And Design Decision
+
+Поскольку существующая web dashboard (веб-панель) реализована на FastAPI + обычном HTML/JavaScript, а `Remotion` требует React/Node video-rendering layer (слой отрисовки видео на React/Node), первый MVP изолируется в новой папке:
+
+- `subtitle_studio/`
+
+Phase 1 ограничен rendering proof (доказательством отрисовки):
+
+- локальный ролик пользователя;
+- подготовленный JSON с word-level timing (временными метками отдельных слов);
+- один `KaraokePresetV1`;
+- preview (предпросмотр);
+- экспорт MP4 с burned-in animated subtitles (вшитыми анимированными субтитрами).
+
+Транскрибация, получение субтитров через `yt-dlp`, несколько пресетов и интеграция с существующей веб-панелью отложены до подтверждённого первого экспорта.
+
+### Committed Artifacts
+
+- `workflow-runs/0002-animated-subtitle-module/02_RESEARCH.md`
+- `workflow-runs/0002-animated-subtitle-module/03_PLAN.md`
+- `workflow-runs/0002-animated-subtitle-module/05_IMPLEMENTATION_HANDOFF_PACKET.md`
+- `workflow-runs/0002-animated-subtitle-module/06_REVIEW.md`
+- Updated `PROJECT_STATE.md`
+
+### Coordination Surface
+
+Создан GitHub Issue `#1 Implement Phase 1 Animated Subtitle Video Maker MVP` как канал передачи задачи Codex. Issue указывает Codex читать канонический пакет и запрещает выход за утверждённый scope (границы задачи).
+
+### Review Outcome
+
+`accept for execution with warnings`
+
+### State Separation
+
+- Research and plan (исследование и план): committed (зафиксированы).
+- Handoff packet (пакет реализации): committed and reviewed (зафиксирован и проверен).
+- GitHub transport issue (задача-переносчик GitHub): created (создана).
+- Code implementation (реализация кода): not executed yet (ещё не выполнена).
+- MP4 render validation (проверка экспорта MP4): not performed yet (ещё не выполнена).
+
 ### Current Next Action
 
-Подготовить `Implementation Handoff Packet` (пакет задания на реализацию) для Codex на Phase 1 MVP: собственный ролик → тайминги слов → один караоке-пресет → предпросмотр → экспорт MP4 с вшитыми субтитрами.
+Codex выполняет GitHub Issue #1 по пакету `workflow-runs/0002-animated-subtitle-module/05_IMPLEMENTATION_HANDOFF_PACKET.md` и возвращает обязательный `EXECUTION REPORT` (отчёт о выполнении).
