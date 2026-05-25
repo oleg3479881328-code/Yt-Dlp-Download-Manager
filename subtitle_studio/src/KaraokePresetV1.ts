@@ -1,0 +1,23 @@
+export const KARAOKE_PRESET_V1 = {
+  pageSwitchMs: 1100,
+  safeBottom: 260,
+  maxWidth: 860,
+  fontSize: 84,
+  lineHeight: 1.15,
+  fontWeight: 800,
+  letterSpacing: "0.01em",
+  borderRadius: 36,
+  paddingX: 42,
+  paddingY: 28,
+  inactiveColor: "#eef4ff",
+  activeColor: "#171923",
+  activeFill: "#9ff96b",
+  panelBackground: "rgba(6, 10, 27, 0.70)",
+  panelBorder: "1px solid rgba(255, 255, 255, 0.16)",
+  textShadow: "0 10px 28px rgba(0, 0, 0, 0.45)",
+  strokeColor: "rgba(3, 6, 17, 0.88)",
+  strokeWidth: "0.075em",
+  boxShadow: "0 28px 70px rgba(0, 0, 0, 0.45)",
+  overlayGradient:
+    "linear-gradient(180deg, rgba(3, 6, 18, 0) 0%, rgba(3, 6, 18, 0.08) 42%, rgba(3, 6, 18, 0.72) 100%)",
+} as const;
