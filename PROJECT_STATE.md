@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 03_PLAN
+current_step: 05_EXECUTION_SPEC
 current_run: workflow-runs/0002-animated-subtitle-module/
 last_updated: 2026-05-25
-next_action: Prepare an Implementation Handoff Packet for Phase 1 Animated Subtitle Video Maker MVP.
+next_action: Execute GitHub Issue #1 through Codex and return the required execution report.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -12,6 +12,8 @@ next_action: Prepare an Implementation Handoff Packet for Phase 1 Animated Subti
 ## Current Phase
 
 Личный локальный инструмент нормализован в `compact mode` (компактном режиме) Project Execution OS. Scope (границы проекта) расширен подтверждённым решением владельца: в этот же репозиторий добавляется модуль создания собственных роликов с анимированными субтитрами.
+
+Phase 1 MVP (первая минимально рабочая версия) спроектирован, проверен review (ревью — проверкой) и передан Codex через GitHub Issue #1. Реализация кода ещё не подтверждена.
 
 ## Purpose
 
@@ -43,6 +45,8 @@ next_action: Prepare an Implementation Handoff Packet for Phase 1 Animated Subti
 4. Существующие два runtime contours (исполнительных контура) — web dashboard (веб-панель) и extension/native host (расширение/локальный мост) — сохраняются как допустимый компромисс личного инструмента.
 5. Решение владельца от 2026-05-25: добавить `Animated Subtitle Video Maker` внутрь текущего проекта, а не создавать отдельный репозиторий.
 6. Технологическое направление для нового модуля: `Remotion` + `@remotion/captions` для preview/rendering (предпросмотра/отрисовки), `stable-ts` / `faster-whisper` для word-level timing (временных меток слов), `yt-dlp` для получения уже существующих субтитров источника.
+7. Phase 1 MVP проверяет только rendering proof (доказательство отрисовки): локальный ролик + подготовленные тайминги слов → один караоке-пресет → предпросмотр → экспорт MP4.
+8. Автоматическая транскрибация и получение исходных субтитров отложены до успешной проверки Phase 1 MVP.
 
 ## Approved Not Yet Implemented Scope
 
@@ -56,7 +60,15 @@ next_action: Prepare an Implementation Handoff Packet for Phase 1 Animated Subti
 - видеть preview (предпросмотр);
 - экспортировать MP4 с burned-in subtitles (вшитыми субтитрами).
 
-Implementation status (статус реализации): approved scope only (утверждены только границы); код модуля не создан и не проверен.
+Implementation status (статус реализации): handoff issued (пакет на реализацию передан); code execution not yet evidenced (выполнение кода ещё не подтверждено).
+
+## Active Execution Handoff
+
+- Research artifact (артефакт исследования): `workflow-runs/0002-animated-subtitle-module/02_RESEARCH.md`
+- Plan artifact (артефакт плана): `workflow-runs/0002-animated-subtitle-module/03_PLAN.md`
+- Canonical packet (канонический пакет задания): `workflow-runs/0002-animated-subtitle-module/05_IMPLEMENTATION_HANDOFF_PACKET.md`
+- Packet review (ревью пакета): `workflow-runs/0002-animated-subtitle-module/06_REVIEW.md`
+- GitHub transport issue (задача-переносчик GitHub): `#1 Implement Phase 1 Animated Subtitle Video Maker MVP`
 
 ## Reviewed Risks
 
@@ -76,12 +88,12 @@ Status (статус): accepted warning (принятое предупрежде
 
 Добавление `Remotion` создаёт JavaScript/React video-rendering layer (слой рендеринга видео на JavaScript/React) рядом с существующим Python-приложением.
 
-Status (статус): accepted for planned module (принято для запланированного модуля); MVP должен быть узким и не затрагивать существующие загрузки.
+Status (статус): accepted for planned module (принято для запланированного модуля); Phase 1 изолирован в `subtitle_studio/` и не должен затрагивать существующие загрузки.
 
 ## Latest Result
 
-Решение о новом модуле подтверждено владельцем и зафиксировано в проектном состоянии. Реализация ещё не начата.
+Подготовлен и проверен пакет реализации Phase 1 MVP; создан GitHub Issue #1 для выполнения через Codex. Код нового модуля ещё не реализован и не проверен.
 
 ## Current Next Action
 
-Подготовить `Implementation Handoff Packet` (пакет задания на реализацию) для Codex на Phase 1 MVP (первую минимально рабочую версию): собственный ролик → тайминги слов → один караоке-пресет → предпросмотр → экспорт MP4 с вшитыми субтитрами.
+Codex должен выполнить `workflow-runs/0002-animated-subtitle-module/05_IMPLEMENTATION_HANDOFF_PACKET.md` через GitHub Issue #1 и вернуть обязательный `EXECUTION REPORT` (отчёт о выполнении) до утверждения следующих работ.
