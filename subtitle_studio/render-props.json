@@ -1,0 +1,24 @@
+{
+  "captions": [
+    {"text": "This", "startMs": 0, "endMs": 340, "timestampMs": 170, "confidence": 0.99},
+    {"text": " local", "startMs": 340, "endMs": 760, "timestampMs": 540, "confidence": 0.99},
+    {"text": " preview", "startMs": 760, "endMs": 1220, "timestampMs": 980, "confidence": 0.99},
+    {"text": " shows", "startMs": 1220, "endMs": 1600, "timestampMs": 1410, "confidence": 0.99},
+    {"text": " one", "startMs": 1600, "endMs": 1840, "timestampMs": 1720, "confidence": 0.99},
+    {"text": " karaoke", "startMs": 1840, "endMs": 2360, "timestampMs": 2090, "confidence": 0.99},
+    {"text": " preset", "startMs": 2360, "endMs": 2740, "timestampMs": 2550, "confidence": 0.99},
+    {"text": " with", "startMs": 2740, "endMs": 3040, "timestampMs": 2890, "confidence": 0.99},
+    {"text": " active", "startMs": 3040, "endMs": 3500, "timestampMs": 3270, "confidence": 0.99},
+    {"text": " word", "startMs": 3500, "endMs": 3840, "timestampMs": 3670, "confidence": 0.99},
+    {"text": " highlighting", "startMs": 3840, "endMs": 4520, "timestampMs": 4180, "confidence": 0.99},
+    {"text": " and", "startMs": 4520, "endMs": 4780, "timestampMs": 4650, "confidence": 0.99},
+    {"text": " a", "startMs": 4780, "endMs": 4940, "timestampMs": 4860, "confidence": 0.99},
+    {"text": " restrained", "startMs": 4940, "endMs": 5580, "timestampMs": 5260, "confidence": 0.99},
+    {"text": " pop", "startMs": 5580, "endMs": 5880, "timestampMs": 5730, "confidence": 0.99},
+    {"text": " animation", "startMs": 5880, "endMs": 6540, "timestampMs": 6200, "confidence": 0.99},
+    {"text": " over", "startMs": 6540, "endMs": 6820, "timestampMs": 6680, "confidence": 0.99},
+    {"text": " your", "startMs": 6820, "endMs": 7100, "timestampMs": 6960, "confidence": 0.99},
+    {"text": " local", "startMs": 7100, "endMs": 7440, "timestampMs": 7270, "confidence": 0.99},
+    {"text": " video.", "startMs": 7440, "endMs": 8000, "timestampMs": 7720, "confidence": 0.99}
+  ]
+}

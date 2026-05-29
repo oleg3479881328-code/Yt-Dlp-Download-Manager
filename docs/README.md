@@ -14,9 +14,9 @@
 
 ## Documents
 
-- [decisions.md](C:/Users/oleg3/OneDrive/Documents/Yt-Dlp-Download-Manager/docs/decisions.md)
-- [troubleshooting.md](C:/Users/oleg3/OneDrive/Documents/Yt-Dlp-Download-Manager/docs/troubleshooting.md)
-- [chrome-extension.md](C:/Users/oleg3/OneDrive/Documents/Yt-Dlp-Download-Manager/docs/chrome-extension.md)
+- [decisions.md](./decisions.md)
+- [troubleshooting.md](./troubleshooting.md)
+- [chrome-extension.md](./chrome-extension.md)
 
 ## Handoff Reading Order
 

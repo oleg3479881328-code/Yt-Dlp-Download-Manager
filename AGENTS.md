@@ -18,9 +18,9 @@ If you are an AI coding agent, start from the repository itself and follow the r
 
 Current priority:
 
-- fix the blocked `subtitle_studio` Phase 1 MVP review issues;
-- validate an MP4 render with content longer than 8 seconds;
-- return the required `EXECUTION REPORT` (отчёт о выполнении).
+- Phase 1 MVP is **accepted** after owner visual review.
+- Plan Phase 2 (transcription integration via `stable-ts` / `faster-whisper`).
+- Await separate owner decision before starting Phase 2 implementation.
 
 Do not begin `Video Content Analyzer` implementation. That future module is research-only and not approved for execution.
 

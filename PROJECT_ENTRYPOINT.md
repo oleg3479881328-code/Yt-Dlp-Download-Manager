@@ -33,7 +33,7 @@
 - `chrome_extension/` — standalone Chrome extension (отдельное расширение Chrome).
 - `native_host/` — native messaging host (локальный мост между расширением и Windows-инструментами).
 - optional transcription (опциональная транскрибация) through `faster-whisper` into `.srt` and `.txt`.
-- `subtitle_studio/` — isolated Remotion implementation (изолированная реализация на Remotion) of the animated subtitle Phase 1 MVP; code exists but current review has not accepted it.
+- `subtitle_studio/` — isolated Remotion implementation (изолированная реализация на Remotion) of the animated subtitle Phase 1 MVP; code exists, validated, and **accepted after owner visual review**.
 
 ## Active Work — Animated Subtitle Video Maker
 
@@ -45,7 +45,9 @@
 - preview (предпросмотр);
 - export (экспорт) готового MP4 с вшитыми анимированными субтитрами.
 
-Implementation state (статус реализации): code present, but `changes requested` (запрошены изменения). Active blockers are recorded in `PROJECT_STATE.md` and GitHub Issue `#1`, including fixed 8-second duration and missing required execution-report evidence.
+Implementation state (статус реализации): **accepted after owner visual review**. Phase 1 MVP завершён. Финальный артефакт: `subtitle_studio/out/karaoke-preview-v5.mp4` (255 frames, 805.8 kB).
+
+Следующий шаг: планирование Phase 2 (интеграция транскрибации). Ожидание отдельного решения владельца для авторизации Phase 2.
 
 ## Future Captured Module — Video Content Analyzer
 
@@ -62,7 +64,7 @@ Captured direction:
 
 ## Canonical Next Action
 
-Codex must fix the outstanding Phase 1 review blockers in GitHub Issue `#1`, validate an MP4 render with content longer than 8 seconds, and return the required structured `EXECUTION REPORT` (отчёт о выполнении). Do not begin `Video Content Analyzer` implementation before that MVP is accepted and a separate owner decision authorizes the next task.
+Phase 1 MVP принят. Планировать Phase 2 (интеграция транскрибации с stable-ts / faster-whisper и импорт субтитров через yt-dlp). Ожидать отдельного решения владельца для авторизации Phase 2. Не начинать `Video Content Analyzer` до отдельного решения владельца.
 
 ## Canonical State Rule
 

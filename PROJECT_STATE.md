@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 07_VALIDATED
+current_step: 08_ACCEPTED
 current_run: workflow-runs/0002-animated-subtitle-module/
 last_updated: 2026-05-29
-next_action: Owner must visually verify the rendered MP4 (subtitle_studio/out/karaoke-preview-v2.mp4) to confirm karaoke highlighting works as expected. After visual confirmation, Phase 1 MVP can be marked as accepted and Phase 2 (transcription integration) can be planned.
+next_action: Phase 1 MVP accepted after owner visual review. Plan Phase 2 (transcription integration with stable-ts / faster-whisper and yt-dlp subtitle import). Await separate owner decision to authorize Phase 2 execution.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -13,9 +13,11 @@ next_action: Owner must visually verify the rendered MP4 (subtitle_studio/out/ka
 
 Личный локальный инструмент нормализован в `compact mode` (компактном режиме) Project Execution OS. Scope (границы проекта) расширен подтверждённым решением владельца: в этот же репозиторий добавляется модуль создания собственных роликов с анимированными субтитрами.
 
-Phase 1 MVP (первая минимально рабочая версия) был спроектирован, проверен review (ревью — проверкой), передан Codex через GitHub Issue #1, реализован в `subtitle_studio/` и проверен. Все блокеры ревью устранены: фиксированная длительность композиции заменена на динамическое вычисление через `calculateMetadata`, README исправлен, создан `EXECUTION REPORT` с доказательствами рендера (255 frames вместо 240).
+Phase 1 MVP (первая минимально рабочая версия) был спроектирован, проверен review (ревью — проверкой), передан Codex через GitHub Issue #1, реализован в `subtitle_studio/`, проверен, все блокеры ревью устранены, и **принят владельцем после визуальной проверки отрендеренного MP4**.
 
-29 мая 2026 года в репозитории также зафиксировано исследование будущего `Video Content Analyzer` (модуля анализа содержания видео). Это исследование сохраняет найденные donor patterns (донорские паттерны — готовые подходы для адаптации), но не разрешает новую реализацию до завершения Phase 1 MVP субтитров.
+Финальный артефакт: `subtitle_studio/out/karaoke-preview-v5.mp4` (255 frames, 805.8 kB, 8.5s при 30fps) — динамическая длительность, karaoke highlighting, корректный рендер.
+
+29 мая 2026 года в репозитории также зафиксировано исследование будущего `Video Content Analyzer` (модуля анализа содержания видео). Это исследование сохраняет найденные donor patterns (донорские паттерны — готовые подходы для адаптации), но не разрешает новую реализацию до отдельного решения владельца.
 
 ## Purpose
 
@@ -39,7 +41,7 @@ Phase 1 MVP (первая минимально рабочая версия) бы
 - `app/yt_service.py` формирует параметры `yt-dlp` и анализирует URL;
 - `chrome_extension/` и `native_host/` образуют отдельный локальный контур расширения;
 - `.gitignore` исключает окружение, сборки, скачанные файлы и локальную SQLite-базу;
-- `subtitle_studio/` существует как изолированная реализация Remotion MVP; блокеры ревью устранены, ожидается визуальная проверка владельцем;
+- `subtitle_studio/` существует как изолированная реализация Remotion MVP; Phase 1 принят владельцем;
 - `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` фиксирует будущий модуль видеоанализа и выбранные донорские подходы.
 
 ## Confirmed Decisions
@@ -56,7 +58,7 @@ Phase 1 MVP (первая минимально рабочая версия) бы
 10. Найденная технология анализа видео сохраняется как будущий кандидат-модуль `Video Content Analyzer` внутри этого репозитория; основной донорский паттерн — `bradautomates/claude-video`, вторичные идеи — `jordanrendric/claude-video-vision`, а `thoughtpunch/claudetube` используется только как источник идей на более поздний этап.
 11. Реализация `Video Content Analyzer` не начинается до отдельного решения владельца после завершения Phase 1 MVP субтитров.
 
-## Animated Subtitle Video Maker — Approved Scope, Validated
+## Animated Subtitle Video Maker — Approved Scope, Accepted
 
 Новый модуль должен позволить:
 
@@ -68,16 +70,22 @@ Phase 1 MVP (первая минимально рабочая версия) бы
 - видеть preview (предпросмотр);
 - экспортировать MP4 с burned-in subtitles (вшитыми субтитрами).
 
-Current implementation state (текущий статус реализации): code present in `subtitle_studio/`, validated. All review blockers resolved.
+Current implementation state (текущий статус реализации): code present in `subtitle_studio/`, validated, **accepted after owner visual review**.
 
-Review blockers resolved:
+### Phase 1 MVP — Review Blockers Resolved
 
-- ✅ `subtitle_studio/src/Root.tsx` — fixed `durationInFrames`: replaced hardcoded 240 with dynamic `calculateMetadata` that reads caption timing data and computes duration automatically. Render confirmed: 255 frames (8.5s) instead of fixed 240 (8s).
+- ✅ `subtitle_studio/src/Root.tsx` — fixed `durationInFrames`: replaced hardcoded 240 with dynamic `calculateMetadata` that reads caption timing data via `staticFile()` + `fetch()` and computes duration automatically. Render confirmed: 255 frames (8.5s) instead of fixed 240 (8s).
 - ✅ README — corrected: removed inaccurate "blurred background" claim, now accurately describes "contained foreground layer plus overlay gradient". Added note about dynamic composition duration.
 - ✅ Validation with content longer than 8 seconds — test video (10s, 1080x1920) generated and used as input. Dynamic duration mechanism proven (255 vs 240 frames).
 - ✅ Execution Report — `workflow-runs/0002-animated-subtitle-module/08_EXECUTION_REPORT.md` created with all commands, outputs, and validation results.
+- ✅ Owner visual review completed — `subtitle_studio/out/karaoke-preview-v5.mp4` (255 frames, 805.8 kB) reviewed and accepted.
 
-Pending: visual verification of rendered MP4 by the owner.
+### Phase 1 MVP — Final Artifact
+
+- **Reviewed MP4**: `subtitle_studio/out/karaoke-preview-v5.mp4`
+- **Frames**: 255 (8.5s at 30fps)
+- **Size**: 805.8 kB
+- **Status**: Accepted after owner visual review
 
 ## Future Candidate Module — Video Content Analyzer
 
@@ -101,7 +109,7 @@ Future bounded purpose:
 - Packet review (ревью пакета): `workflow-runs/0002-animated-subtitle-module/06_REVIEW.md`
 - Execution report (отчёт о выполнении): `workflow-runs/0002-animated-subtitle-module/08_EXECUTION_REPORT.md`
 - GitHub transport issue (задача-переносчик GitHub): `#1 Implement Phase 1 Animated Subtitle Video Maker MVP`
-- Current review state (текущее состояние ревью): `validated`; Phase 1 implemented and verified. Awaiting owner visual confirmation.
+- Current review state (текущее состояние ревью): `accepted`; Phase 1 implemented, validated, and accepted after owner visual review.
 
 ## Reviewed Risks
 
@@ -131,14 +139,16 @@ Status (статус): resolved by owner decision (устранено решен
 
 ## Latest Result
 
-Phase 1 MVP модуля анимированных субтитров реализован и проверен. Все блокеры ревью устранены:
+Phase 1 MVP модуля анимированных субтитров реализован, проверен и **принят владельцем**.
+
+Все блокеры ревью устранены:
 
 - **BLOCKER-001 (EXECUTION REPORT)**: РЕШЁН — создан `08_EXECUTION_REPORT.md` с полным structured отчётом.
 - **BLOCKER-002 (фиксированная длительность)**: РЕШЁН — `calculateMetadata` динамически вычисляет длительность из caption timing data. Рендер: 255 frames вместо 240.
 - **NOTE-001 (README)**: РЕШЁН — документация исправлена.
-
-Ожидается визуальная проверка отрендеренного MP4 владельцем для окончательного принятия Phase 1 MVP.
+- **Owner Visual Review**: ВЫПОЛНЕН — `karaoke-preview-v5.mp4` (255 frames, 805.8 kB) просмотрен и принят.
 
 ## Current Next Action
 
-Владелец должен визуально проверить отрендеренный MP4 (`subtitle_studio/out/karaoke-preview-v2.mp4`), чтобы подтвердить корректную работу karaoke highlighting. После визуального подтверждения Phase 1 MVP может быть принят, и можно планировать Phase 2 (интеграция транскрибации).
+Phase 1 MVP принят. Планировать Phase 2 (интеграция транскрибации с stable-ts / faster-whisper и импорт субтитров через yt-dlp). Ожидать отдельного решения владельца для авторизации Phase 2.
+

@@ -1,63 +1,62 @@
 import "./index.css";
-import { Composition, CalculateMetadataFunction } from "remotion";
+import { Composition, CalculateMetadataFunction, staticFile } from "remotion";
 import { KaraokeVideo } from "./KaraokeVideo";
 import { DEFAULT_KARAOKE_PROPS } from "./default-props";
 import type { Caption } from "@remotion/captions";
+import type { KaraokeVideoProps } from "./types";
+
+const isCaption = (value: unknown): value is Caption => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.text === "string" &&
+    typeof candidate.startMs === "number" &&
+    typeof candidate.endMs === "number" &&
+    typeof candidate.timestampMs === "number" &&
+    (candidate.confidence === null || typeof candidate.confidence === "number")
+  );
+};
+
+const computeDurationFromCaptions = (captions: Caption[]): number => {
+  if (captions.length === 0) return 240;
+  const maxEndMs = Math.max(...captions.map((c: Caption) => c.endMs));
+  const bufferMs = 500;
+  const totalMs = maxEndMs + bufferMs;
+  const fps = 30;
+  return Math.ceil((totalMs / 1000) * fps);
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const calculateMetadata: CalculateMetadataFunction<any> = async ({
   defaultProps,
 }) => {
-  const captions = defaultProps.captions as Caption[] | undefined;
-
-  if (captions && captions.length > 0) {
-    const maxEndMs = Math.max(...captions.map((c: Caption) => c.endMs));
-    const bufferMs = 500;
-    const totalMs = maxEndMs + bufferMs;
-    const fps = 30;
-    const durationInFrames = Math.ceil((totalMs / 1000) * fps);
-    return { durationInFrames };
+  // 1. Check if captions array was passed directly (via --props with captions field)
+  const directCaptions = defaultProps.captions as Caption[] | undefined;
+  if (directCaptions && directCaptions.length > 0) {
+    return { durationInFrames: computeDurationFromCaptions(directCaptions) };
   }
 
-  // Fallback: try to read captions.json for render mode (Node.js)
-  try {
-    const fs = require("fs");
-    const path = require("path");
-    const captionsPath = path.join(
-      process.cwd(),
-      "public",
-      "samples",
-      "captions.json"
-    );
-    const raw = fs.readFileSync(captionsPath, "utf-8");
-    const parsed: Caption[] = JSON.parse(raw);
-    if (parsed.length > 0) {
-      const maxEndMs = Math.max(...parsed.map((c: Caption) => c.endMs));
-      const bufferMs = 500;
-      const totalMs = maxEndMs + bufferMs;
-      const fps = 30;
-      const durationInFrames = Math.ceil((totalMs / 1000) * fps);
-      return { durationInFrames };
-    }
-  } catch {
-    // Fallback for Studio mode (browser) — try fetch
+  // 2. Try to load via captionsSrc using staticFile + fetch
+  //    In render mode, Remotion downloads public/ files and serves them via staticFile()
+  const props = defaultProps as KaraokeVideoProps;
+  if (props.captionsSrc) {
     try {
-      const response = await fetch("/samples/captions.json");
-      const parsed: Caption[] = await response.json();
-      if (parsed.length > 0) {
-        const maxEndMs = Math.max(...parsed.map((c: Caption) => c.endMs));
-        const bufferMs = 500;
-        const totalMs = maxEndMs + bufferMs;
-        const fps = 30;
-        const durationInFrames = Math.ceil((totalMs / 1000) * fps);
-        return { durationInFrames };
+      const url = staticFile(props.captionsSrc);
+      const response = await fetch(url);
+      if (response.ok) {
+        const payload = (await response.json()) as unknown;
+        if (Array.isArray(payload) && payload.length > 0 && payload.some((item) => isCaption(item))) {
+          return { durationInFrames: computeDurationFromCaptions(payload as Caption[]) };
+        }
       }
     } catch {
-      // Final fallback: 240 frames (8 seconds)
-      return { durationInFrames: 240 };
+      // fetch failed, continue to fallback
     }
   }
 
+  // 3. Final fallback: 240 frames (8 seconds)
   return { durationInFrames: 240 };
 };
 

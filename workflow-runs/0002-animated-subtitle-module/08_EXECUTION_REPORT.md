@@ -6,7 +6,7 @@
 
 ## Status
 
-completed
+accepted
 
 ## Repository Verified
 
@@ -57,6 +57,15 @@ npx remotion render KaraokeVideo out/karaoke-preview.mp4
 
 # 7. Second render after calculateMetadata fix (255 frames — computed from captions.json: 8000ms + 500ms buffer = 8500ms → ceil(8500/1000*30) = 255)
 npx remotion render KaraokeVideo out/karaoke-preview-v2.mp4
+
+# 8. Third render after staticFile() + fetch() fix (255 frames — captions loaded via staticFile in render mode)
+npx remotion render KaraokeVideo out/karaoke-preview-v3.mp4
+
+# 9. Fourth render with --props (255 frames — captions passed via render-props.json)
+npx remotion render KaraokeVideo out/karaoke-preview-v4.mp4 --props=../render-props.json
+
+# 10. Fifth render — final accepted artifact (255 frames, 805.8 kB)
+npx remotion render KaraokeVideo out/karaoke-preview-v5.mp4
 ```
 
 ## Validation Performed
@@ -69,22 +78,25 @@ npx remotion render KaraokeVideo out/karaoke-preview-v2.mp4
 - ✅ Duration is no longer fixed at 8 seconds: `calculateMetadata` reads captions.json and computes `durationInFrames` dynamically
 - ✅ Test video (10s, 1080x1920) was generated and used as input
 - ✅ No generated MP4 or local input video is staged for commit (excluded by .gitignore)
+- ✅ Final render v5: 255 frames, 805.8 kB, 8.5s at 30fps — accepted after owner visual review
 
 ## Validation Not Performed
 
-- Visual inspection of rendered MP4 — requires manual review by the owner
 - Remotion Studio preview — not launched (headless environment)
 - Test with captions longer than 8 seconds — sample captions span exactly 8 seconds; the `calculateMetadata` mechanism is proven to work (255 vs 240 frames), but a longer caption file would be needed to demonstrate >8.5s output
 
 ## Rendered MP4 Produced
 
-Yes — two files:
+Yes — five files:
 - `subtitle_studio/out/karaoke-preview.mp4` (782.6 kB, 240 frames)
 - `subtitle_studio/out/karaoke-preview-v2.mp4` (805.5 kB, 255 frames)
+- `subtitle_studio/out/karaoke-preview-v3.mp4` (805.5 kB, 255 frames)
+- `subtitle_studio/out/karaoke-preview-v4.mp4` (805.5 kB, 255 frames)
+- `subtitle_studio/out/karaoke-preview-v5.mp4` (805.8 kB, 255 frames) — **final accepted artifact**
 
 ## Rendered MP4 Visually Checked
 
-No — automated visual check not performed. Owner should open the MP4 to confirm karaoke highlighting is visible.
+Yes — owner visually reviewed `karaoke-preview-v5.mp4`. Result: **accepted**.
 
 ## Blockers Addressed
 
@@ -100,16 +112,16 @@ No — automated visual check not performed. Owner should open the MP4 to confir
 ## Assumptions Made
 
 - The sample `captions.json` (8000ms total) is the default input; longer caption files will correctly extend the composition duration
-- `calculateMetadata` uses `fs.readFileSync` for render mode (Node.js) and falls back to `fetch` for Studio mode (browser)
+- `calculateMetadata` uses `staticFile()` + `fetch()` for render mode (headless Chrome) and falls back to `fetch` for Studio mode (browser). `fs.readFileSync` is NOT available in render mode.
 - The test video (blue screen, 10s) is sufficient for render validation; owner should replace with real content
 
 ## Risks / Follow-Up
 
 - `calculateMetadata` dynamic duration depends on captions.json being readable; if the file path changes or is missing, it falls back to 240 frames (8s)
-- Phase 2 (transcription integration with `stable-ts` / `faster-whisper`) is not started
-- Owner should visually verify the rendered MP4 to confirm karaoke highlighting works as expected
+- Phase 2 (transcription integration with `stable-ts` / `faster-whisper`) is not started — awaiting separate owner decision
 - The `build/` directory was added to `.gitignore` to prevent committing bundle output
+- `render-props.json` is an untracked convenience file for passing captions via `--props` flag
 
 ## Ready For Review
 
-Yes
+Yes — Phase 1 MVP is **accepted** after owner visual review.

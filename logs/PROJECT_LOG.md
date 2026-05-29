@@ -290,3 +290,35 @@ npx remotion render KaraokeVideo out/karaoke-preview-v2.mp4
 ### Current Next Action
 
 Владелец должен визуально проверить отрендеренный MP4 (`subtitle_studio/out/karaoke-preview-v2.mp4`), чтобы подтвердить корректную работу karaoke highlighting. После визуального подтверждения Phase 1 MVP может быть принят, и можно планировать Phase 2 (интеграция транскрибации).
+
+---
+
+## 2026-05-29 — Phase 1 MVP accepted after owner visual review
+
+### Trigger
+
+Олег провёл визуальную проверку финального артефакта `karaoke-preview-v5.mp4` (255 frames, 805.8 kB, 8.5s при 30fps). Phase 1 MVP принят.
+
+### Verified Before Change
+
+- `subtitle_studio/src/Root.tsx` — calculateMetadata использует staticFile() + fetch() для загрузки captions.json в render mode (не fs.readFileSync, не fetch к localhost:3000). Remotion render mode запускает код в headless Chrome, где fs.readFileSync недоступен. staticFile() работает в render mode — Remotion сам скачивает файлы из public/ и раздаёт их.
+- `subtitle_studio/render-props.json` — создан для передачи captions через --props флаг Remotion.
+- `PROJECT_STATE.md` — обновлён: current_step: 08_ACCEPTED, статус accepted after owner visual review.
+- `PROJECT_ENTRYPOINT.md` — обновлён: Canonical Next Action — Phase 1 MVP принят, планировать Phase 2.
+- `PROJECT_RULES.md` — обновлён: Current Next Action — Phase 1 MVP принят, планировать Phase 2.
+
+### Owner Visual Review
+
+- Проверен файл: `subtitle_studio/out/karaoke-preview-v5.mp4`
+- Результат: принят (accepted)
+- Финальный артефакт: 255 frames, 805.8 kB, 8.5s при 30fps
+
+### State Separation
+
+- Phase 1 MVP implementation: completed and accepted (завершена и принята).
+- Visual verification: completed and accepted (завершена и принята).
+- Phase 2 (transcription integration): not started (не начата).
+
+### Current Next Action
+
+Phase 1 MVP принят. Планировать Phase 2 (интеграция транскрибации через stable-ts / faster-whisper). Ожидание отдельного решения владельца о начале Phase 2.
