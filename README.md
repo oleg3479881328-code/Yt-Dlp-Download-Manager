@@ -1,5 +1,9 @@
 # yt-dlp Download Manager
 
+## AI Start
+
+If this repository is opened by an AI coding agent, start with `PROJECT_ENTRYPOINT.md` before using this README as operational context.
+
 Single-user local toolkit for `yt-dlp` with:
 
 - web dashboard

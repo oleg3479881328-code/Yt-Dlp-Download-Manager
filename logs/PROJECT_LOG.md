@@ -183,3 +183,30 @@ Codex выполняет GitHub Issue #1 по пакету `workflow-runs/0002-a
 ### Current Next Action
 
 Исправить блокеры `subtitle_studio` Phase 1 MVP, подтвердить рендер длиннее 8 секунд и вернуть обязательный `EXECUTION REPORT`.
+
+---
+
+## 2026-05-29 — Added repository-local AI entrypoint
+
+### Trigger
+
+Олег попросил сделать схему, при которой можно просто передать папку репозитория другому ИИ, а он сам понял, с чего начинать.
+
+### Verified Before Change
+
+- Репозиторий уже содержал канонические project-state artifacts (артефакты состояния проекта), но не имел стандартного локального `AGENTS.md`.
+- `README.md` не давал явного указания ИИ начинать с `PROJECT_ENTRYPOINT.md`.
+
+### Committed Cleanup
+
+- Добавлен корневой `AGENTS.md` как repository-local AI entrypoint (локальная точка входа для ИИ).
+- В `README.md` добавлен короткий раздел `AI Start`, направляющий агента к `PROJECT_ENTRYPOINT.md`.
+
+### Validation
+
+- Теперь репозиторий содержит явную AI-readable entry layer (слой входа, читаемый ИИ) даже без внешнего чата или дополнительных инструкций.
+- Канонический current task (текущая задача) и read order (порядок чтения) дублированы в стандартной корневой точке входа.
+
+### Current Next Action
+
+Исправить блокеры `subtitle_studio` Phase 1 MVP, подтвердить рендер длиннее 8 секунд и вернуть обязательный `EXECUTION REPORT`.
