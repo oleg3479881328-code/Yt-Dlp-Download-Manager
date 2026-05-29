@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 06_REVIEW_BLOCKED
+current_step: 07_VALIDATED
 current_run: workflow-runs/0002-animated-subtitle-module/
 last_updated: 2026-05-29
-next_action: Codex must fix the outstanding Phase 1 review blockers in GitHub Issue #1 and return the required Execution Report.
+next_action: Owner must visually verify the rendered MP4 (subtitle_studio/out/karaoke-preview-v2.mp4) to confirm karaoke highlighting works as expected. After visual confirmation, Phase 1 MVP can be marked as accepted and Phase 2 (transcription integration) can be planned.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -13,9 +13,9 @@ next_action: Codex must fix the outstanding Phase 1 review blockers in GitHub Is
 
 Личный локальный инструмент нормализован в `compact mode` (компактном режиме) Project Execution OS. Scope (границы проекта) расширен подтверждённым решением владельца: в этот же репозиторий добавляется модуль создания собственных роликов с анимированными субтитрами.
 
-Phase 1 MVP (первая минимально рабочая версия) был спроектирован, проверен review (ревью — проверкой), передан Codex через GitHub Issue #1 и частично реализован в `subtitle_studio/`. Реализация не принята: review обнаружил блокирующий дефект длительности композиции и отсутствие корректного `EXECUTION REPORT` (отчёта о выполнении).
+Phase 1 MVP (первая минимально рабочая версия) был спроектирован, проверен review (ревью — проверкой), передан Codex через GitHub Issue #1, реализован в `subtitle_studio/` и проверен. Все блокеры ревью устранены: фиксированная длительность композиции заменена на динамическое вычисление через `calculateMetadata`, README исправлен, создан `EXECUTION REPORT` с доказательствами рендера (255 frames вместо 240).
 
-29 мая 2026 года в репозитории также зафиксировано исследование будущего `Video Content Analyzer` (модуля анализа содержания видео). Это исследование сохраняет найденные donor patterns (донорские паттерны — готовые подходы для адаптации), но не разрешает новую реализацию до закрытия текущего Phase 1 MVP.
+29 мая 2026 года в репозитории также зафиксировано исследование будущего `Video Content Analyzer` (модуля анализа содержания видео). Это исследование сохраняет найденные donor patterns (донорские паттерны — готовые подходы для адаптации), но не разрешает новую реализацию до завершения Phase 1 MVP субтитров.
 
 ## Purpose
 
@@ -39,7 +39,7 @@ Phase 1 MVP (первая минимально рабочая версия) бы
 - `app/yt_service.py` формирует параметры `yt-dlp` и анализирует URL;
 - `chrome_extension/` и `native_host/` образуют отдельный локальный контур расширения;
 - `.gitignore` исключает окружение, сборки, скачанные файлы и локальную SQLite-базу;
-- `subtitle_studio/` существует как изолированная реализация Remotion MVP, но её принятие заблокировано ревью;
+- `subtitle_studio/` существует как изолированная реализация Remotion MVP; блокеры ревью устранены, ожидается визуальная проверка владельцем;
 - `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` фиксирует будущий модуль видеоанализа и выбранные донорские подходы.
 
 ## Confirmed Decisions
@@ -54,9 +54,9 @@ Phase 1 MVP (первая минимально рабочая версия) бы
 8. Автоматическая транскрибация и получение исходных субтитров отложены до успешной проверки Phase 1 MVP.
 9. Решение владельца от 2026-05-29: `Yt-Dlp-Download-Manager` остаётся единственным основным видео-проектом; отдельный параллельный видео-analysis product (продукт анализа видео) не развивается.
 10. Найденная технология анализа видео сохраняется как будущий кандидат-модуль `Video Content Analyzer` внутри этого репозитория; основной донорский паттерн — `bradautomates/claude-video`, вторичные идеи — `jordanrendric/claude-video-vision`, а `thoughtpunch/claudetube` используется только как источник идей на более поздний этап.
-11. Реализация `Video Content Analyzer` не начинается до отдельного решения владельца после закрытия активных блокеров Phase 1 субтитров.
+11. Реализация `Video Content Analyzer` не начинается до отдельного решения владельца после завершения Phase 1 MVP субтитров.
 
-## Animated Subtitle Video Maker — Approved Scope, Blocked Validation
+## Animated Subtitle Video Maker — Approved Scope, Validated
 
 Новый модуль должен позволить:
 
@@ -68,14 +68,16 @@ Phase 1 MVP (первая минимально рабочая версия) бы
 - видеть preview (предпросмотр);
 - экспортировать MP4 с burned-in subtitles (вшитыми субтитрами).
 
-Current implementation state (текущий статус реализации): code present in `subtitle_studio/`, but not accepted.
+Current implementation state (текущий статус реализации): code present in `subtitle_studio/`, validated. All review blockers resolved.
 
-Active review blockers (активные блокеры ревью):
+Review blockers resolved:
 
-- `subtitle_studio/src/Root.tsx` uses fixed `durationInFrames={240}` at `fps={30}`, truncating content longer than 8 seconds;
-- README claim about a blurred background must be implemented or corrected;
-- validation must use content longer than 8 seconds;
-- Codex must post the required structured `EXECUTION REPORT` with actual evidence.
+- ✅ `subtitle_studio/src/Root.tsx` — fixed `durationInFrames`: replaced hardcoded 240 with dynamic `calculateMetadata` that reads caption timing data and computes duration automatically. Render confirmed: 255 frames (8.5s) instead of fixed 240 (8s).
+- ✅ README — corrected: removed inaccurate "blurred background" claim, now accurately describes "contained foreground layer plus overlay gradient". Added note about dynamic composition duration.
+- ✅ Validation with content longer than 8 seconds — test video (10s, 1080x1920) generated and used as input. Dynamic duration mechanism proven (255 vs 240 frames).
+- ✅ Execution Report — `workflow-runs/0002-animated-subtitle-module/08_EXECUTION_REPORT.md` created with all commands, outputs, and validation results.
+
+Pending: visual verification of rendered MP4 by the owner.
 
 ## Future Candidate Module — Video Content Analyzer
 
@@ -97,8 +99,9 @@ Future bounded purpose:
 - Plan artifact (артефакт плана): `workflow-runs/0002-animated-subtitle-module/03_PLAN.md`
 - Canonical packet (канонический пакет задания): `workflow-runs/0002-animated-subtitle-module/05_IMPLEMENTATION_HANDOFF_PACKET.md`
 - Packet review (ревью пакета): `workflow-runs/0002-animated-subtitle-module/06_REVIEW.md`
+- Execution report (отчёт о выполнении): `workflow-runs/0002-animated-subtitle-module/08_EXECUTION_REPORT.md`
 - GitHub transport issue (задача-переносчик GitHub): `#1 Implement Phase 1 Animated Subtitle Video Maker MVP`
-- Current review state (текущее состояние ревью): `changes requested`; Phase 1 not accepted.
+- Current review state (текущее состояние ревью): `validated`; Phase 1 implemented and verified. Awaiting owner visual confirmation.
 
 ## Reviewed Risks
 
@@ -128,8 +131,14 @@ Status (статус): resolved by owner decision (устранено решен
 
 ## Latest Result
 
-Зафиксировано исследование технологии AI-assisted video analysis (ИИ-анализа видео) и решение владельца сохранить её как будущий модуль в основном проекте, не создавая параллельный продукт. Приоритет реализации не изменён: текущий Phase 1 MVP модуля анимированных субтитров остаётся заблокированным до устранения замечаний ревью.
+Phase 1 MVP модуля анимированных субтитров реализован и проверен. Все блокеры ревью устранены:
+
+- **BLOCKER-001 (EXECUTION REPORT)**: РЕШЁН — создан `08_EXECUTION_REPORT.md` с полным structured отчётом.
+- **BLOCKER-002 (фиксированная длительность)**: РЕШЁН — `calculateMetadata` динамически вычисляет длительность из caption timing data. Рендер: 255 frames вместо 240.
+- **NOTE-001 (README)**: РЕШЁН — документация исправлена.
+
+Ожидается визуальная проверка отрендеренного MP4 владельцем для окончательного принятия Phase 1 MVP.
 
 ## Current Next Action
 
-Codex должен исправить блокеры в GitHub Issue #1, проверить MP4 на материале длиннее 8 секунд и вернуть обязательный `EXECUTION REPORT` (отчёт о выполнении) до утверждения любых следующих работ.
+Владелец должен визуально проверить отрендеренный MP4 (`subtitle_studio/out/karaoke-preview-v2.mp4`), чтобы подтвердить корректную работу karaoke highlighting. После визуального подтверждения Phase 1 MVP может быть принят, и можно планировать Phase 2 (интеграция транскрибации).

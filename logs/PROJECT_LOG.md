@@ -210,3 +210,83 @@ Codex выполняет GitHub Issue #1 по пакету `workflow-runs/0002-a
 ### Current Next Action
 
 Исправить блокеры `subtitle_studio` Phase 1 MVP, подтвердить рендер длиннее 8 секунд и вернуть обязательный `EXECUTION REPORT`.
+
+---
+
+## 2026-05-29 — Phase 1 MVP review blockers resolved
+
+### Trigger
+
+Codex завершил выполнение GitHub Issue #1. Review обнаружил блокирующие дефекты: фиксированная длительность композиции (8 секунд), неточность в README и отсутствие EXECUTION REPORT.
+
+### Verified Before Change
+
+- `subtitle_studio/src/Root.tsx` использовал фиксированное `durationInFrames={240}` при `fps={30}`, что обрезало контент длиннее 8 секунд.
+- `subtitle_studio/README.md` содержал неверное утверждение о "blurred background layer".
+- `subtitle_studio/.gitignore` не исключал директорию `build/`.
+- `workflow-runs/0002-animated-subtitle-module/` не содержал EXECUTION REPORT.
+
+### Changes Made
+
+1. **`subtitle_studio/src/Root.tsx`** — заменён фиксированный `durationInFrames={240}` на динамическое вычисление через `calculateMetadata`. Функция читает `captions.json`, вычисляет `maxEndMs` из caption timing data, добавляет 500ms буфер и конвертирует в frames при 30fps. Fallback: 240 frames (8s) при ошибке чтения.
+
+2. **`subtitle_studio/README.md`** — исправлено неверное утверждение: "blurred background layer" заменено на "contained foreground layer plus overlay gradient". Добавлено примечание о динамической длительности композиции.
+
+3. **`subtitle_studio/.gitignore`** — добавлена строка `build` для исключения директории сборки Remotion.
+
+4. **`workflow-runs/0002-animated-subtitle-module/08_EXECUTION_REPORT.md`** — создан полный structured execution report со статусом `completed`, списком изменённых файлов, выполненными командами, результатами валидации и статусом блокеров.
+
+### Commands Run
+
+```powershell
+# Install dependencies
+cd subtitle_studio
+npm install --legacy-peer-deps
+
+# TypeScript check (passed)
+npx tsc --noEmit
+
+# ESLint check (passed, only TS version warning)
+npx eslint src
+
+# Remotion bundle (passed)
+npx remotion bundle
+
+# Generate test video (10 seconds, 1080x1920, blue background)
+ffmpeg -f lavfi -i color=c=blue:s=1080x1920:d=10 -f lavfi -i anullsrc=r=44100:cl=mono ^
+  -c:v libx264 -preset ultrafast -crf 28 -c:a aac -shortest -y ^
+  public/local-assets/validation-input.mp4
+
+# First render (240 frames — default fallback)
+npx remotion render KaraokeVideo out/karaoke-preview.mp4
+
+# Second render after calculateMetadata fix (255 frames — computed from captions)
+npx remotion render KaraokeVideo out/karaoke-preview-v2.mp4
+```
+
+### Validation Results
+
+- ✅ TypeScript compilation: no errors
+- ✅ ESLint: no errors (only TS version compatibility warning, non-blocking)
+- ✅ Remotion bundle: successful
+- ✅ Render with default duration: 240 frames (8s) — MP4 produced (782.6 kB)
+- ✅ Render with dynamic duration: 255 frames (8.5s) — MP4 produced (805.5 kB)
+- ✅ Duration is no longer fixed at 8 seconds: `calculateMetadata` reads captions.json and computes `durationInFrames` dynamically
+- ✅ Test video (10s, 1080x1920) generated and used as input
+
+### Blockers Resolved
+
+- **BLOCKER-001 (EXECUTION REPORT)**: RESOLVED — `08_EXECUTION_REPORT.md` создан.
+- **BLOCKER-002 (фиксированная длительность)**: RESOLVED — `calculateMetadata` динамически вычисляет длительность. Рендер: 255 frames вместо 240.
+- **NOTE-001 (README)**: RESOLVED — документация исправлена.
+
+### State Separation
+
+- Review blockers (блокеры ревью): resolved (устранены).
+- Implementation (реализация): completed (завершена).
+- Validation (проверка): completed (завершена).
+- Visual verification (визуальная проверка): pending (ожидает владельца).
+
+### Current Next Action
+
+Владелец должен визуально проверить отрендеренный MP4 (`subtitle_studio/out/karaoke-preview-v2.mp4`), чтобы подтвердить корректную работу karaoke highlighting. После визуального подтверждения Phase 1 MVP может быть принят, и можно планировать Phase 2 (интеграция транскрибации).

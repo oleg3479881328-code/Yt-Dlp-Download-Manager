@@ -100,5 +100,6 @@ npm run build
 ## Notes
 
 - The composition is portrait by default: `1080x1920`.
-- The video is shown with a blurred background layer plus a contained foreground layer to preserve aspect ratio.
+- The video is shown with a contained foreground layer plus an overlay gradient to preserve aspect ratio.
 - `KaraokePresetV1` is the only preset in this phase.
+- The composition duration is computed dynamically from caption timing data via `calculateMetadata`. If captions cannot be loaded, it falls back to 240 frames (8 seconds at 30fps).
