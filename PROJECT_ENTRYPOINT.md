@@ -17,7 +17,7 @@
 - repository: private dedicated GitHub repository; this is the only primary video project
 - normalization status: existing project normalized into Project Execution OS on 2026-05-25
 - active scope decision: add `Animated Subtitle Video Maker` (модуль создания роликов с анимированными субтитрами) inside this repository
-- captured future decision: preserve the analyzed video-intelligence donor pattern here as future `Video Content Analyzer`; do not develop `Video-Combine-Analyzer` as a parallel primary product
+- captured future decision: preserve the analyzed video-intelligence donor pattern here as future `Video Content Analyzer`; do not develop a separate parallel video-analysis product
 
 ## Required Read Order
 
@@ -58,7 +58,7 @@ Captured direction:
 - primary donor pattern: `bradautomates/claude-video`;
 - secondary donor ideas: `jordanrendric/claude-video-vision`;
 - later ideas only: `thoughtpunch/claudetube`;
-- separate `Video-Combine-Analyzer` development is unnecessary after the captured research is retained here.
+- separate parallel video-analysis development is unnecessary after the captured research is retained here.
 
 ## Canonical Next Action
 

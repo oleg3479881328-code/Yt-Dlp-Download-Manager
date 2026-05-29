@@ -6,7 +6,7 @@
 - State: `committed research / future-module decision captured`
 - Implementation state: `not approved for execution yet`
 - Main project: `oleg3479881328-code/Yt-Dlp-Download-Manager`
-- Temporary experimental repository discussed during research: `oleg3479881328-code/Video-Combine-Analyzer`
+- Temporary parallel direction discussed during research: a separate experimental video-analysis repository
 
 ## Why This Artifact Exists
 
@@ -16,7 +16,7 @@ This must not be lost in chat, but it also must not create a competing main proj
 
 - `Yt-Dlp-Download-Manager` remains the primary video project;
 - the video-analysis capability is a possible future module inside this primary project;
-- `Video-Combine-Analyzer` is not a second product direction and is no longer required as a knowledge holder after this capture;
+- the former separate experimental direction is not a second product direction and is no longer required as a knowledge holder after this capture;
 - no video-analysis implementation should interrupt the currently blocked `Animated Subtitle Video Maker` Phase 1 MVP.
 
 ## Confirmed Project Fit
@@ -125,7 +125,7 @@ The statement that a 30-minute video is analyzed in under two minutes was not tr
 
 ### Primary-project rule
 
-`Yt-Dlp-Download-Manager` remains the only primary video project. Do not develop `Video-Combine-Analyzer` as a competing system.
+`Yt-Dlp-Download-Manager` remains the only primary video project. Do not develop a separate competing video-analysis system.
 
 ### Future candidate module
 
@@ -167,7 +167,7 @@ Only after the active animated-subtitle MVP is accepted and a new implementation
 | `bradautomates/claude-video` | primary donor pattern | Smallest adequate frame-plus-transcript analysis pipeline and Codex-compatible skill packaging idea. |
 | `jordanrendric/claude-video-vision` | secondary pattern source | Local Whisper, transcript provenance and high-quality UI frame handling. |
 | `thoughtpunch/claudetube` | ideas only for later | Cache and focused retrieval are valuable, but its current surface is too large for MVP adoption. |
-| `Video-Combine-Analyzer` | not a primary project | Its useful knowledge is captured here; separate development would duplicate the primary video system. |
+| Former separate experimental direction | not a primary project | Its useful knowledge is captured here; separate development would duplicate the primary video system. |
 
 ## Current Boundary And Next Action
 

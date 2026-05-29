@@ -85,4 +85,4 @@
 
 ## Current Next Action
 
-Подготовить `Implementation Handoff Packet` (пакет задания на реализацию) для Codex на Phase 1 MVP модуля анимированных субтитров.
+Исправить блокеры `subtitle_studio` Phase 1 MVP в GitHub Issue `#1`, проверить рендер MP4 на материале длиннее 8 секунд и вернуть обязательный `EXECUTION REPORT` (отчёт о выполнении).
