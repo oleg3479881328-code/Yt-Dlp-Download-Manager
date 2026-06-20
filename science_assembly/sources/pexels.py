@@ -37,17 +37,20 @@ class PexelsVideoSearchAdapter:
         queries = beat.get("search_queries") or []
         if not isinstance(queries, list):
             return candidates
+
+        candidate_counter = 0
         for query in queries[:3]:
             if not isinstance(query, str) or not query.strip():
                 continue
             raw_results = self._search(query=query.strip(), per_page=per_query, orientation=orientation)
-            for result_index, raw in enumerate(raw_results, start=1):
+            for raw in raw_results:
+                candidate_counter += 1
                 candidates.append(
                     normalize_pexels_video(
                         raw=raw,
                         beat_id=str(beat.get("beat_id")),
                         beat_index=beat_index,
-                        result_index=result_index,
+                        result_index=candidate_counter,
                         query=query.strip(),
                     )
                 )
