@@ -14,10 +14,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .path_safety import MissingPathError, UnsafePathError, resolve_existing_output_path
+from .segment_utils import SegmentValidationError, normalize_segment_payload
 from .storage import Storage
 from .worker import DownloadWorker
 from .yt_service import analyze_url, utc_now
-
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -35,6 +35,10 @@ class QueueRequest(BaseModel):
     url: str
     mode: str = "video"
     quality: str = "bestvideo*+bestaudio/best"
+    segment_start: str | float | None = None
+    segment_end: str | float | None = None
+    segment_duration: str | float | None = None
+    segment_label: str | None = None
 
 
 class SettingsRequest(BaseModel):
@@ -90,13 +94,35 @@ async def analyze(payload: AnalyzeRequest) -> dict[str, Any]:
 
 @app.post("/api/jobs")
 async def create_job(payload: QueueRequest) -> dict[str, Any]:
+    segment = None
+    has_segment_fields = any(
+        value not in {None, ""}
+        for value in (payload.segment_start, payload.segment_end, payload.segment_duration, payload.segment_label)
+    )
+    if has_segment_fields:
+        try:
+            segment_range = normalize_segment_payload(
+                {
+                    "start": payload.segment_start,
+                    "end": payload.segment_end,
+                    "duration": payload.segment_duration,
+                    "label": payload.segment_label,
+                }
+            )
+        except SegmentValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        segment = segment_range.to_metadata()
+
     try:
         analysis = analyze_url(payload.url)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if segment and analysis["type"] != "single":
+        raise HTTPException(status_code=400, detail="Segment download currently supports single videos only")
 
     job_id = str(uuid.uuid4())
     queue_count = len(storage.list_jobs(("queued", "ready")))
+    analysis_json = {**analysis, "segment": segment} if segment else analysis
     job = {
         "id": job_id,
         "url": payload.url,
@@ -117,7 +143,7 @@ async def create_job(payload: QueueRequest) -> dict[str, Any]:
         "item_failed": 0,
         "current_item_id": None,
         "current_item_index": 0,
-        "analysis_json": analysis,
+        "analysis_json": analysis_json,
         "mode": payload.mode,
         "quality": payload.quality,
         "queue_position": queue_count + 1,
@@ -140,7 +166,7 @@ async def create_job(payload: QueueRequest) -> dict[str, Any]:
         if entry.get("url")
     ]
     storage.create_job(job, items)
-    storage.add_log(job_id, "Job added to queue", utc_now())
+    storage.add_log(job_id, "Segment job added to queue" if segment else "Job added to queue", utc_now())
     storage.refresh_queue_positions()
     return {"ok": True, "job": storage.get_job(job_id)}
 
