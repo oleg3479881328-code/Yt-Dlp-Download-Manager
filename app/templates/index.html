@@ -108,7 +108,37 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <h2>3. Recent clip jobs</h2>
+                  <h2>3. Transcript / Episode Picker</h2>
+                  <p class="muted">Paste SRT-like transcript text or load a local `.srt` / `.txt` file.</p>
+                </div>
+                <span id="transcript-status" class="status-chip status-queued">Waiting for transcript</span>
+              </div>
+              <label class="field">
+                <span>Transcript text</span>
+                <textarea id="transcript-input" rows="10" placeholder="1&#10;00:00:05,000 --> 00:00:12,000&#10;Example subtitle text&#10;&#10;2&#10;00:00:12,000 --> 00:00:18,000&#10;Next subtitle line"></textarea>
+              </label>
+              <div class="actions-row">
+                <button id="parse-transcript-btn" class="accent-btn" type="button">Parse transcript</button>
+                <label class="ghost-btn file-trigger" for="transcript-file">Load file</label>
+                <input id="transcript-file" type="file" accept=".srt,.txt" hidden>
+                <button id="clear-transcript-btn" class="ghost-btn" type="button">Clear transcript</button>
+              </div>
+              <div class="transcript-grid">
+                <div class="transcript-column">
+                  <h3>Transcript lines</h3>
+                  <div id="transcript-lines" class="transcript-lines"></div>
+                </div>
+                <div class="transcript-column">
+                  <h3>Episode preview</h3>
+                  <div id="transcript-selection-preview" class="transcript-selection-preview"></div>
+                  <button id="use-transcript-range-btn" class="accent-btn full-width" type="button" disabled>Use this range</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>4. Recent clip jobs</h2>
                   <p class="muted">Jobs with selected range metadata.</p>
                 </div>
               </div>
@@ -191,6 +221,6 @@
       </div>
     </aside>
   </div>
-  <script src="/static/app.js"></script>
+  <script type="module" src="/static/app.js"></script>
 </body>
 </html>
