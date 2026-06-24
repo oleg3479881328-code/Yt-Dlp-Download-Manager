@@ -140,12 +140,28 @@ class DownloadWorker:
         output_dir.mkdir(parents=True, exist_ok=True)
         mode = job["mode"] or settings["default_mode"]
         quality = job["quality"] or settings["quality"]
+        segment = (job.get("analysis_json") or {}).get("segment")
         attempts_total = self._attempts_total(settings)
         output_path = None
 
         for attempt in range(1, attempts_total + 1):
-            options = build_ydl_options(output_dir, mode, quality, self._progress_hook(job_id))
-            self.storage.add_log(job_id, f"Starting single-item download (attempt {attempt}/{attempts_total})", utc_now())
+            options = build_ydl_options(output_dir, mode, quality, self._progress_hook(job_id), segment=segment)
+            if segment:
+                self.storage.add_log(
+                    job_id,
+                    (
+                        "Starting selected segment download "
+                        f"(attempt {attempt}/{attempts_total}): "
+                        f"{segment['section_expression']} ({segment['label']})"
+                    ),
+                    utc_now(),
+                )
+            else:
+                self.storage.add_log(
+                    job_id,
+                    f"Starting single-item download (attempt {attempt}/{attempts_total})",
+                    utc_now(),
+                )
             try:
                 with YoutubeDL(options) as ydl:
                     info = ydl.extract_info(job["url"], download=True)
@@ -169,7 +185,7 @@ class DownloadWorker:
             finished_at=utc_now(),
             output_path=output_path,
         )
-        self.storage.add_log(job_id, "Download completed", utc_now())
+        self.storage.add_log(job_id, "Segment download completed" if segment else "Download completed", utc_now())
 
     def _download_playlist(self, job_id: str) -> None:
         job = self.storage.get_job(job_id)

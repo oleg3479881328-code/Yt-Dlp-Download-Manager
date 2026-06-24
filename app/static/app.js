@@ -180,6 +180,18 @@ function applySocketState(payload) {
 function renderDetails(job) {
   state.selectedJobId = job.id;
   qs("#details-title").textContent = job.title || job.url;
+  const segment = job.analysis_json?.segment;
+  const segmentBlock = segment ? `
+    <div class="segment-summary">
+      <h3>Selected Segment</h3>
+      <div class="row-meta">
+        <span>Start: ${escapeHtml(segment.start)}</span>
+        <span>End: ${escapeHtml(segment.end)}</span>
+        <span>Duration: ${escapeHtml(segment.duration)}</span>
+        <span>Label: ${escapeHtml(segment.label)}</span>
+      </div>
+      <div class="muted">Range: ${escapeHtml(segment.section_expression)}</div>
+    </div>` : "";
   const playlistBlock = job.playlist_items?.length ? `
     <div>
       <h3>Playlist Items</h3>
@@ -208,6 +220,7 @@ function renderDetails(job) {
       </div>
       ${progressBar(job.progress)}
       <div class="job-meta"><span>${escapeHtml(job.stage || "-")}</span><span>${escapeHtml(job.speed || "Speed unavailable")}</span><span>${escapeHtml(job.eta || "ETA unavailable")}</span></div>
+      ${segmentBlock}
       <div class="details-actions">
         <button data-action="retry" data-id="${escapeAttr(job.id)}">Retry</button>
         <button data-action="cancel" data-id="${escapeAttr(job.id)}">Cancel</button>
@@ -331,14 +344,25 @@ function bindAnalyze() {
   qs("#queue-btn").addEventListener("click", async () => {
     const url = qs("#url-input").value.trim();
     if (!url) return;
+    const segmentStart = qs("#segment-start").value.trim();
+    const segmentEnd = qs("#segment-end").value.trim();
+    const segmentDuration = qs("#segment-duration").value.trim();
+    const segmentLabel = qs("#segment-label").value.trim();
+    const body = {
+      url,
+      mode: state.settings?.default_mode || "video",
+      quality: state.settings?.quality || "bestvideo*+bestaudio/best",
+    };
+    if (segmentStart || segmentEnd || segmentDuration || segmentLabel) {
+      if (segmentStart) body.segment_start = segmentStart;
+      if (segmentEnd) body.segment_end = segmentEnd;
+      if (segmentDuration) body.segment_duration = segmentDuration;
+      if (segmentLabel) body.segment_label = segmentLabel;
+    }
     try {
       const payload = await fetchJson("/api/jobs", {
         method: "POST",
-        body: JSON.stringify({
-          url,
-          mode: state.settings?.default_mode || "video",
-          quality: state.settings?.quality || "bestvideo*+bestaudio/best",
-        }),
+        body: JSON.stringify(body),
       });
       state.selectedJobId = payload.job.id;
       pushSocketContext();
