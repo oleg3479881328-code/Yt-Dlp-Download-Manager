@@ -1,8 +1,34 @@
 const state = { analysis: null, selectedJobId: null, historyFilter: "all", settings: null, socket: null };
 const qs = (selector) => document.querySelector(selector);
 
-function statusClass(status) { return `status-chip status-${status}`; }
-function progressBar(value = 0) { return `<div class="progress"><span style="width:${Math.max(4, value || 4)}%"></span></div>`; }
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+function classToken(value) {
+  return String(value ?? "unknown").replace(/[^A-Za-z0-9_-]/g, "-");
+}
+
+function safeUrl(value) {
+  try {
+    const parsed = new URL(String(value ?? ""), window.location.origin);
+    if (["http:", "https:"].includes(parsed.protocol)) return parsed.href;
+  } catch (_error) {
+  }
+  return "";
+}
+
+function statusClass(status) { return `status-chip status-${classToken(status)}`; }
+function progressBar(value = 0) { return `<div class="progress"><span style="width:${Math.min(100, Math.max(4, Number(value) || 4))}%"></span></div>`; }
 
 function formatJobMeta(job) {
   return [
@@ -11,6 +37,14 @@ function formatJobMeta(job) {
     job.eta ? `ETA: ${job.eta}` : null,
     job.type === "playlist" ? `Items: ${job.item_completed || 0}/${job.item_total || 0}` : null,
   ].filter(Boolean).join(" • ");
+}
+
+function thumbnailHtml(url, sizeClass = "") {
+  const thumbnail = safeUrl(url);
+  const classes = `thumb ${sizeClass}`.trim();
+  return thumbnail
+    ? `<img class="${escapeAttr(classes)}" src="${escapeAttr(thumbnail)}" alt="thumbnail">`
+    : `<div class="${escapeAttr(classes)} placeholder">No Preview</div>`;
 }
 
 function renderAnalysis() {
@@ -26,21 +60,21 @@ function renderAnalysis() {
   target.innerHTML = `
     <div class="job-card">
       <div class="media-line">
-        ${a.thumbnail ? `<img class="thumb large" src="${a.thumbnail}" alt="thumbnail">` : `<div class="thumb placeholder large">No Preview</div>`}
+        ${thumbnailHtml(a.thumbnail, "large")}
         <div>
-          <h3>${a.title}</h3>
+          <h3>${escapeHtml(a.title)}</h3>
           <div class="job-meta">
-            <span>${a.type}</span>
-            <span>${a.item_count} item(s)</span>
-            <span>${a.extractor || "source unknown"}</span>
+            <span>${escapeHtml(a.type)}</span>
+            <span>${escapeHtml(a.item_count)} item(s)</span>
+            <span>${escapeHtml(a.extractor || "source unknown")}</span>
           </div>
         </div>
       </div>
     </div>
     ${(a.entries || []).slice(0, 8).map((entry) => `
       <div class="item-row">
-        <strong>${entry.index}. ${entry.title}</strong>
-        <div class="muted">${entry.duration ? `${entry.duration}s` : "Duration unavailable"}</div>
+        <strong>${escapeHtml(entry.index)}. ${escapeHtml(entry.title)}</strong>
+        <div class="muted">${entry.duration ? `${escapeHtml(entry.duration)}s` : "Duration unavailable"}</div>
       </div>
     `).join("")}
   `;
@@ -50,30 +84,30 @@ function renderDashboard(data) {
   qs("#worker-state").textContent = `Worker: ${data.worker_state}`;
   qs("#queue-size").textContent = `Queue: ${data.queue_size}`;
   qs("#system-status").innerHTML = `
-    <div class="row"><strong>Worker</strong><span class="${statusClass(data.worker_state)}">${data.worker_state}</span></div>
-    <div class="row"><strong>Queue Size</strong><span>${data.queue_size}</span></div>
-    <div class="row"><strong>Errors</strong><span>${data.errors_count}</span></div>
+    <div class="row"><strong>Worker</strong><span class="${statusClass(data.worker_state)}">${escapeHtml(data.worker_state)}</span></div>
+    <div class="row"><strong>Queue Size</strong><span>${escapeHtml(data.queue_size)}</span></div>
+    <div class="row"><strong>Errors</strong><span>${escapeHtml(data.errors_count)}</span></div>
   `;
   qs("#active-jobs").innerHTML = data.active_jobs.length ? data.active_jobs.map((job) => `
-    <div class="job-card" data-job="${job.id}">
+    <div class="job-card" data-job="${escapeAttr(job.id)}">
       <div class="card-header">
         <div class="media-line">
-          ${job.analysis_json?.thumbnail ? `<img class="thumb" src="${job.analysis_json.thumbnail}" alt="thumbnail">` : `<div class="thumb placeholder">No Preview</div>`}
+          ${thumbnailHtml(job.analysis_json?.thumbnail)}
           <div>
-            <h3>${job.title || job.url}</h3>
-            <div class="${statusClass(job.status)}">${job.status}</div>
+            <h3>${escapeHtml(job.title || job.url)}</h3>
+            <div class="${statusClass(job.status)}">${escapeHtml(job.status)}</div>
           </div>
         </div>
-        <span>${job.type}</span>
+        <span>${escapeHtml(job.type)}</span>
       </div>
       ${progressBar(job.progress)}
-      <div class="job-meta">${formatJobMeta(job)}</div>
+      <div class="job-meta">${escapeHtml(formatJobMeta(job))}</div>
     </div>
   `).join("") : `<div class="empty">No jobs yet. Add a URL above to begin.</div>`;
   qs("#queue-preview").innerHTML = data.queue_preview.length ? data.queue_preview.map((job) => `
-    <div class="row" data-job="${job.id}">
-      <strong>${job.title || job.url}</strong>
-      <div class="row-meta">Position ${job.queue_position || "-"}</div>
+    <div class="row" data-job="${escapeAttr(job.id)}">
+      <strong>${escapeHtml(job.title || job.url)}</strong>
+      <div class="row-meta">Position ${escapeHtml(job.queue_position || "-")}</div>
     </div>
   `).join("") : `<div class="empty">Queue is empty.</div>`;
 }
@@ -88,14 +122,14 @@ function renderHistory(jobs) {
 
 function queueRow(job) {
   return `
-    <div class="row" data-job="${job.id}">
-      <div><strong>${job.title || job.url}</strong><div class="row-meta">${formatJobMeta(job)}</div></div>
-      <div>${job.type}</div>
-      <div class="${statusClass(job.status)}">${job.status}</div>
+    <div class="row" data-job="${escapeAttr(job.id)}">
+      <div><strong>${escapeHtml(job.title || job.url)}</strong><div class="row-meta">${escapeHtml(formatJobMeta(job))}</div></div>
+      <div>${escapeHtml(job.type)}</div>
+      <div class="${statusClass(job.status)}">${escapeHtml(job.status)}</div>
       <div class="row-actions">
-        <button data-action="select" data-id="${job.id}">Details</button>
-        <button data-action="cancel" data-id="${job.id}">Cancel</button>
-        <button data-action="remove" data-id="${job.id}">Remove</button>
+        <button data-action="select" data-id="${escapeAttr(job.id)}">Details</button>
+        <button data-action="cancel" data-id="${escapeAttr(job.id)}">Cancel</button>
+        <button data-action="remove" data-id="${escapeAttr(job.id)}">Remove</button>
       </div>
     </div>
   `;
@@ -103,19 +137,19 @@ function queueRow(job) {
 
 function historyRow(job) {
   return `
-    <div class="row" data-job="${job.id}">
+    <div class="row" data-job="${escapeAttr(job.id)}">
       <div class="media-line">
-        ${job.analysis_json?.thumbnail ? `<img class="thumb" src="${job.analysis_json.thumbnail}" alt="thumbnail">` : `<div class="thumb placeholder">No Preview</div>`}
-        <div><strong>${job.title || job.url}</strong><div class="row-meta">${job.finished_at || job.created_at || "-"}</div></div>
+        ${thumbnailHtml(job.analysis_json?.thumbnail)}
+        <div><strong>${escapeHtml(job.title || job.url)}</strong><div class="row-meta">${escapeHtml(job.finished_at || job.created_at || "-")}</div></div>
       </div>
-      <div>${job.type}</div>
-      <div class="${statusClass(job.status)}">${job.status}</div>
+      <div>${escapeHtml(job.type)}</div>
+      <div class="${statusClass(job.status)}">${escapeHtml(job.status)}</div>
       <div class="row-actions">
-        <button data-action="select" data-id="${job.id}">Details</button>
-        <button data-action="retry" data-id="${job.id}">Retry</button>
-        ${job.output_path ? `<button data-action="open-file" data-id="${job.id}">Open File</button>` : ""}
-        ${job.output_path ? `<button data-action="open-folder" data-id="${job.id}">Open Folder</button>` : ""}
-        ${job.output_path ? `<a class="download-btn" href="/api/download/${job.id}">Download</a>` : ""}
+        <button data-action="select" data-id="${escapeAttr(job.id)}">Details</button>
+        <button data-action="retry" data-id="${escapeAttr(job.id)}">Retry</button>
+        ${job.output_path ? `<button data-action="open-file" data-id="${escapeAttr(job.id)}">Open File</button>` : ""}
+        ${job.output_path ? `<button data-action="open-folder" data-id="${escapeAttr(job.id)}">Open Folder</button>` : ""}
+        ${job.output_path ? `<a class="download-btn" href="/api/download/${escapeAttr(job.id)}">Download</a>` : ""}
       </div>
     </div>
   `;
@@ -152,13 +186,13 @@ function renderDetails(job) {
       <div class="playlist-list">
         ${job.playlist_items.map((item) => `
           <div class="item-row">
-            <strong>${item.item_index + 1}. ${item.title}</strong>
+            <strong>${escapeHtml((item.item_index || 0) + 1)}. ${escapeHtml(item.title)}</strong>
             <div class="row-meta">
-              <span class="${statusClass(item.status)}">${item.status}</span>
-              <span>${item.progress || 0}%</span>
-              ${item.output_path ? `<button data-action="open-item-file" data-id="${item.id}">Open File</button>` : ""}
-              ${item.output_path ? `<button data-action="open-item-folder" data-id="${item.id}">Open Folder</button>` : ""}
-              ${item.output_path ? `<a class="download-btn" href="/api/download/item/${item.id}">Download</a>` : ""}
+              <span class="${statusClass(item.status)}">${escapeHtml(item.status)}</span>
+              <span>${escapeHtml(item.progress || 0)}%</span>
+              ${item.output_path ? `<button data-action="open-item-file" data-id="${escapeAttr(item.id)}">Open File</button>` : ""}
+              ${item.output_path ? `<button data-action="open-item-folder" data-id="${escapeAttr(item.id)}">Open Folder</button>` : ""}
+              ${item.output_path ? `<a class="download-btn" href="/api/download/item/${escapeAttr(item.id)}">Download</a>` : ""}
             </div>
           </div>
         `).join("")}
@@ -168,25 +202,25 @@ function renderDetails(job) {
     <div class="job-card">
       <div class="card-header">
         <div class="media-line">
-          ${job.analysis_json?.thumbnail ? `<img class="thumb large" src="${job.analysis_json.thumbnail}" alt="thumbnail">` : `<div class="thumb placeholder large">No Preview</div>`}
-          <div><h3>${job.title || job.url}</h3><div class="${statusClass(job.status)}">${job.status}</div></div>
+          ${thumbnailHtml(job.analysis_json?.thumbnail, "large")}
+          <div><h3>${escapeHtml(job.title || job.url)}</h3><div class="${statusClass(job.status)}">${escapeHtml(job.status)}</div></div>
         </div>
       </div>
       ${progressBar(job.progress)}
-      <div class="job-meta"><span>${job.stage || "-"}</span><span>${job.speed || "Speed unavailable"}</span><span>${job.eta || "ETA unavailable"}</span></div>
+      <div class="job-meta"><span>${escapeHtml(job.stage || "-")}</span><span>${escapeHtml(job.speed || "Speed unavailable")}</span><span>${escapeHtml(job.eta || "ETA unavailable")}</span></div>
       <div class="details-actions">
-        <button data-action="retry" data-id="${job.id}">Retry</button>
-        <button data-action="cancel" data-id="${job.id}">Cancel</button>
-        ${job.output_path ? `<button data-action="open-file" data-id="${job.id}">Open File</button>` : ""}
-        ${job.output_path ? `<button data-action="open-folder" data-id="${job.id}">Open Folder</button>` : ""}
-        ${job.output_path ? `<a class="download-btn" href="/api/download/${job.id}">Download file</a>` : ""}
+        <button data-action="retry" data-id="${escapeAttr(job.id)}">Retry</button>
+        <button data-action="cancel" data-id="${escapeAttr(job.id)}">Cancel</button>
+        ${job.output_path ? `<button data-action="open-file" data-id="${escapeAttr(job.id)}">Open File</button>` : ""}
+        ${job.output_path ? `<button data-action="open-folder" data-id="${escapeAttr(job.id)}">Open Folder</button>` : ""}
+        ${job.output_path ? `<a class="download-btn" href="/api/download/${escapeAttr(job.id)}">Download file</a>` : ""}
       </div>
     </div>
     ${playlistBlock}
     <div>
       <h3>Logs</h3>
       <div class="log-list">
-        ${(job.logs || []).length ? job.logs.map((log) => `<div class="log-row"><strong>${log.timestamp}</strong><div class="muted">${log.message}</div></div>`).join("") : `<div class="empty">No logs yet.</div>`}
+        ${(job.logs || []).length ? job.logs.map((log) => `<div class="log-row"><strong>${escapeHtml(log.timestamp)}</strong><div class="muted">${escapeHtml(log.message)}</div></div>`).join("") : `<div class="empty">No logs yet.</div>`}
       </div>
     </div>
   `;
@@ -205,11 +239,11 @@ async function loadSettings() {
   const settings = await fetchJson("/api/settings");
   state.settings = settings;
   qs("#settings-form").innerHTML = `
-    <div class="setting-row"><label for="output_directory">Output directory</label><input id="output_directory" name="output_directory" value="${settings.output_directory}"></div>
+    <div class="setting-row"><label for="output_directory">Output directory</label><input id="output_directory" name="output_directory" value="${escapeAttr(settings.output_directory)}"></div>
     <div class="setting-row"><label for="default_mode">Default mode</label><select id="default_mode" name="default_mode"><option value="video" ${settings.default_mode === "video" ? "selected" : ""}>Video</option><option value="audio" ${settings.default_mode === "audio" ? "selected" : ""}>Audio</option></select></div>
-    <div class="setting-row"><label for="quality">Quality / format</label><input id="quality" name="quality" value="${settings.quality}"></div>
+    <div class="setting-row"><label for="quality">Quality / format</label><input id="quality" name="quality" value="${escapeAttr(settings.quality)}"></div>
     <div class="setting-row"><label for="retry_enabled">Retry enabled</label><select id="retry_enabled" name="retry_enabled"><option value="true" ${settings.retry_enabled ? "selected" : ""}>Enabled</option><option value="false" ${!settings.retry_enabled ? "selected" : ""}>Disabled</option></select></div>
-    <div class="setting-row"><label for="retry_count">Retry count</label><input id="retry_count" name="retry_count" type="number" min="0" value="${settings.retry_count}"></div>
+    <div class="setting-row"><label for="retry_count">Retry count</label><input id="retry_count" name="retry_count" type="number" min="0" value="${escapeAttr(settings.retry_count)}"></div>
     <button class="accent-btn" type="submit">Save settings</button>
   `;
 }
@@ -247,24 +281,24 @@ function bindRowActions() {
         return;
       }
       if (action === "open-file") {
-        await fetchJson(`/api/open/job/${id}`, { method: "POST" });
+        await fetchJson(`/api/open/job/${encodeURIComponent(id)}`, { method: "POST" });
         return;
       }
       if (action === "open-folder") {
-        await fetchJson(`/api/open/job/${id}/folder`, { method: "POST" });
+        await fetchJson(`/api/open/job/${encodeURIComponent(id)}/folder`, { method: "POST" });
         return;
       }
       if (action === "open-item-file") {
-        await fetchJson(`/api/open/item/${id}`, { method: "POST" });
+        await fetchJson(`/api/open/item/${encodeURIComponent(id)}`, { method: "POST" });
         return;
       }
       if (action === "open-item-folder") {
-        await fetchJson(`/api/open/item/${id}/folder`, { method: "POST" });
+        await fetchJson(`/api/open/item/${encodeURIComponent(id)}/folder`, { method: "POST" });
         return;
       }
-      if (action === "retry") await fetchJson(`/api/jobs/${id}/retry`, { method: "POST" });
-      if (action === "cancel") await fetchJson(`/api/jobs/${id}/cancel`, { method: "POST" });
-      if (action === "remove") await fetchJson(`/api/jobs/${id}`, { method: "DELETE" });
+      if (action === "retry") await fetchJson(`/api/jobs/${encodeURIComponent(id)}/retry`, { method: "POST" });
+      if (action === "cancel") await fetchJson(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+      if (action === "remove") await fetchJson(`/api/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
       if (action === "remove" && state.selectedJobId === id) {
         state.selectedJobId = null;
       }
@@ -291,7 +325,7 @@ function bindAnalyze() {
       renderAnalysis();
     } catch (error) {
       qs("#analysis-status").textContent = error.message;
-      qs("#analysis-result").innerHTML = `<div class="empty">${error.message}</div>`;
+      qs("#analysis-result").innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
     }
   });
   qs("#queue-btn").addEventListener("click", async () => {

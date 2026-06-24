@@ -8,10 +8,9 @@ import struct
 import subprocess
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 DETACHED_FLAGS = 0
 if os.name == "nt":
@@ -33,9 +32,22 @@ MEDIA_EXTENSIONS = {
     ".wma",
 }
 
+MAX_UPLOAD_CHUNK_BYTES = 256 * 1024
+MAX_UPLOAD_TOTAL_BYTES = 500 * 1024 * 1024
+
+
+def configure_binary_stdio() -> None:
+    if os.name != "nt":
+        return
+
+    import msvcrt
+
+    msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+    msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def read_message() -> dict[str, Any]:
@@ -233,6 +245,13 @@ def build_uploaded_media_path(output_dir: Path, original_name: str | None) -> Pa
     safe_stem = re.sub(r"[^A-Za-z0-9._ -]+", "_", stem).strip(" .") or "uploaded_media"
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return output_dir / f"{safe_stem} [upload {stamp}]{suffix}"
+
+
+def validate_upload_size(expected_size: int) -> None:
+    if expected_size <= 0:
+        raise ValueError("Uploaded file size must be greater than zero")
+    if expected_size > MAX_UPLOAD_TOTAL_BYTES:
+        raise ValueError(f"Uploaded file exceeds max total size of {MAX_UPLOAD_TOTAL_BYTES} bytes")
 
 
 def _fmt_srt_time(seconds: float, second_marks: bool) -> str:
@@ -551,6 +570,7 @@ def handle_upload_transcribe_stream(message: dict[str, Any]) -> None:
     temp_path = target_path.with_suffix(target_path.suffix + ".part")
     upload_id = str(uuid.uuid4())
     expected_size = int(message.get("size") or 0)
+    validate_upload_size(expected_size)
     written = 0
 
     temp_path.write_bytes(b"")
@@ -564,9 +584,13 @@ def handle_upload_transcribe_stream(message: dict[str, Any]) -> None:
                 if chunk_message.get("uploadId") != upload_id:
                     raise RuntimeError("Upload session mismatch")
                 chunk_bytes = base64.b64decode(chunk_message["chunkBase64"], validate=True)
+                if len(chunk_bytes) > MAX_UPLOAD_CHUNK_BYTES:
+                    raise RuntimeError(f"Upload chunk exceeds max size of {MAX_UPLOAD_CHUNK_BYTES} bytes")
                 with temp_path.open("ab") as upload_file:
                     upload_file.write(chunk_bytes)
                 written += len(chunk_bytes)
+                if written > MAX_UPLOAD_TOTAL_BYTES:
+                    raise RuntimeError(f"Uploaded file exceeds max total size of {MAX_UPLOAD_TOTAL_BYTES} bytes")
                 send_message(
                     {
                         "ok": True,
@@ -821,6 +845,7 @@ def run_job_file(job_file_arg: str) -> None:
 
 def main() -> None:
     try:
+        configure_binary_stdio()
         if len(sys.argv) >= 3 and sys.argv[1] == "--run-job":
             run_job_file(sys.argv[2])
             return

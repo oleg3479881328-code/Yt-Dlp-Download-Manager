@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .path_safety import MissingPathError, UnsafePathError, resolve_existing_output_path
 from .storage import Storage
 from .worker import DownloadWorker
 from .yt_service import analyze_url, utc_now
@@ -218,12 +219,13 @@ def _find_playlist_item(item_id: str) -> dict[str, Any] | None:
 
 
 def _resolve_existing_path(raw_path: str | None) -> Path:
-    if not raw_path:
-        raise HTTPException(status_code=404, detail="Path not available")
-    path = Path(raw_path)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Path not found on disk")
-    return path
+    try:
+        settings = storage.get_settings()
+        return resolve_existing_output_path(raw_path, settings["output_directory"], BASE_DIR)
+    except MissingPathError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @app.get("/api/download/{job_id}")
@@ -231,9 +233,7 @@ async def download_job(job_id: str) -> FileResponse:
     job = storage.get_job(job_id)
     if not job or not job.get("output_path"):
         raise HTTPException(status_code=404, detail="Downloaded file not found")
-    path = Path(job["output_path"])
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Downloaded file not found on disk")
+    path = _resolve_existing_path(job.get("output_path"))
     return FileResponse(path=path, filename=path.name)
 
 
@@ -242,9 +242,7 @@ async def download_playlist_item(item_id: str) -> FileResponse:
     item = _find_playlist_item(item_id)
     if not item or not item.get("output_path"):
         raise HTTPException(status_code=404, detail="Playlist item not found")
-    path = Path(item["output_path"])
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Downloaded file not found on disk")
+    path = _resolve_existing_path(item.get("output_path"))
     return FileResponse(path=path, filename=path.name)
 
 
