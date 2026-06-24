@@ -85,6 +85,19 @@ class DownloadWorker:
             return 1
         return max(1, int(settings.get("retry_count", 0)) + 1)
 
+    def _resolve_final_output_path(self, info: dict[str, Any], ydl: YoutubeDL) -> str | None:
+        requested = info.get("requested_downloads") or []
+        for entry in requested:
+            filepath = entry.get("filepath")
+            if filepath:
+                return str(filepath)
+
+        filepath = info.get("filepath")
+        if filepath:
+            return str(filepath)
+
+        return ydl.prepare_filename(info)
+
     def _execute_job(self, job_id: str) -> None:
         job = self.storage.get_job(job_id)
         if not job or job["status"] not in {"queued", "ready"}:
@@ -136,7 +149,7 @@ class DownloadWorker:
             try:
                 with YoutubeDL(options) as ydl:
                     info = ydl.extract_info(job["url"], download=True)
-                    output_path = ydl.prepare_filename(info)
+                    output_path = self._resolve_final_output_path(info, ydl)
                 break
             except Exception:
                 if attempt == attempts_total:
@@ -198,7 +211,7 @@ class DownloadWorker:
                     try:
                         with YoutubeDL(build_ydl_options(output_dir, mode, quality, self._progress_hook(job_id, item["id"]))) as ydl:
                             info = ydl.extract_info(item["url"], download=True)
-                            output_path = ydl.prepare_filename(info)
+                            output_path = self._resolve_final_output_path(info, ydl)
                         break
                     except Exception:
                         if attempt == attempts_total:
