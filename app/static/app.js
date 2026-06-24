@@ -1,4 +1,4 @@
-const state = { analysis: null, selectedJobId: null, historyFilter: "all", settings: null, socket: null };
+const state = { analysis: null, selectedJobId: null, historyFilter: "all", settings: null, socket: null, latestHistory: [] };
 const qs = (selector) => document.querySelector(selector);
 
 function escapeHtml(value) {
@@ -10,33 +10,17 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function escapeAttr(value) {
-  return escapeHtml(value);
-}
-
-function classToken(value) {
-  return String(value ?? "unknown").replace(/[^A-Za-z0-9_-]/g, "-");
-}
+function escapeAttr(value) { return escapeHtml(value); }
+function classToken(value) { return String(value ?? "unknown").replace(/[^A-Za-z0-9_-]/g, "-"); }
+function statusClass(status) { return `status-chip status-${classToken(status)}`; }
+function progressBar(value = 0) { return `<div class="progress"><span style="width:${Math.min(100, Math.max(4, Number(value) || 4))}%"></span></div>`; }
 
 function safeUrl(value) {
   try {
     const parsed = new URL(String(value ?? ""), window.location.origin);
     if (["http:", "https:"].includes(parsed.protocol)) return parsed.href;
-  } catch (_error) {
-  }
+  } catch (_error) {}
   return "";
-}
-
-function statusClass(status) { return `status-chip status-${classToken(status)}`; }
-function progressBar(value = 0) { return `<div class="progress"><span style="width:${Math.min(100, Math.max(4, Number(value) || 4))}%"></span></div>`; }
-
-function formatJobMeta(job) {
-  return [
-    `Stage: ${job.stage || "-"}`,
-    job.speed ? `Speed: ${job.speed}` : null,
-    job.eta ? `ETA: ${job.eta}` : null,
-    job.type === "playlist" ? `Items: ${job.item_completed || 0}/${job.item_total || 0}` : null,
-  ].filter(Boolean).join(" • ");
 }
 
 function thumbnailHtml(url, sizeClass = "") {
@@ -47,34 +31,86 @@ function thumbnailHtml(url, sizeClass = "") {
     : `<div class="${escapeAttr(classes)} placeholder">No Preview</div>`;
 }
 
+function formatJobMeta(job) {
+  return [
+    `Stage: ${job.stage || "-"}`,
+    job.speed ? `Speed: ${job.speed}` : null,
+    job.eta ? `ETA: ${job.eta}` : null,
+    job.type === "playlist" ? `Items: ${job.item_completed || 0}/${job.item_total || 0}` : null,
+  ].filter(Boolean).join(" • ");
+}
+
+function parseLooseTime(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (/^\d+(?:\.\d+)?$/.test(raw)) return Number(raw);
+  const parts = raw.split(":").map((part) => part.trim());
+  if (parts.length === 2) return Number(parts[0]) * 60 + Number(parts[1]);
+  if (parts.length === 3) return Number(parts[0]) * 3600 + Number(parts[1]) * 60 + Number(parts[2]);
+  return null;
+}
+
+function formatSeconds(seconds) {
+  if (seconds === null || Number.isNaN(seconds)) return "—";
+  const total = Math.max(0, Math.round(seconds));
+  const hh = Math.floor(total / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  return hh ? `${hh}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}` : `${mm}:${String(ss).padStart(2, "0")}`;
+}
+
+function updateRangePreview() {
+  const start = parseLooseTime(qs("#segment-start")?.value);
+  const end = parseLooseTime(qs("#segment-end")?.value);
+  const duration = parseLooseTime(qs("#segment-duration")?.value);
+  const target = qs("#range-preview");
+  if (!target) return;
+  if (start === null) {
+    target.textContent = "No range";
+    target.className = "range-preview";
+    return;
+  }
+  const computedEnd = end !== null ? end : (duration !== null ? start + duration : null);
+  if (computedEnd === null || computedEnd <= start) {
+    target.textContent = "Range incomplete";
+    target.className = "range-preview warning";
+    return;
+  }
+  target.textContent = `${formatSeconds(start)} → ${formatSeconds(computedEnd)} • ${Math.round(computedEnd - start)}s`;
+  target.className = "range-preview ready";
+}
+
 function renderAnalysis() {
   const target = qs("#analysis-result");
   const status = qs("#analysis-status");
+  if (!target || !status) return;
   if (!state.analysis) {
-    target.innerHTML = `<div class="analysis-empty">Analyze a URL to inspect metadata before queueing.</div>`;
+    target.innerHTML = `<div class="analysis-empty">Analyze a URL to inspect metadata before creating a clip.</div>`;
     status.textContent = "Waiting for URL";
+    status.className = "status-chip status-queued";
     return;
   }
   const a = state.analysis;
-  status.textContent = a.type === "playlist" ? `Playlist detected • ${a.item_count} items` : "Single item detected";
+  status.textContent = a.type === "playlist" ? `Playlist • ${a.item_count} items` : "Ready for range";
+  status.className = a.type === "playlist" ? "status-chip status-failed" : "status-chip status-completed";
   target.innerHTML = `
-    <div class="job-card">
-      <div class="media-line">
-        ${thumbnailHtml(a.thumbnail, "large")}
-        <div>
-          <h3>${escapeHtml(a.title)}</h3>
-          <div class="job-meta">
-            <span>${escapeHtml(a.type)}</span>
-            <span>${escapeHtml(a.item_count)} item(s)</span>
-            <span>${escapeHtml(a.extractor || "source unknown")}</span>
-          </div>
+    <div class="analysis-preview">
+      ${thumbnailHtml(a.thumbnail, "poster")}
+      <div class="analysis-copy">
+        <h3>${escapeHtml(a.title)}</h3>
+        <div class="job-meta">
+          <span>${escapeHtml(a.type)}</span>
+          <span>${escapeHtml(a.item_count)} item(s)</span>
+          <span>${escapeHtml(a.extractor || "source unknown")}</span>
+          ${a.duration ? `<span>${escapeHtml(formatSeconds(Number(a.duration)))} total</span>` : ""}
         </div>
+        ${a.type === "playlist" ? `<div class="notice warning">MVP 1 segment jobs support a single video URL only. Use a direct item URL.</div>` : `<div class="notice ok">Enter a start/end or start/duration and create a clip job.</div>`}
       </div>
     </div>
     ${(a.entries || []).slice(0, 8).map((entry) => `
       <div class="item-row">
         <strong>${escapeHtml(entry.index)}. ${escapeHtml(entry.title)}</strong>
-        <div class="muted">${entry.duration ? `${escapeHtml(entry.duration)}s` : "Duration unavailable"}</div>
+        <div class="muted">${entry.duration ? `${escapeHtml(formatSeconds(Number(entry.duration)))} duration` : "Duration unavailable"}</div>
       </div>
     `).join("")}
   `;
@@ -98,12 +134,12 @@ function renderDashboard(data) {
             <div class="${statusClass(job.status)}">${escapeHtml(job.status)}</div>
           </div>
         </div>
-        <span>${escapeHtml(job.type)}</span>
+        <span>${job.analysis_json?.segment ? "clip" : escapeHtml(job.type)}</span>
       </div>
       ${progressBar(job.progress)}
       <div class="job-meta">${escapeHtml(formatJobMeta(job))}</div>
     </div>
-  `).join("") : `<div class="empty">No jobs yet. Add a URL above to begin.</div>`;
+  `).join("") : `<div class="empty">No active jobs yet.</div>`;
   qs("#queue-preview").innerHTML = data.queue_preview.length ? data.queue_preview.map((job) => `
     <div class="row" data-job="${escapeAttr(job.id)}">
       <strong>${escapeHtml(job.title || job.url)}</strong>
@@ -112,19 +148,11 @@ function renderDashboard(data) {
   `).join("") : `<div class="empty">Queue is empty.</div>`;
 }
 
-function renderQueue(jobs) {
-  qs("#queue-list").innerHTML = jobs.length ? jobs.map(queueRow).join("") : `<div class="empty">Queue is empty.</div>`;
-}
-
-function renderHistory(jobs) {
-  qs("#history-list").innerHTML = jobs.length ? jobs.map(historyRow).join("") : `<div class="empty">History is empty.</div>`;
-}
-
 function queueRow(job) {
   return `
     <div class="row" data-job="${escapeAttr(job.id)}">
       <div><strong>${escapeHtml(job.title || job.url)}</strong><div class="row-meta">${escapeHtml(formatJobMeta(job))}</div></div>
-      <div>${escapeHtml(job.type)}</div>
+      <div>${job.analysis_json?.segment ? "clip" : escapeHtml(job.type)}</div>
       <div class="${statusClass(job.status)}">${escapeHtml(job.status)}</div>
       <div class="row-actions">
         <button data-action="select" data-id="${escapeAttr(job.id)}">Details</button>
@@ -142,7 +170,7 @@ function historyRow(job) {
         ${thumbnailHtml(job.analysis_json?.thumbnail)}
         <div><strong>${escapeHtml(job.title || job.url)}</strong><div class="row-meta">${escapeHtml(job.finished_at || job.created_at || "-")}</div></div>
       </div>
-      <div>${escapeHtml(job.type)}</div>
+      <div>${job.analysis_json?.segment ? "clip" : escapeHtml(job.type)}</div>
       <div class="${statusClass(job.status)}">${escapeHtml(job.status)}</div>
       <div class="row-actions">
         <button data-action="select" data-id="${escapeAttr(job.id)}">Details</button>
@@ -155,6 +183,36 @@ function historyRow(job) {
   `;
 }
 
+function renderQueue(jobs) { qs("#queue-list").innerHTML = jobs.length ? jobs.map(queueRow).join("") : `<div class="empty">Queue is empty.</div>`; }
+function renderHistory(jobs) { qs("#history-list").innerHTML = jobs.length ? jobs.map(historyRow).join("") : `<div class="empty">History is empty.</div>`; }
+
+function renderClipLibrary(jobs) {
+  const target = qs("#clip-library");
+  if (!target) return;
+  const clips = (jobs || []).filter((job) => job.analysis_json?.segment);
+  target.innerHTML = clips.length ? clips.slice(0, 12).map((job) => {
+    const segment = job.analysis_json.segment;
+    return `
+      <div class="clip-row" data-job="${escapeAttr(job.id)}">
+        <div>
+          <strong>${escapeHtml(segment.label || "clip")}</strong>
+          <div class="row-meta">
+            <span>${escapeHtml(formatSeconds(segment.start))} → ${escapeHtml(formatSeconds(segment.end))}</span>
+            <span>${escapeHtml(segment.duration)}s</span>
+            <span class="${statusClass(job.status)}">${escapeHtml(job.status)}</span>
+          </div>
+          <div class="muted clip-path">${escapeHtml(job.output_path || job.title || job.url)}</div>
+        </div>
+        <div class="row-actions">
+          <button data-action="select" data-id="${escapeAttr(job.id)}">Details</button>
+          ${job.output_path ? `<button data-action="open-file" data-id="${escapeAttr(job.id)}">Open</button>` : ""}
+          ${job.output_path ? `<button data-action="open-folder" data-id="${escapeAttr(job.id)}">Folder</button>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("") : `<div class="empty">No clip jobs yet. Create one from the workbench above.</div>`;
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, { headers: { "Content-Type": "application/json" }, ...options });
   if (!response.ok) {
@@ -165,32 +223,34 @@ async function fetchJson(url, options = {}) {
 }
 
 function applySocketState(payload) {
+  state.latestHistory = payload.history || [];
   renderDashboard(payload.dashboard);
   renderQueue(payload.queue || []);
   renderHistory(payload.history || []);
+  renderClipLibrary(payload.history || []);
   if (payload.selected_job) {
     renderDetails(payload.selected_job);
   } else if (!state.selectedJobId) {
     qs("#details-title").textContent = "No job selected";
-    qs("#details-body").innerHTML = `<div class="empty">Choose a job to inspect progress, playlist items, and logs.</div>`;
+    qs("#details-body").innerHTML = `<div class="empty">Choose a clip/job to inspect output, range metadata, and logs.</div>`;
   }
   bindRowActions();
 }
 
 function renderDetails(job) {
   state.selectedJobId = job.id;
-  qs("#details-title").textContent = job.title || job.url;
+  qs("#details-title").textContent = job.analysis_json?.segment ? `Clip: ${job.analysis_json.segment.label}` : (job.title || job.url);
   const segment = job.analysis_json?.segment;
   const segmentBlock = segment ? `
     <div class="segment-summary">
       <h3>Selected Segment</h3>
-      <div class="row-meta">
-        <span>Start: ${escapeHtml(segment.start)}</span>
-        <span>End: ${escapeHtml(segment.end)}</span>
-        <span>Duration: ${escapeHtml(segment.duration)}</span>
-        <span>Label: ${escapeHtml(segment.label)}</span>
+      <div class="segment-metrics">
+        <div><span>Start</span><strong>${escapeHtml(formatSeconds(segment.start))}</strong></div>
+        <div><span>End</span><strong>${escapeHtml(formatSeconds(segment.end))}</strong></div>
+        <div><span>Duration</span><strong>${escapeHtml(segment.duration)}s</strong></div>
+        <div><span>Label</span><strong>${escapeHtml(segment.label)}</strong></div>
       </div>
-      <div class="muted">Range: ${escapeHtml(segment.section_expression)}</div>
+      <div class="muted">Range expression: ${escapeHtml(segment.section_expression)}</div>
     </div>` : "";
   const playlistBlock = job.playlist_items?.length ? `
     <div>
@@ -221,6 +281,7 @@ function renderDetails(job) {
       ${progressBar(job.progress)}
       <div class="job-meta"><span>${escapeHtml(job.stage || "-")}</span><span>${escapeHtml(job.speed || "Speed unavailable")}</span><span>${escapeHtml(job.eta || "ETA unavailable")}</span></div>
       ${segmentBlock}
+      ${job.output_path ? `<div class="output-box"><span>Output</span><code>${escapeHtml(job.output_path)}</code></div>` : ""}
       <div class="details-actions">
         <button data-action="retry" data-id="${escapeAttr(job.id)}">Retry</button>
         <button data-action="cancel" data-id="${escapeAttr(job.id)}">Cancel</button>
@@ -242,10 +303,7 @@ function renderDetails(job) {
 
 function pushSocketContext() {
   if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
-  state.socket.send(JSON.stringify({
-    history_filter: state.historyFilter,
-    selected_job_id: state.selectedJobId,
-  }));
+  state.socket.send(JSON.stringify({ history_filter: state.historyFilter, selected_job_id: state.selectedJobId }));
 }
 
 async function loadSettings() {
@@ -288,33 +346,15 @@ function bindRowActions() {
     element.onclick = async () => {
       const { action, id } = element.dataset;
       if (!id) return;
-      if (action === "select") {
-        state.selectedJobId = id;
-        pushSocketContext();
-        return;
-      }
-      if (action === "open-file") {
-        await fetchJson(`/api/open/job/${encodeURIComponent(id)}`, { method: "POST" });
-        return;
-      }
-      if (action === "open-folder") {
-        await fetchJson(`/api/open/job/${encodeURIComponent(id)}/folder`, { method: "POST" });
-        return;
-      }
-      if (action === "open-item-file") {
-        await fetchJson(`/api/open/item/${encodeURIComponent(id)}`, { method: "POST" });
-        return;
-      }
-      if (action === "open-item-folder") {
-        await fetchJson(`/api/open/item/${encodeURIComponent(id)}/folder`, { method: "POST" });
-        return;
-      }
+      if (action === "select") { state.selectedJobId = id; pushSocketContext(); return; }
+      if (action === "open-file") { await fetchJson(`/api/open/job/${encodeURIComponent(id)}`, { method: "POST" }); return; }
+      if (action === "open-folder") { await fetchJson(`/api/open/job/${encodeURIComponent(id)}/folder`, { method: "POST" }); return; }
+      if (action === "open-item-file") { await fetchJson(`/api/open/item/${encodeURIComponent(id)}`, { method: "POST" }); return; }
+      if (action === "open-item-folder") { await fetchJson(`/api/open/item/${encodeURIComponent(id)}/folder`, { method: "POST" }); return; }
       if (action === "retry") await fetchJson(`/api/jobs/${encodeURIComponent(id)}/retry`, { method: "POST" });
       if (action === "cancel") await fetchJson(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
       if (action === "remove") await fetchJson(`/api/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (action === "remove" && state.selectedJobId === id) {
-        state.selectedJobId = null;
-      }
+      if (action === "remove" && state.selectedJobId === id) state.selectedJobId = null;
       pushSocketContext();
     };
   });
@@ -332,12 +372,14 @@ function bindAnalyze() {
     const url = qs("#url-input").value.trim();
     if (!url) return;
     qs("#analysis-status").textContent = "Analyzing...";
+    qs("#analysis-status").className = "status-chip status-downloading";
     try {
       const payload = await fetchJson("/api/analyze", { method: "POST", body: JSON.stringify({ url }) });
       state.analysis = payload.analysis;
       renderAnalysis();
     } catch (error) {
       qs("#analysis-status").textContent = error.message;
+      qs("#analysis-status").className = "status-chip status-failed";
       qs("#analysis-result").innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
     }
   });
@@ -348,11 +390,7 @@ function bindAnalyze() {
     const segmentEnd = qs("#segment-end").value.trim();
     const segmentDuration = qs("#segment-duration").value.trim();
     const segmentLabel = qs("#segment-label").value.trim();
-    const body = {
-      url,
-      mode: state.settings?.default_mode || "video",
-      quality: state.settings?.quality || "bestvideo*+bestaudio/best",
-    };
+    const body = { url, mode: state.settings?.default_mode || "video", quality: state.settings?.quality || "bestvideo*+bestaudio/best" };
     if (segmentStart || segmentEnd || segmentDuration || segmentLabel) {
       if (segmentStart) body.segment_start = segmentStart;
       if (segmentEnd) body.segment_end = segmentEnd;
@@ -360,15 +398,27 @@ function bindAnalyze() {
       if (segmentLabel) body.segment_label = segmentLabel;
     }
     try {
-      const payload = await fetchJson("/api/jobs", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+      const payload = await fetchJson("/api/jobs", { method: "POST", body: JSON.stringify(body) });
       state.selectedJobId = payload.job.id;
       pushSocketContext();
+      document.querySelector('[data-screen="dashboard"]')?.click();
     } catch (error) {
       qs("#analysis-status").textContent = error.message;
+      qs("#analysis-status").className = "status-chip status-failed";
     }
+  });
+  qs("#clear-workbench-btn").addEventListener("click", () => {
+    qs("#url-input").value = "";
+    qs("#segment-start").value = "";
+    qs("#segment-end").value = "";
+    qs("#segment-duration").value = "";
+    qs("#segment-label").value = "";
+    state.analysis = null;
+    renderAnalysis();
+    updateRangePreview();
+  });
+  ["#segment-start", "#segment-end", "#segment-duration", "#segment-label"].forEach((selector) => {
+    qs(selector).addEventListener("input", updateRangePreview);
   });
 }
 
@@ -398,9 +448,7 @@ function connectSocket() {
   state.socket = socket;
   socket.onopen = () => pushSocketContext();
   socket.onmessage = (event) => applySocketState(JSON.parse(event.data));
-  socket.onclose = () => {
-    setTimeout(connectSocket, 1500);
-  };
+  socket.onclose = () => { setTimeout(connectSocket, 1500); };
 }
 
 async function init() {
@@ -410,6 +458,7 @@ async function init() {
   bindSettingsSubmit();
   await loadSettings();
   renderAnalysis();
+  updateRangePreview();
   connectSocket();
 }
 
