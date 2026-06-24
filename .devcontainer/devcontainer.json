@@ -1,0 +1,26 @@
+{
+  "name": "AI Reels Workbench",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/ffmpeg:1": {}
+  },
+  "postCreateCommand": "python -m pip install --upgrade pip && python -m pip install -r requirements.txt",
+  "postAttachCommand": "python -m uvicorn app.main:app --host 0.0.0.0 --port 8012",
+  "forwardPorts": [8012],
+  "portsAttributes": {
+    "8012": {
+      "label": "AI Reels Workbench",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "ms-python.python"
+      ]
+    }
+  }
+}
