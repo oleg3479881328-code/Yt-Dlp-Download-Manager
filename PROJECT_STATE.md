@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 08_ACCEPTED
-current_run: workflow-runs/0002-animated-subtitle-module/
-last_updated: 2026-05-29
-next_action: Phase 1 MVP accepted after owner visual review. Plan Phase 2 (transcription integration with stable-ts / faster-whisper and yt-dlp subtitle import). Await separate owner decision to authorize Phase 2 execution.
+current_step: 09_STABILIZATION_COMPLETED_PRE_PHASE2
+current_run: merged PR #4 + Issues #5/#6
+last_updated: 2026-06-24
+next_action: PR #4 stabilization is merged. Next safe step is either full browser-driven Chrome extension/native-host end-to-end validation to retire the remaining runtime risk, or Phase 2A planning only after separate owner approval. Do not start Phase 2 implementation yet.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -18,6 +18,8 @@ Phase 1 MVP (первая минимально рабочая версия) бы
 Финальный артефакт: `subtitle_studio/out/karaoke-preview-v5.mp4` (255 frames, 805.8 kB, 8.5s при 30fps) — динамическая длительность, karaoke highlighting, корректный рендер.
 
 29 мая 2026 года в репозитории также зафиксировано исследование будущего `Video Content Analyzer` (модуля анализа содержания видео). Это исследование сохраняет найденные donor patterns (донорские паттерны — готовые подходы для адаптации), но не разрешает новую реализацию до отдельного решения владельца.
+
+24 июня 2026 года merged PR `#4` завершил отдельный stabilization pass (этап стабилизации) перед любым Phase 2: dashboard path safety, escaped external metadata rendering, реальное подтверждение и исправление `RISK-001`, bounded native-host hardening и green safety CI.
 
 ## Purpose
 
@@ -42,6 +44,9 @@ Phase 1 MVP (первая минимально рабочая версия) бы
 - `chrome_extension/` и `native_host/` образуют отдельный локальный контур расширения;
 - `.gitignore` исключает окружение, сборки, скачанные файлы и локальную SQLite-базу;
 - `subtitle_studio/` существует как изолированная реализация Remotion MVP; Phase 1 принят владельцем;
+- merged PR `#4` добавил `app/path_safety.py`, ограничение dashboard file access только output directory, escaped external metadata rendering, regression tests и Windows safety CI;
+- `app/worker.py` теперь сохраняет финальный audio output path после post-processing, а не промежуточный pre-conversion path;
+- `native_host/ytdlp_host.py` теперь использует Windows binary stdio mode и явные upload size limits;
 - `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` фиксирует будущий модуль видеоанализа и выбранные донорские подходы.
 
 ## Confirmed Decisions
@@ -57,6 +62,8 @@ Phase 1 MVP (первая минимально рабочая версия) бы
 9. Решение владельца от 2026-05-29: `Yt-Dlp-Download-Manager` остаётся единственным основным видео-проектом; отдельный параллельный видео-analysis product (продукт анализа видео) не развивается.
 10. Найденная технология анализа видео сохраняется как будущий кандидат-модуль `Video Content Analyzer` внутри этого репозитория; основной донорский паттерн — `bradautomates/claude-video`, вторичные идеи — `jordanrendric/claude-video-vision`, а `thoughtpunch/claudetube` используется только как источник идей на более поздний этап.
 11. Реализация `Video Content Analyzer` не начинается до отдельного решения владельца после завершения Phase 1 MVP субтитров.
+12. Решение владельца от 2026-06-24: merged PR `#4` считается завершённым stabilization pass before Phase 2.
+13. Green `safety-ci` и local Windows validation из Issue `#5` достаточны для фиксации завершённой stabilization stage, но не закрывают residual browser-driven Chrome extension/native-host risk.
 
 ## Animated Subtitle Video Maker — Approved Scope, Accepted
 
@@ -110,14 +117,15 @@ Future bounded purpose:
 - Execution report (отчёт о выполнении): `workflow-runs/0002-animated-subtitle-module/08_EXECUTION_REPORT.md`
 - GitHub transport issue (задача-переносчик GitHub): `#1 Implement Phase 1 Animated Subtitle Video Maker MVP`
 - Current review state (текущее состояние ревью): `accepted`; Phase 1 implemented, validated, and accepted after owner visual review.
+- Pre-Phase-2 stabilization evidence: merged PR `#4`, Issue `#5` local Windows validation report, and Issue `#6` source-of-truth sync.
 
 ## Reviewed Risks
 
 ### RISK-001 — Existing web audio output path may be wrong
 
-При audio download (загрузке аудио) web worker (веб-обработчик) использует FFmpeg post-processing (постобработку) в MP3, но сохранённый путь может указывать на исходный файл до конвертации, а не на итоговый `.mp3`.
+При audio download (загрузке аудио) web worker (веб-обработчик) использовал FFmpeg post-processing (постобработку) в MP3, но сохранённый путь мог указывать на исходный файл до конвертации, а не на итоговый `.mp3`.
 
-Status (статус): suspected from code review (подозревается по проверке кода); not validated by execution (не подтверждено запуском).
+Status (статус): resolved by local Windows validation and merged PR `#4` (устранён локальной Windows-проверкой и merged PR `#4`).
 
 ### RISK-002 — Two runtime contours may drift
 
@@ -137,18 +145,32 @@ Status (статус): accepted for planned module (принято для зап
 
 Status (статус): resolved by owner decision (устранено решением владельца): знания перенесены в этот проект, отдельное развитие не требуется.
 
+### RISK-005 — Browser-driven Chrome extension/native-host path is not fully revalidated
+
+После merged PR `#4` и bounded native-host hardening остаётся остаточный риск: не была выполнена полная browser-driven end-to-end validation (сквозная проверка через браузер) для `probe`, extension `analyze`, context-menu download, status fetch и upload transcription flow.
+
+Status (статус): known residual risk (известный остаточный риск); not fully cleared by issue `#5`.
+
 ## Latest Result
 
-Phase 1 MVP модуля анимированных субтитров реализован, проверен и **принят владельцем**.
+Merged PR `#4` (`c1a2e345dc41d0bbc205b7bc92b3a92926594612`) завершил stabilization pass before Phase 2.
 
-Все блокеры ревью устранены:
+Подтверждено этим merge и Issue `#5`:
 
-- **BLOCKER-001 (EXECUTION REPORT)**: РЕШЁН — создан `08_EXECUTION_REPORT.md` с полным structured отчётом.
-- **BLOCKER-002 (фиксированная длительность)**: РЕШЁН — `calculateMetadata` динамически вычисляет длительность из caption timing data. Рендер: 255 frames вместо 240.
-- **NOTE-001 (README)**: РЕШЁН — документация исправлена.
-- **Owner Visual Review**: ВЫПОЛНЕН — `karaoke-preview-v5.mp4` (255 frames, 805.8 kB) просмотрен и принят.
+- dashboard output-path safety добавлен;
+- dashboard external metadata rendering escaped;
+- `RISK-001` был реально воспроизведён на Windows и исправлен;
+- native host получил bounded hardening: Windows binary stdio и upload size limits;
+- добавлены regression tests для path safety, worker final output path и native upload limits;
+- CI добавлен и исправлен; `safety-ci` green на PR head `0baebefe3662d58665bc2a757aa2fd5bb7923c42`;
+- local Windows validation passed.
 
 ## Current Next Action
 
-Phase 1 MVP принят. Планировать Phase 2 (интеграция транскрибации с stable-ts / faster-whisper и импорт субтитров через yt-dlp). Ожидать отдельного решения владельца для авторизации Phase 2.
+Следующий безопасный шаг:
+
+1. либо провести full browser-driven Chrome extension/native-host end-to-end validation и явно закрыть `RISK-005`;
+2. либо, если владелец не хочет тратить шаг на эту проверку сейчас, делать только Phase 2A planning после отдельного решения владельца.
+
+Не начинать Phase 2 implementation до отдельного разрешения владельца.
 

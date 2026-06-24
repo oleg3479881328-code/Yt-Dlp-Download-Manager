@@ -322,3 +322,43 @@ npx remotion render KaraokeVideo out/karaoke-preview-v2.mp4
 ### Current Next Action
 
 Phase 1 MVP принят. Планировать Phase 2 (интеграция транскрибации через stable-ts / faster-whisper). Ожидание отдельного решения владельца о начале Phase 2.
+
+---
+
+## 2026-06-24 — PR #4 stabilization merged and project state synced
+
+### Trigger
+
+PR `#4` (`Stabilize dashboard safety before Phase 2`) был merged в `master`, после чего понадобилось синхронизировать канонические project-state files с фактическим состоянием репозитория.
+
+### Verified Before Change
+
+- Merged `master` head: `c1a2e345dc41d0bbc205b7bc92b3a92926594612`.
+- Merge message confirms the intended scope: dashboard path safety, frontend metadata escaping, `RISK-001` audio output-path fix, bounded native-host hardening, regression tests, and Windows safety CI.
+- Issue `#5` already contained the local Windows validation report and confirmed:
+  - dashboard root / analyze / queue / download / open checks passed;
+  - corrupted `output_path` outside output directory returned `403`;
+  - `RISK-001` was reproduced in audio mode and then fixed;
+  - residual browser-driven Chrome extension/native-host end-to-end validation was still not completed.
+- The canonical repository state files were stale and still pointed only to Phase 2 planning after subtitle acceptance.
+
+### Committed State Sync
+
+- `PROJECT_ENTRYPOINT.md` updated to reflect that PR `#4` merged before any Phase 2 work and to route the next executor through the new residual-risk / Phase-2A decision.
+- `PROJECT_STATE.md` updated to record the completed stabilization pass, resolved `RISK-001`, green safety CI, and the remaining browser-driven extension/native-host residual risk.
+- `PROJECT_RULES.md` updated with a small durable clarification: do not treat the Chrome extension/native-host risk as closed without real browser-driven testing, and do not start Phase 2 implementation without separate owner approval.
+- `logs/PROJECT_LOG.md` updated with this stabilization-merge sync entry.
+
+### Confirmed Result
+
+- PR `#4` is merged.
+- Stabilization before Phase 2 is complete.
+- `RISK-001` is no longer merely suspected; it is validated, fixed, and merged.
+- Residual risk remains only around full browser-driven Chrome extension/native-host end-to-end validation.
+
+### Current Next Action
+
+Either:
+
+1. run a full browser-driven Chrome extension/native-host end-to-end validation and explicitly close the remaining runtime risk; or
+2. do only Phase 2A planning after a separate owner decision.

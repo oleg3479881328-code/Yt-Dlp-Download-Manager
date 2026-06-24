@@ -38,6 +38,7 @@
 3. Новый `Animated Subtitle Video Maker` (модуль создания роликов с анимированными субтитрами) разрешён внутри текущего репозитория как отдельный узкий модуль.
 4. Планируемое ядро модуля: `Remotion` + `@remotion/captions` для preview/rendering (предпросмотра/отрисовки), `stable-ts` / `faster-whisper` для word-level timing (временных меток слов), `yt-dlp` для существующих субтитров источника.
 5. Новый модуль не должен ломать или переписывать существующую загрузку медиа на первом этапе.
+6. Stabilization pass из merged PR `#4` считается обязательным completed layer before any future Phase 2 implementation work.
 
 ## Quality Rules
 
@@ -64,8 +65,9 @@
 - не превращать личный инструмент в публичный продукт без отдельного решения;
 - не начинать публикацию Chrome extension;
 - не переписывать существующие download runtimes (исполнительные контуры загрузки) ради нового модуля;
-- не считать `RISK-001` доказанным багом без реального запуска;
+- не считать residual Chrome extension/native-host risk закрытым без реальной browser-driven end-to-end проверки;
 - не расширять subtitle module (модуль субтитров) за пределы Phase 1 MVP до первого подтверждённого экспорта видео.
+- не начинать Phase 2 implementation без отдельного решения владельца после merged PR `#4`.
 
 ## Local Safety Rules
 
@@ -85,4 +87,11 @@
 
 ## Current Next Action
 
-Phase 1 MVP принят после визуальной проверки владельцем. Планировать Phase 2 (интеграция транскрибации с stable-ts / faster-whisper и импорт субтитров через yt-dlp). Ожидать отдельного решения владельца для авторизации Phase 2. Не начинать `Video Content Analyzer` до отдельного решения владельца.
+Phase 1 MVP принят, а stabilization pass перед Phase 2 завершён merged PR `#4`.
+
+Текущий безопасный следующий шаг:
+
+- либо выполнить full browser-driven Chrome extension/native-host end-to-end validation;
+- либо делать только Phase 2A planning после отдельного решения владельца.
+
+Не начинать `Video Content Analyzer` до отдельного решения владельца.
