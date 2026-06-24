@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is prepared for AI handoff (передачи ИИ) directly from the folder or GitHub repository without extra chat context.
+This repository is prepared for AI handoff directly from the folder or GitHub repository without extra chat context.
 
 If you are an AI coding agent, start from the repository itself and follow the read order below before making changes.
 
@@ -12,21 +12,23 @@ If you are an AI coding agent, start from the repository itself and follow the r
 2. `PROJECT_STATE.md`
 3. `PROJECT_RULES.md`
 4. `logs/PROJECT_LOG.md`
-5. Active workflow materials under `workflow-runs/0002-animated-subtitle-module/`
+5. Active workflow materials under `workflow-runs/0003-science-video-assembly-mvp/`
+6. Active executor PR `#3 EXECUTOR PACKET: Science Video Assembly MVP`
 
 ## Canonical Current Task
 
 Current priority:
 
-- Phase 1 MVP is **accepted** after owner visual review.
-- Plan Phase 2 (transcription integration via `stable-ts` / `faster-whisper`).
-- Await separate owner decision before starting Phase 2 implementation.
+- Phase 1 Animated Subtitle Video Maker MVP is accepted after owner visual review.
+- Owner decision on 2026-06-20 authorizes a bounded draft / MVP track for `Science Video Assembly MVP` inside this repository.
+- Active work is PR `#3`: validate and harden the isolated `science_assembly/` scaffold.
+- Phase 2 transcription integration remains planned but not the active task while PR `#3` is open.
 
-Do not begin `Video Content Analyzer` implementation. That future module is research-only and not approved for execution.
+Do not implement automatic YouTube downloading for publication. Do not treat `science_assembly/` as a full `Video Content Analyzer`; it is a rights-aware script-to-stock-B-roll assembly MVP.
 
 ## State Rules
 
-- Treat repository files as the source of truth (источник истины).
+- Treat repository files as the source of truth.
 - If conversation context conflicts with repository state, follow `PROJECT_STATE.md`, active workflow artifacts, GitHub Issue or PR thread for the active task, and `logs/PROJECT_LOG.md`.
 - Do not claim something works unless it was actually validated by execution.
 
@@ -34,8 +36,8 @@ Do not begin `Video Content Analyzer` implementation. That future module is rese
 
 - Keep the project as a personal local Windows tool.
 - Do not turn it into a public product or Chrome Web Store extension.
-- Do not expand `subtitle_studio` beyond the approved Phase 1 MVP before the current review blockers are closed.
-- Do not refactor unrelated downloader, extension, or native-host code unless the active task requires it.
+- Do not refactor unrelated downloader, extension, native-host, or `subtitle_studio` code unless the active task requires it.
+- Keep `science_assembly/` isolated until validated and accepted.
 
 ## Practical Start Rule
 

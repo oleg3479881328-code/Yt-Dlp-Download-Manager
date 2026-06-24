@@ -5,67 +5,79 @@
 Личный локальный Windows-инструмент для полного цикла работы с роликами:
 
 - скачивание медиа через `yt-dlp`;
-- управление загрузками из web dashboard (веб-панели) и Chrome extension (расширения Chrome);
+- управление загрузками из web dashboard и Chrome extension;
 - получение или создание субтитров и текста в `SRT + TXT`;
-- создание собственных роликов с burned-in animated subtitles (вшитыми анимированными субтитрами), включая karaoke highlighting (караоке-подсветку слов), стили, анимации и позиционирование;
-- future candidate module (будущий кандидат-модуль): `Video Content Analyzer` (модуль анализа содержания видео) для анализа роликов через транскрипт с таймкодами и выбранные кадры.
+- создание собственных роликов с burned-in animated subtitles, включая karaoke highlighting, стили, анимации и позиционирование;
+- rights-aware science video assembly MVP: script -> visual beats -> stock source candidates -> manual approval -> timeline/source ledger;
+- future candidate module: `Video Content Analyzer` для анализа локальных или разрешённых видео через транскрипт с таймкодами и выбранные кадры.
 
 ## Project Mode
 
 - mode: `compact`
 - use case: personal local tool only
-- repository: private dedicated GitHub repository; this is the only primary video project
+- repository: dedicated GitHub repository; this is the only primary video project
 - normalization status: existing project normalized into Project Execution OS on 2026-05-25
-- active scope decision: add `Animated Subtitle Video Maker` (модуль создания роликов с анимированными субтитрами) inside this repository
-- captured future decision: preserve the analyzed video-intelligence donor pattern here as future `Video Content Analyzer`; do not develop a separate parallel video-analysis product
+- accepted scope: `Animated Subtitle Video Maker` inside this repository
+- active owner decision from 2026-06-20: bounded `Science Video Assembly MVP` draft track is authorized inside this repository through PR `#3`
+- captured future decision: preserve video-intelligence donor patterns here as future `Video Content Analyzer`; do not develop a separate parallel product
 
 ## Required Read Order
 
 1. `PROJECT_STATE.md` — текущее подтверждённое состояние и следующий шаг.
 2. `PROJECT_RULES.md` — ограничения и правила работы.
 3. `logs/PROJECT_LOG.md` — хронология решений и изменений.
-4. Latest active workflow material: `workflow-runs/0002-animated-subtitle-module/` and GitHub Issue `#1`.
-5. Future video-analysis research: `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md`.
+4. Active PR `#3 EXECUTOR PACKET: Science Video Assembly MVP`.
+5. Active workflow materials: `workflow-runs/0003-science-video-assembly-mvp/`.
+6. Existing accepted module context: `workflow-runs/0002-animated-subtitle-module/`.
+7. Future video-analysis research: `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md`.
 
 ## Verified Current Components
 
-- `app/` — FastAPI web dashboard (локальная веб-панель), SQLite state (хранилище состояния), background download worker (фоновый обработчик загрузок).
-- `chrome_extension/` — standalone Chrome extension (отдельное расширение Chrome).
-- `native_host/` — native messaging host (локальный мост между расширением и Windows-инструментами).
-- optional transcription (опциональная транскрибация) through `faster-whisper` into `.srt` and `.txt`.
-- `subtitle_studio/` — isolated Remotion implementation (изолированная реализация на Remotion) of the animated subtitle Phase 1 MVP; code exists, validated, and **accepted after owner visual review**.
+- `app/` — FastAPI web dashboard, SQLite state, background download worker.
+- `chrome_extension/` — standalone Chrome extension.
+- `native_host/` — native messaging host between extension and Windows tool.
+- optional transcription through `faster-whisper` into `.srt` and `.txt`.
+- `subtitle_studio/` — isolated Remotion implementation of animated subtitle Phase 1 MVP; code exists, validated, and accepted after owner visual review.
+- `science_assembly/` — draft scaffold in PR `#3`; not accepted until validation and execution report.
 
-## Active Work — Animated Subtitle Video Maker
+## Accepted Work — Animated Subtitle Video Maker
 
-`Animated Subtitle Video Maker` (модуль создания роликов с анимированными субтитрами) Phase 1 MVP:
+Phase 1 MVP is accepted after owner visual review. Final artifact: `subtitle_studio/out/karaoke-preview-v5.mp4`.
 
-- input (вход): собственное видео пользователя;
-- timed caption input (вход временных меток субтитров): prepared word-level timing (подготовленные временные метки отдельных слов);
-- one karaoke preset (один караоке-пресет);
-- preview (предпросмотр);
-- export (экспорт) готового MP4 с вшитыми анимированными субтитрами.
+Phase 2 transcription integration remains planned but is not active while PR `#3` is under review.
 
-Implementation state (статус реализации): **accepted after owner visual review**. Phase 1 MVP завершён. Финальный артефакт: `subtitle_studio/out/karaoke-preview-v5.mp4` (255 frames, 805.8 kB).
+## Active Work — Science Video Assembly MVP
 
-Следующий шаг: планирование Phase 2 (интеграция транскрибации). Ожидание отдельного решения владельца для авторизации Phase 2.
+Research/planning/code scaffold exists in PR `#3`.
+
+Current objective:
+
+```text
+short script
+-> DeepSeek visual beats JSON
+-> stock source candidates
+-> DeepSeek candidate ranking JSON
+-> manual approval file
+-> timeline JSON
+-> source ledger JSON
+```
+
+This is a rights-aware stock/source-ledger workflow, not a YouTube scraping or republishing tool.
 
 ## Future Captured Module — Video Content Analyzer
 
-Research only; implementation is not authorized yet.
-
-Captured direction:
+Research only unless separately authorized. Captured direction:
 
 - analyze downloaded or local videos using timestamped transcript plus selected visual frames;
-- first valuable use case: analysis of competitor short-form videos for hook (крючок внимания), on-screen text, visual structure, product timing and CTA (призыв к действию);
+- first valuable use case: competitor short-form video analysis;
 - primary donor pattern: `bradautomates/claude-video`;
 - secondary donor ideas: `jordanrendric/claude-video-vision`;
-- later ideas only: `thoughtpunch/claudetube`;
-- separate parallel video-analysis development is unnecessary after the captured research is retained here.
+- later ideas only: `thoughtpunch/claudetube`.
 
 ## Canonical Next Action
 
-Phase 1 MVP принят. Планировать Phase 2 (интеграция транскрибации с stable-ts / faster-whisper и импорт субтитров через yt-dlp). Ожидать отдельного решения владельца для авторизации Phase 2. Не начинать `Video Content Analyzer` до отдельного решения владельца.
+Resolve PR `#3` review blockers, run offline smoke test and pytest, return execution report. Do not start automatic YouTube publication downloading. After PR `#3` is accepted or closed, return to Phase 2 transcription planning.
 
 ## Canonical State Rule
 
-При конфликте между разговором и репозиторием источником истины являются `PROJECT_STATE.md`, активный workflow run (цикл работы), GitHub Issue/PR thread (ветка GitHub Issue/PR) для текущего исполнения и `logs/PROJECT_LOG.md`.
+При конфликте между разговором и репозиторием источником истины являются `PROJECT_STATE.md`, active workflow run, active GitHub Issue/PR thread and `logs/PROJECT_LOG.md`.
