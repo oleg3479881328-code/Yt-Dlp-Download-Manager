@@ -1,4 +1,23 @@
-const state = { analysis: null, selectedJobId: null, historyFilter: "all", settings: null, socket: null, latestHistory: [] };
+import {
+  buildTranscriptSelection,
+  parseTranscriptText,
+  resolveTranscriptEntryEnd,
+} from "./transcript-picker.js";
+
+const state = {
+  analysis: null,
+  selectedJobId: null,
+  historyFilter: "all",
+  settings: null,
+  socket: null,
+  latestHistory: [],
+  transcript: {
+    entries: [],
+    startIndex: null,
+    endIndex: null,
+    error: null,
+  },
+};
 const qs = (selector) => document.querySelector(selector);
 
 function escapeHtml(value) {
@@ -78,6 +97,159 @@ function updateRangePreview() {
   }
   target.textContent = `${formatSeconds(start)} → ${formatSeconds(computedEnd)} • ${Math.round(computedEnd - start)}s`;
   target.className = "range-preview ready";
+}
+
+function parseTranscriptInput() {
+  const text = qs("#transcript-input")?.value ?? "";
+  const status = qs("#transcript-status");
+  try {
+    const entries = parseTranscriptText(text);
+    state.transcript = {
+      entries,
+      startIndex: null,
+      endIndex: null,
+      error: null,
+    };
+    if (status) {
+      status.textContent = `${entries.length} line(s) ready`;
+      status.className = "status-chip status-completed";
+    }
+  } catch (error) {
+    state.transcript = {
+      entries: [],
+      startIndex: null,
+      endIndex: null,
+      error: error.message,
+    };
+    if (status) {
+      status.textContent = error.message;
+      status.className = "status-chip status-failed";
+    }
+  }
+  renderTranscriptPicker();
+}
+
+function handleTranscriptLineClick(index) {
+  const transcript = state.transcript;
+  if (!transcript.entries.length) return;
+
+  if (transcript.startIndex === null || (transcript.startIndex !== null && transcript.endIndex !== null)) {
+    state.transcript.startIndex = index;
+    state.transcript.endIndex = null;
+  } else if (transcript.endIndex === null) {
+    if (index < transcript.startIndex) {
+      state.transcript.startIndex = index;
+    } else {
+      state.transcript.endIndex = index;
+    }
+  }
+
+  renderTranscriptPicker();
+}
+
+function applyTranscriptRange() {
+  try {
+    const selection = buildTranscriptSelection(
+      state.transcript.entries,
+      state.transcript.startIndex,
+      state.transcript.endIndex,
+    );
+    qs("#segment-start").value = formatSeconds(selection.start);
+    qs("#segment-end").value = formatSeconds(selection.end);
+    qs("#segment-duration").value = "";
+    if (!qs("#segment-label").value.trim()) {
+      qs("#segment-label").value = selection.label;
+    }
+    updateRangePreview();
+    const status = qs("#transcript-status");
+    if (status) {
+      status.textContent = "Selected range applied to clip fields";
+      status.className = "status-chip status-completed";
+    }
+  } catch (error) {
+    const status = qs("#transcript-status");
+    if (status) {
+      status.textContent = error.message;
+      status.className = "status-chip status-failed";
+    }
+  }
+}
+
+function clearTranscriptPicker() {
+  qs("#transcript-input").value = "";
+  qs("#transcript-file").value = "";
+  state.transcript = {
+    entries: [],
+    startIndex: null,
+    endIndex: null,
+    error: null,
+  };
+  const status = qs("#transcript-status");
+  if (status) {
+    status.textContent = "Waiting for transcript";
+    status.className = "status-chip status-queued";
+  }
+  renderTranscriptPicker();
+}
+
+function renderTranscriptPicker() {
+  const transcript = state.transcript;
+  const listTarget = qs("#transcript-lines");
+  const previewTarget = qs("#transcript-selection-preview");
+  const useButton = qs("#use-transcript-range-btn");
+  if (!listTarget || !previewTarget || !useButton) return;
+
+  if (!transcript.entries.length) {
+    listTarget.innerHTML = `<div class="empty">Paste transcript text or load an SRT file to begin.</div>`;
+    previewTarget.innerHTML = `<div class="empty">Select a start line and an end line to preview the episode range.</div>`;
+    useButton.disabled = true;
+    return;
+  }
+
+  const lower = transcript.startIndex !== null && transcript.endIndex !== null
+    ? Math.min(transcript.startIndex, transcript.endIndex)
+    : transcript.startIndex;
+  const upper = transcript.startIndex !== null && transcript.endIndex !== null
+    ? Math.max(transcript.startIndex, transcript.endIndex)
+    : transcript.startIndex;
+
+  listTarget.innerHTML = transcript.entries.map((entry, index) => {
+    const resolvedEnd = resolveTranscriptEntryEnd(transcript.entries, index);
+    const isStart = transcript.startIndex === index;
+    const isEnd = transcript.endIndex === index;
+    const inRange = lower !== null && upper !== null && index >= lower && index <= upper;
+    return `
+      <button class="transcript-line${isStart ? " is-start" : ""}${isEnd ? " is-end" : ""}${inRange ? " is-selected" : ""}" data-transcript-index="${escapeAttr(index)}" type="button">
+        <span class="transcript-time">${escapeHtml(formatSeconds(entry.start))}${resolvedEnd !== null ? ` → ${escapeHtml(formatSeconds(resolvedEnd))}` : ""}</span>
+        <span class="transcript-text">${escapeHtml(entry.text)}</span>
+      </button>
+    `;
+  }).join("");
+
+  try {
+    const selection = buildTranscriptSelection(
+      transcript.entries,
+      transcript.startIndex,
+      transcript.endIndex,
+    );
+    previewTarget.innerHTML = `
+      <div class="selection-metrics">
+        <div><span>Start</span><strong>${escapeHtml(formatSeconds(selection.start))}</strong></div>
+        <div><span>End</span><strong>${escapeHtml(formatSeconds(selection.end))}</strong></div>
+        <div><span>Duration</span><strong>${escapeHtml(`${selection.duration}s`)}</strong></div>
+        <div><span>Label</span><strong>${escapeHtml(selection.label || "clip")}</strong></div>
+      </div>
+      <div class="selection-snippet">${escapeHtml(selection.snippet || "No transcript text in selection.")}</div>
+    `;
+    useButton.disabled = false;
+  } catch (_error) {
+    previewTarget.innerHTML = `<div class="empty">Click one line for start, then another line for end.</div>`;
+    useButton.disabled = true;
+  }
+
+  document.querySelectorAll("[data-transcript-index]").forEach((element) => {
+    element.onclick = () => handleTranscriptLineClick(Number(element.dataset.transcriptIndex));
+  });
 }
 
 function renderAnalysis() {
@@ -422,6 +594,19 @@ function bindAnalyze() {
   });
 }
 
+function bindTranscriptPicker() {
+  qs("#parse-transcript-btn").addEventListener("click", () => parseTranscriptInput());
+  qs("#clear-transcript-btn").addEventListener("click", () => clearTranscriptPicker());
+  qs("#use-transcript-range-btn").addEventListener("click", () => applyTranscriptRange());
+  qs("#transcript-file").addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    qs("#transcript-input").value = text;
+    parseTranscriptInput();
+  });
+}
+
 function bindSettingsSubmit() {
   document.addEventListener("submit", async (event) => {
     if (event.target.id !== "settings-form") return;
@@ -455,9 +640,11 @@ async function init() {
   bindNavigation();
   bindFilters();
   bindAnalyze();
+  bindTranscriptPicker();
   bindSettingsSubmit();
   await loadSettings();
   renderAnalysis();
+  renderTranscriptPicker();
   updateRangePreview();
   connectSocket();
 }
