@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>yt-dlp Download Manager</title>
+  <title>AI Reels Workbench</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -13,14 +13,15 @@
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">Y</div>
+        <div class="brand-mark">R</div>
         <div>
-          <strong>yt-dlp</strong>
-          <p>Download Manager</p>
+          <strong>AI Reels</strong>
+          <p>Clip Factory MVP</p>
         </div>
       </div>
       <nav class="nav">
-        <button class="nav-link active" data-screen="dashboard">Dashboard</button>
+        <button class="nav-link active" data-screen="workbench">Workbench</button>
+        <button class="nav-link" data-screen="dashboard">Dashboard</button>
         <button class="nav-link" data-screen="queue">Queue</button>
         <button class="nav-link" data-screen="history">History</button>
         <button class="nav-link" data-screen="settings">Settings</button>
@@ -28,27 +29,110 @@
       <div class="sidebar-status">
         <span id="worker-state">Worker: idle</span>
         <span id="queue-size">Queue: 0</span>
+        <span class="muted">MVP 1: selected segment clip</span>
       </div>
     </aside>
 
     <main class="main">
-      <header class="topbar">
-        <div class="url-form">
-          <input id="url-input" type="url" placeholder="Enter media or playlist URL">
-          <button id="analyze-btn" class="accent-btn">Analyze</button>
-          <button id="queue-btn" class="ghost-btn">Add to Queue</button>
+      <section class="workbench-hero">
+        <div>
+          <p class="eyebrow">Video conveyor / first brick</p>
+          <h1>Turn a selected moment into a saved clip</h1>
+          <p class="hero-copy">Paste a source URL, inspect metadata, enter a time range, and create a short clip file without working through the extension path.</p>
         </div>
-      </header>
+        <div class="hero-flow">
+          <span>URL</span>
+          <span>Analyze</span>
+          <span>Range</span>
+          <span>Clip</span>
+        </div>
+      </section>
 
       <section class="content">
-        <div class="screen active" id="screen-dashboard">
-          <div class="card analysis-card">
-            <div class="card-header">
-              <h2>Analysis</h2>
-              <span id="analysis-status">Waiting for URL</span>
+        <div class="screen active" id="screen-workbench">
+          <div class="workbench-grid">
+            <div class="card workbench-card primary-workbench">
+              <div class="card-header">
+                <div>
+                  <h2>1. Source</h2>
+                  <p class="muted">Use a video URL you are allowed to process.</p>
+                </div>
+                <span id="analysis-status" class="status-chip status-queued">Waiting for URL</span>
+              </div>
+              <label class="field large-field">
+                <span>Source URL</span>
+                <input id="url-input" type="url" placeholder="https://...">
+              </label>
+              <div class="actions-row">
+                <button id="analyze-btn" class="accent-btn">Analyze source</button>
+                <button id="clear-workbench-btn" class="ghost-btn">Clear</button>
+              </div>
+              <div id="analysis-result" class="analysis-empty">Analyze a URL to inspect metadata before creating a clip.</div>
             </div>
-            <div id="analysis-result" class="analysis-empty">Analyze a URL to inspect metadata before queueing.</div>
+
+            <div class="card workbench-card">
+              <div class="card-header">
+                <div>
+                  <h2>2. Selected range</h2>
+                  <p class="muted">Enter either end time or duration.</p>
+                </div>
+                <span id="range-preview" class="range-preview">No range</span>
+              </div>
+              <div class="segment-form workbench-segment-form">
+                <label class="field">
+                  <span>Start</span>
+                  <input id="segment-start" type="text" placeholder="00:01:05 or 65">
+                </label>
+                <label class="field">
+                  <span>End</span>
+                  <input id="segment-end" type="text" placeholder="00:01:35 or 95">
+                </label>
+                <label class="field">
+                  <span>Duration</span>
+                  <input id="segment-duration" type="text" placeholder="30 or 00:00:30">
+                </label>
+                <label class="field">
+                  <span>Label</span>
+                  <input id="segment-label" type="text" placeholder="hook-demo">
+                </label>
+              </div>
+              <div class="range-help">
+                <div><strong>Example:</strong> start <code>00:00:05</code>, end <code>00:00:12</code></div>
+                <div class="muted">Later this block will be filled from transcript / AI episode picker.</div>
+              </div>
+              <button id="queue-btn" class="accent-btn full-width">Create clip job</button>
+            </div>
           </div>
+
+          <div class="workbench-grid lower-grid">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>3. Recent clip jobs</h2>
+                  <p class="muted">Jobs with selected range metadata.</p>
+                </div>
+              </div>
+              <div id="clip-library" class="table-list clip-library"></div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>Pipeline map</h2>
+                  <p class="muted">Current MVP path and next layers.</p>
+                </div>
+              </div>
+              <div class="pipeline-map">
+                <div class="pipeline-step active"><strong>MVP 1</strong><span>Manual range → saved clip</span></div>
+                <div class="pipeline-step"><strong>MVP 2</strong><span>Transcript picker</span></div>
+                <div class="pipeline-step"><strong>MVP 3</strong><span>AI episode finder</span></div>
+                <div class="pipeline-step"><strong>MVP 4</strong><span>Reels processing</span></div>
+                <div class="pipeline-step"><strong>MVP 5</strong><span>Subtitles + cover</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-dashboard">
           <div class="dashboard-grid">
             <div class="card">
               <div class="card-header"><h2>Active Jobs</h2></div>
@@ -100,7 +184,7 @@
     <aside class="details">
       <div class="card details-card">
         <div class="card-header">
-          <h2>Details</h2>
+          <h2>Job Details</h2>
           <span id="details-title">No job selected</span>
         </div>
         <div id="details-body" class="details-body"></div>

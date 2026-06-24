@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from yt_dlp import YoutubeDL
 
+from .segment_utils import build_clip_output_template
+
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def format_eta(seconds: int | None) -> str | None:
@@ -32,7 +34,13 @@ def format_speed(speed: float | None) -> str | None:
     return None
 
 
-def build_ydl_options(output_dir: Path, mode: str, quality: str, progress_hook) -> dict[str, Any]:
+def build_ydl_options(
+    output_dir: Path,
+    mode: str,
+    quality: str,
+    progress_hook,
+    segment: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     options = {
         "outtmpl": str(output_dir / "%(title).180s [%(id)s].%(ext)s"),
         "noplaylist": True,
@@ -41,6 +49,17 @@ def build_ydl_options(output_dir: Path, mode: str, quality: str, progress_hook) 
         "progress_hooks": [progress_hook],
         "ignoreerrors": False,
     }
+    if segment:
+        options["outtmpl"] = build_clip_output_template(output_dir, label=segment.get("label") or "clip")
+        options["download_ranges"] = lambda *_: [
+            {
+                "start_time": segment["start"],
+                "end_time": segment["end"],
+                "title": segment.get("label") or "clip",
+                "index": 1,
+            }
+        ]
+        options["force_keyframes_at_cuts"] = True
     if mode == "audio":
         options["format"] = "bestaudio/best"
         options["postprocessors"] = [

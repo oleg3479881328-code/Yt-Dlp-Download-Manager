@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterable
-
+from typing import Any
 
 DEFAULT_SETTINGS = {
     "output_directory": "downloads",
@@ -182,6 +182,12 @@ class Storage:
                 "INSERT INTO logs (job_id, item_id, timestamp, message) VALUES (?, ?, ?, ?)",
                 (job_id, item_id, timestamp, message),
             )
+
+    def remove_job(self, job_id: str) -> None:
+        with self.lock, self.connect() as connection:
+            connection.execute("DELETE FROM logs WHERE job_id = ?", (job_id,))
+            connection.execute("DELETE FROM playlist_items WHERE job_id = ?", (job_id,))
+            connection.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self.connect() as connection:
