@@ -1,0 +1,19 @@
+:root {
+  --paper: #fbf5e8;
+  --paper-shadow: #eadfcb;
+  --ink: #1d2b34;
+  --ink-soft: #3d5564;
+  --blue: #3b78ff;
+  --blue-soft: #8fb7ff;
+  --gold: #f5b843;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #fff8ec 0%, #f1e6d3 100%);
+}
