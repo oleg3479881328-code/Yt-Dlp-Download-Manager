@@ -1,4 +1,4 @@
-import { staticFile } from "remotion";
+import { cancelRender, continueRender, delayRender, staticFile } from "remotion";
 import { useEffect, useState } from "react";
 import type { PathGroupElement, SceneSpecFile, StrokePathStep } from "./sceneTypes";
 
@@ -46,7 +46,8 @@ type SvgPathGroup = {
 };
 
 const extractAttribute = (source: string, attribute: string): string | null => {
-  const match = source.match(new RegExp(`${attribute}="([^"]+)"`));
+  const escapedAttribute = attribute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = source.match(new RegExp(`(?:^|\\s)${escapedAttribute}="([^"]+)"`));
   return match ? match[1] : null;
 };
 
@@ -176,6 +177,7 @@ export const loadSceneSpec = async (
 
 export const useSceneSpec = (specSrc: string): SceneSpecFile => {
   const [spec, setSpec] = useState<SceneSpecFile>(FALLBACK_SPEC);
+  const [handle] = useState(() => delayRender(`Loading whiteboard scene spec: ${specSrc}`));
 
   useEffect(() => {
     let cancelled = false;
@@ -187,19 +189,21 @@ export const useSceneSpec = (specSrc: string): SceneSpecFile => {
       const normalized = await loadSceneSpec(specSrc, payload);
       if (!cancelled) {
         setSpec(normalized);
+        continueRender(handle);
       }
     };
 
     load().catch(() => {
       if (!cancelled) {
         setSpec(FALLBACK_SPEC);
+        cancelRender(new Error(`Failed to load whiteboard scene spec: ${specSrc}`));
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [specSrc]);
+  }, [handle, specSrc]);
 
   return spec;
 };

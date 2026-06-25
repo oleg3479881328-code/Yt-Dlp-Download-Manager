@@ -32,7 +32,7 @@ It does **not** include TTS, cloud rendering, editor UI, dashboard integration, 
 - `src/WhiteboardScene.tsx` - scene-level layout and timing.
 - `src/renderers/SketchElement.tsx` - sketch element renderer with draw-on animation.
 - `public/samples/sky-blue-scenes.json` - sample topic: `Почему небо голубое?`
-- `public/samples/pencil-horse/` - approved SVG + JSON package for the pencil horse draw-on scene.
+- `public/samples/pencil-horse/` - approved SVG + JSON package plus precompiled render-scene JSON for the pencil horse draw-on scene.
 
 ## Install
 
@@ -117,7 +117,7 @@ Each drawable element supports relative timing through `startSec` and `durationS
 
 `pathGroup` renders an ordered list of SVG subpaths so one object can appear in multiple passes such as outline, details, and hatching.
 
-The approved horse demo now reads grouped SVG path data from `public/samples/pencil-horse/approved-drawing.svg` and uses `pencil-horse-scenes.json` for group order and timing.
+The approved horse demo is compiled from `approved-drawing.svg` + `pencil-horse-scenes.json` into `pencil-horse-render-scenes.json`, and the render uses that precompiled scene spec directly.
 
 ## Checks
 

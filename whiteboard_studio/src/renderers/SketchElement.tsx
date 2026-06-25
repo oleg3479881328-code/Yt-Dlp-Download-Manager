@@ -196,15 +196,12 @@ const StrokePathDrawable: React.FC<{
   return (
     <path
       d={d}
-      pathLength={1}
       fill="none"
       stroke={stroke}
       strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
-      strokeDasharray={1}
-      strokeDashoffset={1 - progress}
-      opacity={opacity}
+      opacity={opacity * progress}
     />
   );
 };
