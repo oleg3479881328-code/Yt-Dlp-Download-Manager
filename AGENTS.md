@@ -12,15 +12,16 @@ If you are an AI coding agent, start from the repository itself and follow the r
 2. `PROJECT_STATE.md`
 3. `PROJECT_RULES.md`
 4. `logs/PROJECT_LOG.md`
-5. Active workflow materials under `workflow-runs/0002-animated-subtitle-module/`
+5. `whiteboard_studio/README.md`
+6. GitHub Issue `#16 Implement Phase 1 Whiteboard Renderer MVP`
 
 ## Canonical Current Task
 
 Current priority:
 
-- Phase 1 MVP is **accepted** after owner visual review.
-- Plan Phase 2 (transcription integration via `stable-ts` / `faster-whisper`).
-- Await separate owner decision before starting Phase 2 implementation.
+- `subtitle_studio` Phase 1 remains **accepted** after owner visual review.
+- Owner decision from 2026-06-25 authorizes a bounded `whiteboard_studio` MVP inside this repository.
+- Current task is local validation and owner review of the rendered whiteboard sample MP4 from Issue `#16`.
 
 Do not begin `Video Content Analyzer` implementation. That future module is research-only and not approved for execution.
 
@@ -34,7 +35,7 @@ Do not begin `Video Content Analyzer` implementation. That future module is rese
 
 - Keep the project as a personal local Windows tool.
 - Do not turn it into a public product or Chrome Web Store extension.
-- Do not expand `subtitle_studio` beyond the approved Phase 1 MVP before the current review blockers are closed.
+- Keep `whiteboard_studio/` isolated from downloader, extension, native host, and accepted `subtitle_studio`.
 - Do not refactor unrelated downloader, extension, or native-host code unless the active task requires it.
 
 ## Practical Start Rule

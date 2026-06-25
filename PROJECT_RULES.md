@@ -9,6 +9,7 @@
 - запуска загрузок через Chrome extension (расширение Chrome);
 - local transcription (локальной транскрибации) в `.srt` и `.txt`;
 - создания собственных видео с burned-in animated subtitles (вшитыми анимированными субтитрами), включая karaoke highlighting (караоке-подсветку слов), стили, анимации и позиционирование.
+- создания собственных short-form whiteboard explainers (коротких whiteboard-роликов-объяснялок) из JSON scene spec.
 
 Не считать проект публичным продуктом, коммерческим приложением или расширением для Chrome Web Store без отдельного решения владельца.
 
@@ -35,9 +36,10 @@
 
 1. Web dashboard (веб-панель) и standalone Chrome extension/native host (отдельное расширение с локальным мостом) сейчас разрешены как два отдельных runtime contours (исполнительных контура), потому что инструмент личный.
 2. Не начинать архитектурное объединение существующих контуров без отдельной задачи и подтверждённой боли от дублирования.
-3. Новый `Animated Subtitle Video Maker` (модуль создания роликов с анимированными субтитрами) разрешён внутри текущего репозитория как отдельный узкий модуль.
+3. `subtitle_studio/` разрешён внутри текущего репозитория как отдельный узкий модуль и уже принят.
 4. Планируемое ядро модуля: `Remotion` + `@remotion/captions` для preview/rendering (предпросмотра/отрисовки), `stable-ts` / `faster-whisper` для word-level timing (временных меток слов), `yt-dlp` для существующих субтитров источника.
-5. Новый модуль не должен ломать или переписывать существующую загрузку медиа на первом этапе.
+5. `whiteboard_studio/` разрешён владельцем 2026-06-25 как отдельный узкий Remotion-based модуль для локального whiteboard rendering proof.
+6. Новые модули не должны ломать или переписывать существующую загрузку медиа на первом этапе.
 
 ## Quality Rules
 
@@ -59,13 +61,27 @@
 
 Настройка множества стилей, редактор таймлайна, перевод, разделение говорящих и массовое производство роликов не входят в Phase 1 MVP.
 
+## Whiteboard Renderer MVP Boundary
+
+Разрешённая Phase 1 граница для `whiteboard_studio/`:
+
+1. JSON scene spec;
+2. 3-5 простых сцен;
+3. sketch / hand-drawn visual style;
+4. draw-on timing for primary shapes;
+5. local preview;
+6. local MP4 export.
+
+GUI automation, paid SaaS, cloud rendering, TTS, dashboard integration и превращение этого модуля в полноценный editor не входят в текущий MVP.
+
 ## Current Forbidden Actions
 
 - не превращать личный инструмент в публичный продукт без отдельного решения;
 - не начинать публикацию Chrome extension;
 - не переписывать существующие download runtimes (исполнительные контуры загрузки) ради нового модуля;
 - не считать `RISK-001` доказанным багом без реального запуска;
-- не расширять subtitle module (модуль субтитров) за пределы Phase 1 MVP до первого подтверждённого экспорта видео.
+- не расширять subtitle module (модуль субтитров) за пределы Phase 1 MVP до первого подтверждённого экспорта видео;
+- не превращать `whiteboard_studio` в GUI editor, SaaS integration или mouse-driving automation.
 
 ## Local Safety Rules
 
@@ -85,4 +101,4 @@
 
 ## Current Next Action
 
-Phase 1 MVP принят после визуальной проверки владельцем. Планировать Phase 2 (интеграция транскрибации с stable-ts / faster-whisper и импорт субтитров через yt-dlp). Ожидать отдельного решения владельца для авторизации Phase 2. Не начинать `Video Content Analyzer` до отдельного решения владельца.
+`subtitle_studio` Phase 1 принят после визуальной проверки владельцем. Текущий активный bounded шаг: owner review `whiteboard_studio/out/sky-blue-demo.mp4`. После whiteboard review можно либо принять модуль as-is, либо сделать малый isolated polish pass, затем вернуться к Phase 2 transcription planning. Не начинать `Video Content Analyzer` до отдельного решения владельца.

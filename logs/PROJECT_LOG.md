@@ -322,3 +322,71 @@ npx remotion render KaraokeVideo out/karaoke-preview-v2.mp4
 ### Current Next Action
 
 Phase 1 MVP принят. Планировать Phase 2 (интеграция транскрибации через stable-ts / faster-whisper). Ожидание отдельного решения владельца о начале Phase 2.
+
+---
+
+## 2026-06-25 — Whiteboard Renderer MVP implemented and locally validated
+
+### Trigger
+
+Владелец открыл GitHub Issue `#16 Implement Phase 1 Whiteboard Renderer MVP` и авторизовал bounded local/free-first whiteboard renderer внутри этого репозитория.
+
+### Verified Before Change
+
+- `subtitle_studio/` already existed as an accepted Remotion pattern for vertical local MP4 rendering.
+- Current `master` branch source-of-truth files still pointed only to Phase 2 transcription planning, so they needed a bounded sync to reflect the new owner decision.
+- No `whiteboard_studio/` module existed in the repository before this session.
+
+### Changes Made
+
+1. Created isolated `whiteboard_studio/` Remotion module with:
+   - `package.json`, `tsconfig.json`, `eslint.config.mjs`, `remotion.config.ts`;
+   - `src/Root.tsx`, `src/WhiteboardVideo.tsx`, `src/WhiteboardScene.tsx`, `src/renderers/SketchElement.tsx`;
+   - `public/samples/sky-blue-scenes.json`;
+   - `README.md` and local `.gitignore`.
+2. Reused the accepted Remotion packaging/tooling pattern from `subtitle_studio/`.
+3. Used `roughjs` for a light local sketch/hand-drawn SVG layer instead of heavier editor SDKs.
+4. Updated `AGENTS.md`, `PROJECT_ENTRYPOINT.md`, `PROJECT_STATE.md`, and `PROJECT_RULES.md` so the canonical repo state reflects Issue `#16` as the active bounded track.
+
+### Commands Run
+
+```powershell
+cd whiteboard_studio
+npm install
+npm run lint
+npm run build
+npm run render:sample
+ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,duration -show_entries format=size,duration -of default=noprint_wrappers=1:nokey=0 out\sky-blue-demo.mp4
+```
+
+### Validation Results
+
+- `npm install` — passed
+- `npm run lint` — passed
+- `npm run build` — passed
+- `npm run render:sample` — passed
+- Output artifact created: `whiteboard_studio/out/sky-blue-demo.mp4`
+- `ffprobe` confirmed:
+  - resolution: `1080x1920`
+  - fps: `30/1`
+  - duration: `34.048s`
+  - size: `5231187 bytes` (`~5.2 MB`)
+
+### State Separation
+
+- Owner decision: committed in GitHub Issue `#16`.
+- Implementation: completed locally in `whiteboard_studio/`.
+- Local validation: completed.
+- Owner visual review: pending.
+
+### Not Performed
+
+- Dashboard integration
+- TTS integration
+- Any paid/cloud service validation
+
+These were intentionally skipped because they are out of scope for Phase 1 MVP.
+
+### Current Next Action
+
+Владелец должен визуально проверить `whiteboard_studio/out/sky-blue-demo.mp4` и решить: принять bounded MVP as-is или запросить небольшой isolated polish pass.
