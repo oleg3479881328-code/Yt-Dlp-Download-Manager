@@ -1,0 +1,202 @@
+{
+  "meta": {
+    "title": "Pencil Horse Demo",
+    "fps": 30,
+    "width": 1080,
+    "height": 1920
+  },
+  "scenes": [
+    {
+      "id": "horse-scene-01",
+      "title": "",
+      "caption": "",
+      "durationSec": 18,
+      "background": "radial-gradient(circle at top, #ffffff 0%, #f5f1e8 100%)",
+      "elements": [
+        {
+          "id": "horse-outline",
+          "type": "pathGroup",
+          "startSec": 0.5,
+          "durationSec": 11,
+          "stroke": "#45413c",
+          "strokeWidth": 6,
+          "opacity": 0.95,
+          "paths": [
+            {
+              "id": "back-neck",
+              "startOffsetSec": 0,
+              "durationSec": 1.8,
+              "d": "M 255 960 C 330 820, 410 690, 520 610 C 590 560, 700 550, 780 590"
+            },
+            {
+              "id": "muzzle-head",
+              "startOffsetSec": 1.4,
+              "durationSec": 1.3,
+              "d": "M 780 590 C 860 610, 905 660, 900 730 C 895 790, 840 838, 770 832 C 735 828, 705 808, 690 780"
+            },
+            {
+              "id": "ear-main",
+              "startOffsetSec": 2.6,
+              "durationSec": 0.7,
+              "d": "M 715 610 C 735 548, 760 520, 790 540 C 772 582, 758 620, 735 650"
+            },
+            {
+              "id": "chest-belly",
+              "startOffsetSec": 3.2,
+              "durationSec": 1.4,
+              "d": "M 690 780 C 635 870, 585 936, 565 1020 C 550 1088, 525 1155, 450 1178"
+            },
+            {
+              "id": "hindquarter",
+              "startOffsetSec": 4.4,
+              "durationSec": 1.5,
+              "d": "M 255 960 C 230 1030, 225 1090, 260 1142 C 310 1212, 388 1228, 450 1178"
+            },
+            {
+              "id": "front-leg",
+              "startOffsetSec": 5.8,
+              "durationSec": 1.2,
+              "d": "M 590 1005 C 575 1135, 570 1275, 560 1400 C 552 1465, 596 1495, 640 1472"
+            },
+            {
+              "id": "front-leg-rear-line",
+              "startOffsetSec": 6.7,
+              "durationSec": 1,
+              "d": "M 640 1472 C 625 1328, 635 1188, 648 1048"
+            },
+            {
+              "id": "hind-leg",
+              "startOffsetSec": 7.6,
+              "durationSec": 1.2,
+              "d": "M 355 1112 C 335 1238, 332 1360, 330 1455 C 330 1500, 380 1512, 418 1485"
+            },
+            {
+              "id": "hind-leg-return",
+              "startOffsetSec": 8.5,
+              "durationSec": 1,
+              "d": "M 418 1485 C 404 1338, 414 1232, 432 1148"
+            },
+            {
+              "id": "tail",
+              "startOffsetSec": 9.5,
+              "durationSec": 0.9,
+              "d": "M 252 958 C 172 1018, 148 1128, 200 1235 C 225 1288, 258 1325, 288 1348"
+            },
+            {
+              "id": "mane",
+              "startOffsetSec": 10.2,
+              "durationSec": 0.8,
+              "d": "M 548 612 C 500 670, 470 748, 452 848 C 492 810, 525 758, 552 698 C 577 644, 597 612, 625 590"
+            }
+          ]
+        },
+        {
+          "id": "horse-details",
+          "type": "pathGroup",
+          "startSec": 11.5,
+          "durationSec": 2.8,
+          "stroke": "#5f5952",
+          "strokeWidth": 3.2,
+          "opacity": 0.85,
+          "paths": [
+            {
+              "id": "eye",
+              "startOffsetSec": 0,
+              "durationSec": 0.5,
+              "d": "M 820 690 C 840 686, 852 695, 855 708 C 843 716, 830 716, 818 708"
+            },
+            {
+              "id": "nostril",
+              "startOffsetSec": 0.5,
+              "durationSec": 0.45,
+              "d": "M 864 776 C 875 786, 875 804, 860 810"
+            },
+            {
+              "id": "mouth",
+              "startOffsetSec": 0.9,
+              "durationSec": 0.45,
+              "d": "M 810 810 C 835 822, 850 830, 868 834"
+            },
+            {
+              "id": "jaw",
+              "startOffsetSec": 1.3,
+              "durationSec": 0.55,
+              "d": "M 742 820 C 770 860, 800 890, 842 918"
+            },
+            {
+              "id": "shoulder",
+              "startOffsetSec": 1.8,
+              "durationSec": 0.5,
+              "d": "M 542 848 C 588 904, 610 956, 620 1030"
+            },
+            {
+              "id": "belly-crease",
+              "startOffsetSec": 2.2,
+              "durationSec": 0.5,
+              "d": "M 420 1182 C 485 1174, 545 1155, 592 1118"
+            }
+          ]
+        },
+        {
+          "id": "horse-shading",
+          "type": "pathGroup",
+          "startSec": 14.6,
+          "durationSec": 2.8,
+          "stroke": "#7d756c",
+          "strokeWidth": 2.2,
+          "opacity": 0.45,
+          "paths": [
+            {
+              "id": "neck-hatch-1",
+              "startOffsetSec": 0,
+              "durationSec": 0.35,
+              "d": "M 560 720 L 650 770"
+            },
+            {
+              "id": "neck-hatch-2",
+              "startOffsetSec": 0.3,
+              "durationSec": 0.35,
+              "d": "M 536 772 L 632 820"
+            },
+            {
+              "id": "body-hatch-1",
+              "startOffsetSec": 0.6,
+              "durationSec": 0.35,
+              "d": "M 360 980 L 510 1040"
+            },
+            {
+              "id": "body-hatch-2",
+              "startOffsetSec": 0.9,
+              "durationSec": 0.35,
+              "d": "M 350 1038 L 498 1094"
+            },
+            {
+              "id": "leg-hatch-1",
+              "startOffsetSec": 1.2,
+              "durationSec": 0.3,
+              "d": "M 590 1188 L 638 1215"
+            },
+            {
+              "id": "leg-hatch-2",
+              "startOffsetSec": 1.45,
+              "durationSec": 0.3,
+              "d": "M 374 1258 L 420 1282"
+            },
+            {
+              "id": "tail-hatch",
+              "startOffsetSec": 1.7,
+              "durationSec": 0.35,
+              "d": "M 214 1120 L 270 1168"
+            },
+            {
+              "id": "ground-shadow",
+              "startOffsetSec": 2.05,
+              "durationSec": 0.5,
+              "d": "M 300 1512 C 430 1550, 585 1542, 700 1515"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

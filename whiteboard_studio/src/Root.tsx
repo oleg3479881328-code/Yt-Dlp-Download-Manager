@@ -1,7 +1,7 @@
 import "./index.css";
 import { Composition, staticFile, type CalculateMetadataFunction } from "remotion";
 import { WhiteboardVideo } from "./WhiteboardVideo";
-import { DEFAULT_WHITEBOARD_PROPS } from "./default-props";
+import { DEFAULT_WHITEBOARD_PROPS, HORSE_WHITEBOARD_PROPS } from "./default-props";
 import { getTotalDurationInFrames } from "./scene-loader";
 import type { SceneSpecFile, WhiteboardVideoProps } from "./sceneTypes";
 
@@ -28,14 +28,25 @@ const calculateMetadata: CalculateMetadataFunction<WhiteboardVideoProps> = async
 
 export const RemotionRoot: React.FC = () => {
   return (
-    <Composition
-      id="WhiteboardVideo"
-      component={WhiteboardVideo}
-      defaultProps={DEFAULT_WHITEBOARD_PROPS}
-      calculateMetadata={calculateMetadata}
-      fps={COMPOSITION_FPS}
-      width={1080}
-      height={1920}
-    />
+    <>
+      <Composition
+        id="WhiteboardVideo"
+        component={WhiteboardVideo}
+        defaultProps={DEFAULT_WHITEBOARD_PROPS}
+        calculateMetadata={calculateMetadata}
+        fps={COMPOSITION_FPS}
+        width={1080}
+        height={1920}
+      />
+      <Composition
+        id="PencilHorseVideo"
+        component={WhiteboardVideo}
+        defaultProps={HORSE_WHITEBOARD_PROPS}
+        calculateMetadata={calculateMetadata}
+        fps={COMPOSITION_FPS}
+        width={1080}
+        height={1920}
+      />
+    </>
   );
 };

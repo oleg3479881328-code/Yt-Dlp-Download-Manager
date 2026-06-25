@@ -4,6 +4,8 @@ Phase 1 MVP for a local whiteboard-style explainer renderer inside `Yt-Dlp-Downl
 
 This module renders one vertical MP4 from a JSON scene specification. It reuses the accepted Remotion direction from `subtitle_studio/`, but stays fully isolated from the downloader, extension, native host, and `subtitle_studio`.
 
+Phase 2 adds a path-based pencil/sketch draw-on mode for more complex outlines, starting with a horse demo.
+
 ## Scope
 
 This module proves a narrow rendering workflow:
@@ -11,6 +13,7 @@ This module proves a narrow rendering workflow:
 - JSON scene spec input;
 - whiteboard / sketch explainer visuals;
 - timed draw-on reveal for primary shapes;
+- timed path/SVG draw-on reveal for ordered sketch strokes;
 - local preview in Remotion Studio;
 - local MP4 export.
 
@@ -29,6 +32,7 @@ It does **not** include TTS, cloud rendering, editor UI, dashboard integration, 
 - `src/WhiteboardScene.tsx` - scene-level layout and timing.
 - `src/renderers/SketchElement.tsx` - sketch element renderer with draw-on animation.
 - `public/samples/sky-blue-scenes.json` - sample topic: `Почему небо голубое?`
+- `public/samples/pencil-horse-scenes.json` - sample pencil horse draw-on scene.
 
 ## Install
 
@@ -55,6 +59,18 @@ Output:
 
 ```text
 whiteboard_studio/out/sky-blue-demo.mp4
+```
+
+## Render Pencil Horse Demo
+
+```powershell
+npm run render:horse
+```
+
+Output:
+
+```text
+whiteboard_studio/out/pencil-horse-demo.mp4
 ```
 
 ## Scene Spec Shape
@@ -90,7 +106,16 @@ Element types used in Phase 1:
 - `dots`
 - `text`
 
+Additional Phase 2 types:
+
+- `strokePath`
+- `pathGroup`
+
 Each drawable element supports relative timing through `startSec` and `durationSec`.
+
+`strokePath` renders one SVG path string with timed stroke reveal.
+
+`pathGroup` renders an ordered list of SVG subpaths so one object can appear in multiple passes such as outline, details, and hatching.
 
 ## Checks
 
@@ -104,3 +129,4 @@ npm run build
 - The draw-on effect is deliberately simple and driven by SVG stroke reveal.
 - The whiteboard style is optimized for a single demo topic, not a general-purpose animation editor.
 - Text layout is manual in the JSON spec.
+- The horse sample is hand-authored path data for MVP; automatic image tracing is intentionally not implemented here.

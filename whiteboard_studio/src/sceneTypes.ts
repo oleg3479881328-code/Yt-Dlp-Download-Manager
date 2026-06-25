@@ -10,6 +10,7 @@ type BaseElement = {
   stroke?: string;
   strokeWidth?: number;
   roughness?: number;
+  opacity?: number;
 };
 
 export type LineElement = BaseElement & {
@@ -47,12 +48,34 @@ export type TextElement = BaseElement & {
   align?: "left" | "center" | "right";
 };
 
+export type StrokePathStep = {
+  id: string;
+  d: string;
+  startOffsetSec?: number;
+  durationSec?: number;
+  stroke?: string;
+  strokeWidth?: number;
+  opacity?: number;
+};
+
+export type StrokePathElement = BaseElement & {
+  type: "strokePath";
+  d: string;
+};
+
+export type PathGroupElement = BaseElement & {
+  type: "pathGroup";
+  paths: StrokePathStep[];
+};
+
 export type SceneElement =
   | LineElement
   | CircleElement
   | WaveElement
   | DotsElement
-  | TextElement;
+  | TextElement
+  | StrokePathElement
+  | PathGroupElement;
 
 export type SceneSpec = {
   id: string;
