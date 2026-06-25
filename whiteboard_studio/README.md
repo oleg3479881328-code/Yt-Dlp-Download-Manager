@@ -32,7 +32,7 @@ It does **not** include TTS, cloud rendering, editor UI, dashboard integration, 
 - `src/WhiteboardScene.tsx` - scene-level layout and timing.
 - `src/renderers/SketchElement.tsx` - sketch element renderer with draw-on animation.
 - `public/samples/sky-blue-scenes.json` - sample topic: `Почему небо голубое?`
-- `public/samples/pencil-horse-scenes.json` - sample pencil horse draw-on scene.
+- `public/samples/pencil-horse/` - approved SVG + JSON package for the pencil horse draw-on scene.
 
 ## Install
 
@@ -117,6 +117,8 @@ Each drawable element supports relative timing through `startSec` and `durationS
 
 `pathGroup` renders an ordered list of SVG subpaths so one object can appear in multiple passes such as outline, details, and hatching.
 
+The approved horse demo now reads grouped SVG path data from `public/samples/pencil-horse/approved-drawing.svg` and uses `pencil-horse-scenes.json` for group order and timing.
+
 ## Checks
 
 ```powershell
@@ -129,4 +131,4 @@ npm run build
 - The draw-on effect is deliberately simple and driven by SVG stroke reveal.
 - The whiteboard style is optimized for a single demo topic, not a general-purpose animation editor.
 - Text layout is manual in the JSON spec.
-- The horse sample is hand-authored path data for MVP; automatic image tracing is intentionally not implemented here.
+- The horse sample depends on the owner-approved grouped SVG package; automatic image tracing is intentionally not implemented here.

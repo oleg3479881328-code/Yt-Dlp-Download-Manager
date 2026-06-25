@@ -6,6 +6,6 @@ export const DEFAULT_WHITEBOARD_PROPS: WhiteboardVideoProps = {
 };
 
 export const HORSE_WHITEBOARD_PROPS: WhiteboardVideoProps = {
-  specSrc: "samples/pencil-horse-scenes.json",
-  title: "Pencil Horse Demo",
+  specSrc: "samples/pencil-horse/pencil-horse-scenes.json",
+  title: "Approved Pencil Horse Draw-on Demo",
 };

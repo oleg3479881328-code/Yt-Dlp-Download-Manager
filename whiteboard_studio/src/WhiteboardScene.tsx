@@ -7,6 +7,8 @@ export const WhiteboardScene: React.FC<{ scene: SceneSpec }> = ({ scene }) => {
   const { fps } = useVideoConfig();
   const hasTitle = scene.title.trim().length > 0;
   const hasCaption = scene.caption.trim().length > 0;
+  const canvasHeight = scene.canvasHeight ?? 1500;
+  const useFullBleedCanvas = scene.layout === "fullBleed" && !hasTitle && !hasCaption;
   const headerProgress = spring({
     fps,
     frame,
@@ -27,9 +29,17 @@ export const WhiteboardScene: React.FC<{ scene: SceneSpec }> = ({ scene }) => {
     >
       <AbsoluteFill
         style={{
-          padding: "96px 72px 120px",
+          padding: useFullBleedCanvas ? 0 : "96px 72px 120px",
         }}
       >
+        {useFullBleedCanvas ? (
+          <svg viewBox={`0 0 1080 ${canvasHeight}`} style={{ width: "100%", height: "100%" }}>
+            <rect width="1080" height={canvasHeight} fill="transparent" />
+            {scene.elements.map((element) => (
+              <SketchElement key={element.id} element={element} />
+            ))}
+          </svg>
+        ) : null}
         {hasTitle ? (
           <div
             style={{
@@ -57,26 +67,28 @@ export const WhiteboardScene: React.FC<{ scene: SceneSpec }> = ({ scene }) => {
           </div>
         ) : null}
 
-        <div
-          style={{
-            marginTop: hasTitle ? 42 : 0,
-            flex: 1,
-            borderRadius: 54,
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,250,241,0.82) 100%)",
-            border: "2px solid rgba(31, 46, 57, 0.08)",
-            position: "relative",
-            overflow: "hidden",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8), 0 25px 60px rgba(72, 58, 31, 0.12)",
-          }}
-        >
-          <svg viewBox="0 0 1080 1500" style={{ width: "100%", height: "100%" }}>
-            <rect width="1080" height="1500" fill="transparent" />
-            {scene.elements.map((element) => (
-              <SketchElement key={element.id} element={element} />
-            ))}
-          </svg>
-        </div>
+        {useFullBleedCanvas ? null : (
+          <div
+            style={{
+              marginTop: hasTitle ? 42 : 0,
+              flex: 1,
+              borderRadius: 54,
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,250,241,0.82) 100%)",
+              border: "2px solid rgba(31, 46, 57, 0.08)",
+              position: "relative",
+              overflow: "hidden",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8), 0 25px 60px rgba(72, 58, 31, 0.12)",
+            }}
+          >
+            <svg viewBox={`0 0 1080 ${canvasHeight}`} style={{ width: "100%", height: "100%" }}>
+              <rect width="1080" height={canvasHeight} fill="transparent" />
+              {scene.elements.map((element) => (
+                <SketchElement key={element.id} element={element} />
+              ))}
+            </svg>
+          </div>
+        )}
 
         {hasCaption ? (
           <div

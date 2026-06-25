@@ -84,6 +84,8 @@ export type SceneSpec = {
   caption: string;
   background?: string;
   accent?: string;
+  canvasHeight?: number;
+  layout?: "framed" | "fullBleed";
   elements: SceneElement[];
 };
 
