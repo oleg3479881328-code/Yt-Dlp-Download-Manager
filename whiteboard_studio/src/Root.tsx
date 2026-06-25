@@ -5,7 +5,8 @@ import { DEFAULT_WHITEBOARD_PROPS } from "./default-props";
 import { getTotalDurationInFrames } from "./scene-loader";
 import type { SceneSpecFile, WhiteboardVideoProps } from "./sceneTypes";
 
-const FALLBACK_DURATION = 30 * 30;
+const COMPOSITION_FPS = 30;
+const FALLBACK_DURATION = COMPOSITION_FPS * 30;
 
 const calculateMetadata: CalculateMetadataFunction<WhiteboardVideoProps> = async ({
   defaultProps,
@@ -19,8 +20,7 @@ const calculateMetadata: CalculateMetadataFunction<WhiteboardVideoProps> = async
     }
 
     const payload = (await response.json()) as SceneSpecFile;
-    const fps = payload.meta?.fps ?? 30;
-    return { durationInFrames: getTotalDurationInFrames(payload, fps) };
+    return { durationInFrames: getTotalDurationInFrames(payload, COMPOSITION_FPS) };
   } catch {
     return { durationInFrames: FALLBACK_DURATION };
   }
@@ -33,7 +33,7 @@ export const RemotionRoot: React.FC = () => {
       component={WhiteboardVideo}
       defaultProps={DEFAULT_WHITEBOARD_PROPS}
       calculateMetadata={calculateMetadata}
-      fps={30}
+      fps={COMPOSITION_FPS}
       width={1080}
       height={1920}
     />

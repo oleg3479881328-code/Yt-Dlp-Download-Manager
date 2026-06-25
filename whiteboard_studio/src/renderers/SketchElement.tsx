@@ -13,6 +13,19 @@ import type {
 const roughGenerator = rough.generator();
 const DASH_LENGTH = 2400;
 
+const getDrawableStrokeWidth = (drawable: Drawable) => {
+  return drawable.options.strokeWidth ?? 2.2;
+};
+
+const getDrawableFillWeight = (drawable: Drawable) => {
+  const fillWeight = drawable.options.fillWeight;
+  if (typeof fillWeight === "number" && fillWeight >= 0) {
+    return fillWeight;
+  }
+
+  return (drawable.options.strokeWidth ?? 2.2) / 2;
+};
+
 const getReveal = (startFrame: number, endFrame: number, frame: number) => {
   return interpolate(frame, [startFrame, endFrame], [0, 1], {
     extrapolateLeft: "clamp",
@@ -20,12 +33,40 @@ const getReveal = (startFrame: number, endFrame: number, frame: number) => {
   });
 };
 
-const getStrokeStyle = (set: OpSet, stroke: string) => {
-  const isFill = set.type === "fillPath" || set.type === "fillSketch";
+const getPathStyle = (set: OpSet, drawable: Drawable, fallbackStroke: string) => {
+  const stroke = drawable.options.stroke ?? fallbackStroke;
+  const fill = drawable.options.fill ?? "none";
+
+  if (set.type === "fillPath") {
+    return {
+      d: roughGenerator.opsToPath(set),
+      stroke: "none",
+      fill,
+      strokeWidth: 0,
+      opacity: 1,
+      strokeLinecap: "round" as const,
+      strokeLinejoin: "round" as const,
+    };
+  }
+
+  if (set.type === "fillSketch") {
+    return {
+      d: roughGenerator.opsToPath(set),
+      stroke: fill,
+      fill: "none",
+      strokeWidth: getDrawableFillWeight(drawable),
+      opacity: 1,
+      strokeLinecap: "round" as const,
+      strokeLinejoin: "round" as const,
+    };
+  }
+
   return {
     d: roughGenerator.opsToPath(set),
-    stroke: isFill ? "none" : stroke,
-    fill: isFill ? stroke : "none",
+    stroke,
+    fill: "none",
+    strokeWidth: getDrawableStrokeWidth(drawable),
+    opacity: 1,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
   };
@@ -39,17 +80,18 @@ const RoughDrawable: React.FC<{
   return (
     <>
       {drawable.sets.map((set, index) => {
-        const pathStyle = getStrokeStyle(set, stroke);
+        const pathStyle = getPathStyle(set, drawable, stroke);
+        const isStrokeReveal = pathStyle.stroke !== "none";
         return (
           <path
             key={`${drawable.shape}-${index}`}
             d={pathStyle.d}
             stroke={pathStyle.stroke}
             fill={pathStyle.fill}
-            strokeWidth={2.2}
-            strokeDasharray={pathStyle.stroke === "none" ? undefined : DASH_LENGTH}
-            strokeDashoffset={pathStyle.stroke === "none" ? undefined : DASH_LENGTH * (1 - progress)}
-            opacity={pathStyle.stroke === "none" ? progress : 1}
+            strokeWidth={pathStyle.strokeWidth}
+            strokeDasharray={isStrokeReveal ? DASH_LENGTH : undefined}
+            strokeDashoffset={isStrokeReveal ? DASH_LENGTH * (1 - progress) : undefined}
+            opacity={isStrokeReveal ? pathStyle.opacity : progress}
             strokeLinecap={pathStyle.strokeLinecap}
             strokeLinejoin={pathStyle.strokeLinejoin}
           />
