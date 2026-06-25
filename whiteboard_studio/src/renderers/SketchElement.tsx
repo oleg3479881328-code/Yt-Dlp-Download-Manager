@@ -5,7 +5,9 @@ import type {
   CircleElement,
   DotsElement,
   LineElement,
+  PathGroupElement,
   SceneElement,
+  StrokePathStep,
   TextElement,
   WaveElement,
 } from "../sceneTypes";
@@ -177,11 +179,81 @@ const DotsDrawable: React.FC<{ element: DotsElement; progress: number }> = ({
           fill={element.fill ?? "#b8c8d9"}
           stroke={element.stroke ?? "#22313b"}
           strokeWidth={1.5}
-          opacity={0.9}
+          opacity={element.opacity ?? 0.9}
         />
       ))}
     </>
   );
+};
+
+const StrokePathDrawable: React.FC<{
+  d: string;
+  stroke: string;
+  strokeWidth: number;
+  opacity: number;
+  progress: number;
+}> = ({ d, stroke, strokeWidth, opacity, progress }) => {
+  return (
+    <path
+      d={d}
+      fill="none"
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={opacity * progress}
+    />
+  );
+};
+
+const renderStrokePath = (
+  step: {
+    id: string;
+    d: string;
+    startSec: number;
+    durationSec: number;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  },
+  fps: number,
+  frame: number,
+) => {
+  const startFrame = Math.floor(step.startSec * fps);
+  const endFrame = Math.max(startFrame + 1, Math.ceil((step.startSec + step.durationSec) * fps));
+  const progress = getReveal(startFrame, endFrame, frame);
+
+  return (
+    <StrokePathDrawable
+      key={step.id}
+      d={step.d}
+      stroke={step.stroke}
+      strokeWidth={step.strokeWidth}
+      opacity={step.opacity}
+      progress={progress}
+    />
+  );
+};
+
+const getPathGroupSteps = (element: PathGroupElement): Array<{
+  id: string;
+  d: string;
+  startSec: number;
+  durationSec: number;
+  stroke: string;
+  strokeWidth: number;
+  opacity: number;
+}> => {
+  const defaultDuration = element.paths.length > 0 ? element.durationSec / element.paths.length : element.durationSec;
+  return element.paths.map((path: StrokePathStep, index) => ({
+    id: `${element.id}-${path.id}`,
+    d: path.d,
+    startSec: element.startSec + (path.startOffsetSec ?? index * defaultDuration),
+    durationSec: path.durationSec ?? defaultDuration,
+    stroke: path.stroke ?? element.stroke ?? "#434343",
+    strokeWidth: path.strokeWidth ?? element.strokeWidth ?? 4,
+    opacity: path.opacity ?? element.opacity ?? 1,
+  }));
 };
 
 const TextDrawable: React.FC<{ element: TextElement; progress: number }> = ({
@@ -216,6 +288,27 @@ const TextDrawable: React.FC<{ element: TextElement; progress: number }> = ({
 export const SketchElement: React.FC<{ element: SceneElement }> = ({ element }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+
+  if (element.type === "strokePath") {
+    return renderStrokePath(
+      {
+        id: element.id,
+        d: element.d,
+        startSec: element.startSec,
+        durationSec: element.durationSec,
+        stroke: element.stroke ?? "#434343",
+        strokeWidth: element.strokeWidth ?? 4,
+        opacity: element.opacity ?? 1,
+      },
+      fps,
+      frame,
+    );
+  }
+
+  if (element.type === "pathGroup") {
+    return <>{getPathGroupSteps(element).map((step) => renderStrokePath(step, fps, frame))}</>;
+  }
+
   const startFrame = Math.floor(element.startSec * fps);
   const endFrame = Math.max(startFrame + 1, Math.ceil((element.startSec + element.durationSec) * fps));
   const progress = getReveal(startFrame, endFrame, frame);
@@ -239,6 +332,7 @@ export const SketchElement: React.FC<{ element: SceneElement }> = ({ element }) 
         strokeLinejoin="round"
         strokeDasharray={DASH_LENGTH}
         strokeDashoffset={DASH_LENGTH * (1 - progress)}
+        opacity={element.opacity ?? 1}
       />
     );
   }

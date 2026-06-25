@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "title": "Approved Pencil Horse Draw-on Demo",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "durationSec": 18,
+    "visualStyle": "graphite pencil sketch on light paper",
+    "approvedReference": "approved-reference.png",
+    "approvedSvg": "approved-drawing.svg",
+    "note": "Do not use the PNG as a static pop-in. Use approved-drawing.svg path groups as the renderer source."
+  },
+  "assets": {
+    "referencePng": "approved-reference.png",
+    "horseOnlyReferencePng": "approved-reference-horse-only.png",
+    "drawingSvg": "approved-drawing.svg"
+  },
+  "pathGroupTimeline": [
+    {
+      "id": "construction",
+      "svgGroupId": "construction",
+      "startSec": 0.0,
+      "durationSec": 2.6,
+      "stroke": "#8b8b8b",
+      "strokeWidth": 0.9,
+      "opacity": 0.28,
+      "role": "very light construction / planning strokes"
+    },
+    {
+      "id": "outline",
+      "svgGroupId": "outline",
+      "startSec": 2.2,
+      "durationSec": 6.2,
+      "stroke": "#2f2f2f",
+      "strokeWidth": 2.2,
+      "opacity": 0.92,
+      "role": "main horse contour"
+    },
+    {
+      "id": "head_details",
+      "svgGroupId": "head_details",
+      "startSec": 7.4,
+      "durationSec": 1.8,
+      "stroke": "#242424",
+      "strokeWidth": 1.7,
+      "opacity": 0.9,
+      "role": "ears, eye, muzzle, nostril, facial definition"
+    },
+    {
+      "id": "mane_tail",
+      "svgGroupId": "mane_tail",
+      "startSec": 8.7,
+      "durationSec": 2.0,
+      "stroke": "#464646",
+      "strokeWidth": 1.2,
+      "opacity": 0.65,
+      "role": "mane and tail strokes"
+    },
+    {
+      "id": "inner_structure",
+      "svgGroupId": "inner_structure",
+      "startSec": 10.0,
+      "durationSec": 2.0,
+      "stroke": "#555555",
+      "strokeWidth": 1.15,
+      "opacity": 0.58,
+      "role": "muscle/form structure inside the body"
+    },
+    {
+      "id": "hatching",
+      "svgGroupId": "hatching",
+      "startSec": 11.4,
+      "durationSec": 4.4,
+      "stroke": "#666666",
+      "strokeWidth": 0.85,
+      "opacity": 0.42,
+      "role": "pencil shading and hatch marks"
+    },
+    {
+      "id": "ground_shadow",
+      "svgGroupId": "ground_shadow",
+      "startSec": 15.3,
+      "durationSec": 1.7,
+      "stroke": "#777777",
+      "strokeWidth": 0.8,
+      "opacity": 0.35,
+      "role": "light shadow under hooves"
+    }
+  ],
+  "renderInstructions": {
+    "background": "#faf9f5",
+    "drawOnMethod": "Use SVG path length with strokeDasharray/strokeDashoffset. Each path should reveal progressively inside its group window.",
+    "finalHoldSec": 1.5,
+    "output": "out/pencil-horse-demo.mp4"
+  }
+}

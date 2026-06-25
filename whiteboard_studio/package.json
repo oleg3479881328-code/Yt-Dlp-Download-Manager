@@ -26,6 +26,7 @@
     "dev": "remotion studio",
     "build": "remotion bundle",
     "render:sample": "remotion render WhiteboardVideo out/sky-blue-demo.mp4",
+    "render:horse": "remotion render PencilHorseVideo out/pencil-horse-demo.mp4",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc"
   },
