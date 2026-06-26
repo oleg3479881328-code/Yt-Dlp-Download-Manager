@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 13_VIDEO_MIX_STAGE_1_EXECUTION_CHANNEL_READY
+current_step: 14_VIDEO_MIX_STAGE_1_IMPLEMENTED_PENDING_REVIEW
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-26
-next_action: Executor runs Stage 1 via GitHub Issue #21 using the Stage 1 task packet.
+next_action: Owner reviews the implemented Stage 1 VIDEO MIX module, execution report and PR linked from GitHub Issue #21.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -25,15 +25,20 @@ New active direction:
 
 ## Current Focus
 
-Assistant has completed planning, deep donor research, draft-code revision and Stage 1 execution task preparation.
+Stage 1 has now been implemented locally in `video_mix/` and validated through the required path:
 
-Stage 1 execution channel is now open:
+```text
+scan -> probe -> segment -> candidate manifests -> approve -> MP4 export
+```
+
+Execution channel:
 
 - GitHub Issue `#21` — `VIDEO MIX Stage 1 implementation channel`
 
-Full execution packet:
+Execution artifacts:
 
 - `workflow-runs/0003-video-mix-reel-mixer/13_STAGE_1_CODEX_EXECUTION_TASK.md`
+- `workflow-runs/0003-video-mix-reel-mixer/14_STAGE_1_EXECUTION_REPORT.md`
 
 ## Confirmed Existing State
 
@@ -42,8 +47,9 @@ Full execution packet:
 - `native_host/` — native messaging host.
 - local transcription exists through `faster-whisper` into `.srt` and `.txt`.
 - `subtitle_studio/` exists as accepted Remotion MVP for animated subtitles.
+- `video_mix/` now exists as a local Stage 1 module with CLI entrypoints for planning, approval and export.
 - `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` stores future video-analysis research only.
-- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts, donor research, revised draft code and Stage 1 task packet.
+- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts, donor research, revised draft code, Stage 1 task packet and execution report.
 
 ## Confirmed Decisions
 
@@ -57,10 +63,10 @@ Full execution packet:
 8. Wedding photographer is the first pilot vertical only.
 9. `VIDEO MIX` must be a reusable Reel Mixer Engine with industry packs.
 10. Source media, derived clips, local databases and rendered exports must not be committed.
-11. Draft code is reference material only; it is not integrated or validated.
+11. Draft code was reference material only; the real Stage 1 implementation now lives in `video_mix/`.
 12. Donor research shows VIDEO MIX should be a layered production engine, not a clone of any single SaaS product.
 13. Draft code was revised after donor research to use pluggable segmentation, timeline-like candidates and duplicate/reuse placeholders.
-14. Stage 1 execution must use GitHub Issue `#21` as the communication channel.
+14. Stage 1 execution uses GitHub Issue `#21` as the communication channel.
 15. Owner shorthand `0-2 проверь ответ` means ChatGPT should check the latest executor response in Issue/PR and advise or respond.
 
 ## VIDEO MIX Planning Model
@@ -131,9 +137,9 @@ Coordination issues:
 
 ## Current Boundaries
 
-Do not treat draft code as validated implementation.
+Treat `video_mix/` as the validated Stage 1 baseline.
 
-Stage 1 executor must follow Issue `#21` and task packet `13_STAGE_1_CODEX_EXECUTION_TASK.md`.
+Do not treat future expansion ideas from planning docs as already implemented.
 
 Do not build:
 
@@ -144,6 +150,19 @@ Do not build:
 - industry marketplace;
 - unrelated downloader/runtime refactor.
 
+## Latest Validation Result
+
+Validated locally on 2026-06-26:
+
+- `python -m pytest tests/test_video_mix_pipeline.py` — passed;
+- `python -m ruff check video_mix tests/test_video_mix_pipeline.py` — passed;
+- synthetic media set generated locally under ignored `video_mix_validation/input/`;
+- `python -m video_mix.cli plan ...` — passed;
+- one candidate approved through CLI;
+- `python -m video_mix.cli export ...` — passed;
+- exported MP4: `video_mix_validation/work/exports/wedding_validation_wedding_romantic_story_cand_b3bf1f07989e.mp4`;
+- `ffprobe` confirmed `1080x1920`, `30fps`, `12.033333s`, `54537 bytes`.
+
 ## Current Next Action
 
-Executor runs Stage 1 via GitHub Issue `#21` using the Stage 1 task packet.
+Owner reviews Stage 1 implementation via Issue `#21`, PR and `14_STAGE_1_EXECUTION_REPORT.md`, then decides whether to accept this baseline or request one isolated follow-up pass.

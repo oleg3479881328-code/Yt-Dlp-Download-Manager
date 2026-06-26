@@ -32,9 +32,10 @@ Local tool for:
 2. `PROJECT_RULES.md`
 3. `logs/PROJECT_LOG.md`
 4. `workflow-runs/0003-video-mix-reel-mixer/`
-5. GitHub Issue `#20`
-6. `workflow-runs/0002-animated-subtitle-module/` only if subtitle/rendering context is needed.
-7. `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` only if needed.
+5. `workflow-runs/0003-video-mix-reel-mixer/14_STAGE_1_EXECUTION_REPORT.md`
+6. GitHub Issue `#21`
+7. `workflow-runs/0002-animated-subtitle-module/` only if subtitle/rendering context is needed.
+8. `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` only if needed.
 
 ## Verified Current Components
 
@@ -43,11 +44,12 @@ Local tool for:
 - `native_host/` — native messaging host.
 - local transcription through `faster-whisper`.
 - `subtitle_studio/` — accepted Remotion Phase 1 MVP.
-- `workflow-runs/0003-video-mix-reel-mixer/` — active VIDEO MIX planning package.
+- `video_mix/` — local Stage 1 VIDEO MIX implementation.
+- `workflow-runs/0003-video-mix-reel-mixer/` — active VIDEO MIX planning and execution package.
 
 ## Active Work — VIDEO MIX
 
-`VIDEO MIX` is a planned module inside this repository.
+`VIDEO MIX` is a local Stage 1 module inside this repository.
 
 Purpose:
 
@@ -65,7 +67,7 @@ VIDEO MIX
 
 The first pack is only a pilot. The core must remain reusable.
 
-## Current Planning Artifacts
+## Current VIDEO MIX Artifacts
 
 - `workflow-runs/0003-video-mix-reel-mixer/01_OWNER_BRIEF.md`
 - `workflow-runs/0003-video-mix-reel-mixer/02_MVP_SCOPE.md`
@@ -74,6 +76,8 @@ The first pack is only a pilot. The core must remain reusable.
 - `workflow-runs/0003-video-mix-reel-mixer/05_REVIEW_RULES.md`
 - `workflow-runs/0003-video-mix-reel-mixer/06_ROADMAP.md`
 - `workflow-runs/0003-video-mix-reel-mixer/07_FUTURE_HANDOFF.md`
+- `workflow-runs/0003-video-mix-reel-mixer/13_STAGE_1_CODEX_EXECUTION_TASK.md`
+- `workflow-runs/0003-video-mix-reel-mixer/14_STAGE_1_EXECUTION_REPORT.md`
 
 ## Completed Previous Work
 
@@ -85,9 +89,9 @@ Research only. Implementation is not authorized.
 
 ## Canonical Next Action
 
-Review the `VIDEO MIX` planning package. If approved, create a narrow Stage 1 implementation task for Codex/local coding agent.
+Review the Stage 1 implementation through GitHub Issue `#21`, the linked PR and `14_STAGE_1_EXECUTION_REPORT.md`.
 
-Do not start implementation before owner approval.
+If accepted, keep `video_mix/` as the Stage 1 baseline and choose one narrow follow-up pass only.
 
 ## Canonical State Rule
 
