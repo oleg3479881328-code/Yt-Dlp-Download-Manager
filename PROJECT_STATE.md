@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 09_VIDEO_MIX_PLANNING
+current_step: 10_VIDEO_MIX_DRAFT_CODE_PREPARED
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-26
-next_action: Review VIDEO MIX planning package and decide whether to authorize Stage 1 implementation.
+next_action: Review VIDEO MIX planning and draft-code package, then decide whether to authorize Stage 1 implementation.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -15,7 +15,7 @@ The project remains the primary local Windows video tool.
 
 `Animated Subtitle Video Maker` Phase 1 MVP was completed and accepted after owner visual review.
 
-New active planning direction:
+New active direction:
 
 - `VIDEO MIX` / `Reel Mixer Engine`;
 - module inside this repository;
@@ -25,9 +25,9 @@ New active planning direction:
 
 ## Current Focus
 
-Create planning and future implementation boundaries for `VIDEO MIX` before coding execution.
+Assistant has completed planning and created draft code under the active workflow run.
 
-The owner instructed that the assistant should do everything possible directly. Codex should receive only future code or local execution work.
+Codex should receive only future implementation/local execution work after owner approval.
 
 ## Confirmed Existing State
 
@@ -37,7 +37,7 @@ The owner instructed that the assistant should do everything possible directly. 
 - local transcription exists through `faster-whisper` into `.srt` and `.txt`.
 - `subtitle_studio/` exists as accepted Remotion MVP for animated subtitles.
 - `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` stores future video-analysis research only.
-- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts.
+- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts and draft code.
 
 ## Confirmed Decisions
 
@@ -51,6 +51,7 @@ The owner instructed that the assistant should do everything possible directly. 
 8. Wedding photographer is the first pilot vertical only.
 9. `VIDEO MIX` must be a reusable Reel Mixer Engine with industry packs.
 10. Source media, derived clips, local databases and rendered exports must not be committed.
+11. Draft code is reference material only; it is not integrated or validated.
 
 ## VIDEO MIX Planning Model
 
@@ -88,6 +89,12 @@ Created planning artifacts:
 - `05_REVIEW_RULES.md`
 - `06_ROADMAP.md`
 - `07_FUTURE_HANDOFF.md`
+- `08_PLANNING_REPORT.md`
+- `09_DRAFT_CODE_REPORT.md`
+
+Draft code folder:
+
+- `workflow-runs/0003-video-mix-reel-mixer/draft-code/`
 
 Coordination issue:
 
@@ -95,7 +102,7 @@ Coordination issue:
 
 ## Current Boundaries
 
-Do not start implementation until owner approval.
+Do not treat the draft code as validated implementation.
 
 Do not build:
 
@@ -108,4 +115,4 @@ Do not build:
 
 ## Current Next Action
 
-Review this planning package. If approved, open a narrow Stage 1 implementation task for Codex/local coding agent.
+Review the planning and draft-code package. If approved, open a narrow Stage 1 implementation task for Codex/local coding agent.
