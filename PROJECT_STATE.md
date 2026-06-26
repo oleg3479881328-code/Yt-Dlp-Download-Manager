@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 12_VIDEO_MIX_READY_FOR_STAGE_1_DECISION
+current_step: 13_VIDEO_MIX_STAGE_1_EXECUTION_CHANNEL_READY
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-26
-next_action: Owner decides whether to authorize a narrow Stage 1 Codex implementation task.
+next_action: Executor runs Stage 1 via GitHub Issue #21 using the Stage 1 task packet.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -25,9 +25,15 @@ New active direction:
 
 ## Current Focus
 
-Assistant has completed planning, deep donor research and draft-code revision for VIDEO MIX as a general production combiner.
+Assistant has completed planning, deep donor research, draft-code revision and Stage 1 execution task preparation.
 
-Codex should receive only a narrow Stage 1 implementation task after owner approval.
+Stage 1 execution channel is now open:
+
+- GitHub Issue `#21` — `VIDEO MIX Stage 1 implementation channel`
+
+Full execution packet:
+
+- `workflow-runs/0003-video-mix-reel-mixer/13_STAGE_1_CODEX_EXECUTION_TASK.md`
 
 ## Confirmed Existing State
 
@@ -37,7 +43,7 @@ Codex should receive only a narrow Stage 1 implementation task after owner appro
 - local transcription exists through `faster-whisper` into `.srt` and `.txt`.
 - `subtitle_studio/` exists as accepted Remotion MVP for animated subtitles.
 - `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` stores future video-analysis research only.
-- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts, donor research and revised draft code.
+- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts, donor research, revised draft code and Stage 1 task packet.
 
 ## Confirmed Decisions
 
@@ -54,6 +60,8 @@ Codex should receive only a narrow Stage 1 implementation task after owner appro
 11. Draft code is reference material only; it is not integrated or validated.
 12. Donor research shows VIDEO MIX should be a layered production engine, not a clone of any single SaaS product.
 13. Draft code was revised after donor research to use pluggable segmentation, timeline-like candidates and duplicate/reuse placeholders.
+14. Stage 1 execution must use GitHub Issue `#21` as the communication channel.
+15. Owner shorthand `0-2 проверь ответ` means ChatGPT should check the latest executor response in Issue/PR and advise or respond.
 
 ## VIDEO MIX Planning Model
 
@@ -110,18 +118,22 @@ Created artifacts:
 - `10_DONOR_RESEARCH.md`
 - `11_DEEP_DONOR_RESEARCH_PRODUCTION_ENGINE.md`
 - `12_DRAFT_CODE_REVISION_REPORT.md`
+- `13_STAGE_1_CODEX_EXECUTION_TASK.md`
 
 Revised draft code folder:
 
 - `workflow-runs/0003-video-mix-reel-mixer/draft-code/`
 
-Coordination issue:
+Coordination issues:
 
-- GitHub Issue `#20` — `VIDEO MIX — scalable reels mixer engine with wedding photographer pilot`
+- GitHub Issue `#20` — planning/research issue.
+- GitHub Issue `#21` — Stage 1 execution channel.
 
 ## Current Boundaries
 
-Do not treat the draft code as validated implementation.
+Do not treat draft code as validated implementation.
+
+Stage 1 executor must follow Issue `#21` and task packet `13_STAGE_1_CODEX_EXECUTION_TASK.md`.
 
 Do not build:
 
@@ -134,4 +146,4 @@ Do not build:
 
 ## Current Next Action
 
-Owner decides whether to authorize a narrow Stage 1 Codex implementation task.
+Executor runs Stage 1 via GitHub Issue `#21` using the Stage 1 task packet.
