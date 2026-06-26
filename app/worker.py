@@ -5,11 +5,17 @@ import time
 from pathlib import Path
 from typing import Any
 
-from yt_dlp import YoutubeDL
-from yt_dlp.utils import DownloadError
-
 from .storage import Storage
 from .yt_service import build_ydl_options, format_eta, format_speed, utc_now
+
+
+def _require_youtube_dl():
+    try:
+        from yt_dlp import YoutubeDL
+        from yt_dlp.utils import DownloadError
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("yt_dlp is not installed. Install project requirements to run downloader jobs.") from exc
+    return YoutubeDL, DownloadError
 
 
 class DownloadWorker:
@@ -44,6 +50,7 @@ class DownloadWorker:
     def _progress_hook(self, job_id: str, item_id: str | None = None):
         def hook(payload: dict[str, Any]) -> None:
             if self._is_canceled(job_id):
+                _, DownloadError = _require_youtube_dl()
                 raise DownloadError("Canceled by user")
 
             progress_status = payload.get("status")
@@ -85,7 +92,7 @@ class DownloadWorker:
             return 1
         return max(1, int(settings.get("retry_count", 0)) + 1)
 
-    def _resolve_final_output_path(self, info: dict[str, Any], ydl: YoutubeDL) -> str | None:
+    def _resolve_final_output_path(self, info: dict[str, Any], ydl: Any) -> str | None:
         requested = info.get("requested_downloads") or []
         for entry in requested:
             filepath = entry.get("filepath")
@@ -135,6 +142,7 @@ class DownloadWorker:
         job = self.storage.get_job(job_id)
         if not job:
             return
+        YoutubeDL, DownloadError = _require_youtube_dl()
         settings = self.storage.get_settings()
         output_dir = self._resolve_output_dir(settings["output_directory"])
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -191,6 +199,7 @@ class DownloadWorker:
         job = self.storage.get_job(job_id)
         if not job:
             return
+        YoutubeDL, DownloadError = _require_youtube_dl()
         settings = self.storage.get_settings()
         output_dir = self._resolve_output_dir(settings["output_directory"])
         output_dir.mkdir(parents=True, exist_ok=True)

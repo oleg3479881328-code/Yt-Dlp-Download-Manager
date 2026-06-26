@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIDEO MIX Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="video-mix-shell">
+    <section class="video-mix-hero">
+      <div>
+        <p class="eyebrow">VIDEO MIX / Stage 1.3</p>
+        <h1>Local dashboard for review, approval, and export</h1>
+        <p class="hero-copy">Load an existing VIDEO MIX work directory, inspect the pipeline state, review candidate thumbnails, and approve or reject without leaving the local browser.</p>
+      </div>
+      <div class="video-mix-hero-actions">
+        <button id="vm-open-review" class="ghost-btn" type="button">Open review.html</button>
+        <button id="vm-open-exports" class="ghost-btn" type="button">Open exports</button>
+        <button id="vm-open-workdir" class="ghost-btn" type="button">Open work_dir</button>
+      </div>
+    </section>
+
+    <section class="video-mix-layout">
+      <aside class="video-mix-sidebar card">
+        <div class="card-header">
+          <div>
+            <h2>Load work_dir</h2>
+            <p class="muted">Use an already generated VIDEO MIX work folder.</p>
+          </div>
+          <span id="vm-load-state" class="status-chip status-queued">Waiting</span>
+        </div>
+        <label class="field">
+          <span>VIDEO MIX work_dir</span>
+          <input id="vm-workdir-input" type="text" placeholder="C:\path\to\video_mix_validation\work">
+        </label>
+        <div class="actions-row">
+          <button id="vm-load-btn" class="accent-btn" type="button">Load dashboard</button>
+          <button id="vm-copy-url-btn" class="ghost-btn" type="button">Copy URL</button>
+        </div>
+        <div id="vm-project-meta" class="video-mix-project-meta">
+          <div class="empty">Load a work_dir to see project metadata and summary counts.</div>
+        </div>
+        <div class="video-mix-summary-grid" id="vm-summary-grid"></div>
+        <div class="card-header video-mix-section-header">
+          <div>
+            <h2>Pipeline</h2>
+            <p class="muted">Assets to export in one local flow.</p>
+          </div>
+        </div>
+        <div id="vm-pipeline" class="pipeline-map"></div>
+        <div class="card-header video-mix-section-header">
+          <div>
+            <h2>Actions</h2>
+            <p class="muted">Use existing VIDEO MIX behavior only.</p>
+          </div>
+        </div>
+        <div class="video-mix-action-stack">
+          <button id="vm-export-btn" class="accent-btn full-width" type="button">Export approved candidates</button>
+          <button id="vm-refresh-btn" class="ghost-btn full-width" type="button">Refresh dashboard</button>
+        </div>
+        <div id="vm-exports-list" class="video-mix-exports-list"></div>
+      </aside>
+
+      <main class="video-mix-main">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Candidate cards</h2>
+              <p class="muted">Thumbnail, score, template, warnings, source files, and direct actions.</p>
+            </div>
+            <span id="vm-candidate-count" class="status-chip status-idle">0 candidates</span>
+          </div>
+          <div id="vm-candidates" class="video-mix-candidate-grid">
+            <div class="empty">No work_dir loaded yet.</div>
+          </div>
+        </div>
+      </main>
+    </section>
+  </div>
+  <script type="module" src="/static/video-mix-dashboard.js"></script>
+</body>
+</html>

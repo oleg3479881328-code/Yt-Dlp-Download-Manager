@@ -13,9 +13,22 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from video_mix.core.models import CandidateStatus
+
 from .path_safety import MissingPathError, UnsafePathError, resolve_existing_output_path
 from .segment_utils import SegmentValidationError, normalize_segment_payload
 from .storage import Storage
+from .video_mix_dashboard import (
+    build_dashboard_payload as build_video_mix_dashboard_payload,
+)
+from .video_mix_dashboard import (
+    export_approved_candidates,
+    open_dashboard_target,
+    resolve_relative_work_path,
+)
+from .video_mix_dashboard import (
+    update_candidate_status as update_video_mix_candidate_status,
+)
 from .worker import DownloadWorker
 from .yt_service import analyze_url, utc_now
 
@@ -47,6 +60,21 @@ class SettingsRequest(BaseModel):
     quality: str
     retry_enabled: bool
     retry_count: int
+
+
+class VideoMixCandidateRequest(BaseModel):
+    work_dir: str
+    note: str = ""
+
+
+class VideoMixExportRequest(BaseModel):
+    work_dir: str
+    ffmpeg: str = "ffmpeg"
+
+
+class VideoMixOpenRequest(BaseModel):
+    work_dir: str
+    target: str
 
 
 @asynccontextmanager
@@ -82,6 +110,11 @@ def build_state_payload(history_status: str = "all", selected_job_id: str | None
 @app.get("/", response_class=HTMLResponse)
 async def index() -> HTMLResponse:
     return HTMLResponse((BASE_DIR / "app" / "templates" / "index.html").read_text(encoding="utf-8"))
+
+
+@app.get("/video-mix", response_class=HTMLResponse)
+async def video_mix_dashboard_page() -> HTMLResponse:
+    return HTMLResponse((BASE_DIR / "app" / "templates" / "video_mix_dashboard.html").read_text(encoding="utf-8"))
 
 
 @app.post("/api/analyze")
@@ -236,6 +269,39 @@ async def get_settings() -> dict[str, Any]:
 @app.post("/api/settings")
 async def save_settings(payload: SettingsRequest) -> dict[str, Any]:
     return {"ok": True, "settings": storage.update_settings(payload.model_dump())}
+
+
+@app.get("/api/video-mix/dashboard")
+async def video_mix_dashboard(work_dir: str) -> dict[str, Any]:
+    return build_video_mix_dashboard_payload(work_dir)
+
+
+@app.post("/api/video-mix/candidates/{candidate_id}/approve")
+async def approve_video_mix_candidate(candidate_id: str, payload: VideoMixCandidateRequest) -> dict[str, Any]:
+    dashboard = update_video_mix_candidate_status(payload.work_dir, candidate_id, CandidateStatus.APPROVED, payload.note)
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/candidates/{candidate_id}/reject")
+async def reject_video_mix_candidate(candidate_id: str, payload: VideoMixCandidateRequest) -> dict[str, Any]:
+    dashboard = update_video_mix_candidate_status(payload.work_dir, candidate_id, CandidateStatus.REJECTED, payload.note)
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/export")
+async def export_video_mix(payload: VideoMixExportRequest) -> dict[str, Any]:
+    return export_approved_candidates(payload.work_dir, ffmpeg_path=payload.ffmpeg)
+
+
+@app.post("/api/video-mix/open")
+async def open_video_mix_target(payload: VideoMixOpenRequest) -> dict[str, Any]:
+    return open_dashboard_target(payload.work_dir, payload.target)
+
+
+@app.get("/api/video-mix/file")
+async def video_mix_file(work_dir: str, relative_path: str) -> FileResponse:
+    path = resolve_relative_work_path(Path(work_dir).expanduser().resolve(), relative_path)
+    return FileResponse(path=path, filename=path.name)
 
 
 def _find_playlist_item(item_id: str) -> dict[str, Any] | None:

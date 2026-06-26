@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 17_VIDEO_MIX_STAGE_1_2_REVIEW_THUMBNAILS_PENDING_REVIEW
+current_step: 18_VIDEO_MIX_STAGE_1_3_DASHBOARD_MVP_PENDING_REVIEW
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-26
-next_action: Owner reviews the Stage 1.2 review thumbnails follow-up, execution report and PR linked from GitHub Issue #25.
+next_action: Owner reviews the Stage 1.3 dashboard MVP follow-up, execution report and PR linked from GitHub Issue #32.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -85,6 +85,36 @@ Boundaries:
 - no segmentation changes in this pass
 - no export behavior changes except what review thumbnail generation needs
 
+Current Stage 1.3 focus:
+
+- add a local browser dashboard for existing `video_mix` work_dir state
+- show pipeline steps, summary counts, candidate cards, thumbnails and export paths
+- allow approve/reject directly from the dashboard
+- keep the dashboard local-only and reuse the existing FastAPI app route pattern
+
+Execution artifacts:
+
+- `workflow-runs/0003-video-mix-reel-mixer/21_DASHBOARD_MVP_EXECUTION_REPORT.md`
+
+Validation result:
+
+- pytest passed
+- ruff passed
+- plan passed on synthetic media
+- review passed
+- FastAPI app imports and launches without `yt_dlp` installed unless downloader/analyze features are used
+- `/video-mix` returned `200`
+- `/api/video-mix/dashboard` returned live JSON for the synthetic work_dir
+
+Boundaries:
+
+- local dashboard only
+- no SaaS
+- no login/account system
+- no AI tagging
+- no segmentation changes in this pass
+- no export logic redesign beyond calling the existing export flow
+
 Current next action:
 
-Owner reviews Issue `#25`, the linked PR and `19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md`, then either accepts this thumbnail baseline or requests one isolated next pass.
+Owner reviews Issue `#32`, the linked PR and `21_DASHBOARD_MVP_EXECUTION_REPORT.md`, then either accepts this dashboard baseline or requests one isolated next pass.
