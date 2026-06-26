@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 10_VIDEO_MIX_DRAFT_CODE_PREPARED
+current_step: 11_VIDEO_MIX_DEEP_DONOR_RESEARCH_DONE
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-26
-next_action: Review VIDEO MIX planning and draft-code package, then decide whether to authorize Stage 1 implementation.
+next_action: Review deep donor research, then revise draft code before any Stage 1 implementation approval.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -25,7 +25,7 @@ New active direction:
 
 ## Current Focus
 
-Assistant has completed planning and created draft code under the active workflow run.
+Assistant has completed planning, created draft code, and added deep donor research for VIDEO MIX as a general production combiner.
 
 Codex should receive only future implementation/local execution work after owner approval.
 
@@ -37,7 +37,7 @@ Codex should receive only future implementation/local execution work after owner
 - local transcription exists through `faster-whisper` into `.srt` and `.txt`.
 - `subtitle_studio/` exists as accepted Remotion MVP for animated subtitles.
 - `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` stores future video-analysis research only.
-- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts and draft code.
+- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts, draft code and donor research.
 
 ## Confirmed Decisions
 
@@ -52,6 +52,7 @@ Codex should receive only future implementation/local execution work after owner
 9. `VIDEO MIX` must be a reusable Reel Mixer Engine with industry packs.
 10. Source media, derived clips, local databases and rendered exports must not be committed.
 11. Draft code is reference material only; it is not integrated or validated.
+12. Donor research shows VIDEO MIX should be a layered production engine, not a clone of any single SaaS product.
 
 ## VIDEO MIX Planning Model
 
@@ -70,17 +71,31 @@ local media folder
 → asset scan
 → micro-clip extraction
 → basic scoring
-→ wedding pilot pack templates
+→ pilot pack templates
 → candidate Reels
 → preview/review
 → approved MP4 exports
 ```
 
+## Deep Donor Research Result
+
+Deep donor research is stored at:
+
+- `workflow-runs/0003-video-mix-reel-mixer/11_DEEP_DONOR_RESEARCH_PRODUCTION_ENGINE.md`
+
+Recommended stack:
+
+- Stage 1: `ffprobe + ffmpeg + Python orchestration + candidate manifests + review gate`.
+- Stage 1.5: PySceneDetect, perceptual hashing, OpenCV quality scoring.
+- Stage 2: Remotion for branded templates and overlays.
+- Stage 3: optional CLIP/OpenCLIP or YOLO-style visual intelligence after licensing and performance review.
+- SaaS donors such as OpusClip, quso.ai, Klap, Munch, Creatomate, Shotstack and JSON2Video are product/architecture references, not first local dependencies.
+
 ## Active Workflow Run
 
 `workflow-runs/0003-video-mix-reel-mixer/`
 
-Created planning artifacts:
+Created artifacts:
 
 - `01_OWNER_BRIEF.md`
 - `02_MVP_SCOPE.md`
@@ -91,6 +106,8 @@ Created planning artifacts:
 - `07_FUTURE_HANDOFF.md`
 - `08_PLANNING_REPORT.md`
 - `09_DRAFT_CODE_REPORT.md`
+- `10_DONOR_RESEARCH.md`
+- `11_DEEP_DONOR_RESEARCH_PRODUCTION_ENGINE.md`
 
 Draft code folder:
 
@@ -104,6 +121,8 @@ Coordination issue:
 
 Do not treat the draft code as validated implementation.
 
+Do not approve Stage 1 before reviewing the donor research and revising the draft code to reflect the donor decisions.
+
 Do not build:
 
 - public product work;
@@ -115,4 +134,4 @@ Do not build:
 
 ## Current Next Action
 
-Review the planning and draft-code package. If approved, open a narrow Stage 1 implementation task for Codex/local coding agent.
+Review deep donor research, then revise the draft code/handoff so Codex receives a better Stage 1 task.
