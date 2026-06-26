@@ -1,0 +1,36 @@
+Wedding Photographer pack draft
+
+version: 1
+status: draft
+
+Scene tags:
+- details
+- preparation
+- bride
+- groom
+- couple
+- ceremony
+- kiss
+- guests
+- dance
+- venue
+- backstage
+- photographer
+- emotion
+- rings
+- dress
+- party
+
+Export defaults:
+- aspect ratio: 9:16
+- width: 1080
+- height: 1920
+- fps: 30
+- format: mp4
+
+Templates:
+- romantic_story
+- fast_highlight
+- behind_the_scenes
+- details_to_couple
+- party_energy
