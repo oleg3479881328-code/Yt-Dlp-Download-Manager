@@ -1,4 +1,7 @@
-"""Draft candidate builder for VIDEO MIX."""
+"""Draft candidate builder for VIDEO MIX.
+
+Builds timeline-like candidate manifests, not final rendered videos.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +9,16 @@ import itertools
 from collections import defaultdict
 
 from .asset_scan import stable_id
-from .models import CandidateClip, CandidateReel, CandidateStatus, Clip, ReelTemplate, TemplateSlot
+from .models import (
+    CandidateReel,
+    CandidateStatus,
+    Clip,
+    ReelTemplate,
+    TemplateSlot,
+    TimelineClip,
+    TimelineTrack,
+    TrackType,
+)
 
 
 def slot_matches(slot: TemplateSlot, clip: Clip) -> bool:
@@ -27,14 +39,12 @@ def slot_score(slot: TemplateSlot, clip: Clip) -> float:
     score += preferred_hits * 10
     if clip.duration_ms > slot.max_duration_ms:
         score -= 5
+    if clip.duplicate_group_id:
+        score -= 10
     return score
 
 
-def choose_clip_for_slot(
-    slot: TemplateSlot,
-    clips: list[Clip],
-    used_asset_ids: set[str],
-) -> Clip | None:
+def choose_clip_for_slot(slot: TemplateSlot, clips: list[Clip], used_asset_ids: set[str]) -> Clip | None:
     candidates = [clip for clip in clips if slot_matches(slot, clip)]
     candidates.sort(key=lambda clip: slot_score(slot, clip), reverse=True)
 
@@ -51,7 +61,7 @@ def build_candidate_from_template(
     clips: list[Clip],
     index: int,
 ) -> CandidateReel | None:
-    selected: list[CandidateClip] = []
+    timeline_clips: list[TimelineClip] = []
     used_asset_ids: set[str] = set()
     cursor_ms = 0
     score_parts: list[float] = []
@@ -64,21 +74,26 @@ def build_candidate_from_template(
             continue
 
         use_ms = min(clip.duration_ms, slot.max_duration_ms)
-        selected.append(
-            CandidateClip(
+        timeline_clips.append(
+            TimelineClip(
                 clip_id=clip.clip_id,
                 slot_id=slot.slot_id,
-                start_in_reel_ms=cursor_ms,
-                end_in_reel_ms=cursor_ms + use_ms,
+                source_asset_id=clip.asset_id,
+                source_start_ms=clip.source_start_ms,
+                source_end_ms=clip.source_start_ms + use_ms,
+                timeline_start_ms=cursor_ms,
+                timeline_end_ms=cursor_ms + use_ms,
             )
         )
         cursor_ms += use_ms
         used_asset_ids.add(clip.asset_id)
         score_parts.append(slot_score(slot, clip))
 
-    if not selected:
+    if not timeline_clips:
         return None
 
+    video_track = TimelineTrack(track_id="video_main", track_type=TrackType.VIDEO, clips=timeline_clips)
+    overlay_track = TimelineTrack(track_id="overlay_main", track_type=TrackType.OVERLAY, overlays=template.overlays)
     candidate_id = stable_id("cand", f"{project_id}:{template.template_id}:{index}:{cursor_ms}")
     score = sum(score_parts) / len(score_parts) if score_parts else 0.0
 
@@ -90,7 +105,8 @@ def build_candidate_from_template(
         status=CandidateStatus.GENERATED,
         score=score,
         duration_ms=cursor_ms,
-        clips=selected,
+        tracks=[video_track, overlay_track],
+        platform_preset=template.platform_preset,
         warnings=warnings,
     )
 
@@ -109,13 +125,7 @@ def build_candidates(
     for index, template in enumerate(itertools.cycle(templates), start=1):
         if len(candidates) >= max_candidates:
             break
-        candidate = build_candidate_from_template(
-            project_id=project_id,
-            pack_id=pack_id,
-            template=template,
-            clips=usable_clips,
-            index=index,
-        )
+        candidate = build_candidate_from_template(project_id, pack_id, template, usable_clips, index)
         if candidate is not None:
             candidates.append(candidate)
 
@@ -125,6 +135,6 @@ def build_candidates(
 def summarize_reuse(candidates: list[CandidateReel]) -> dict[str, int]:
     counts: dict[str, int] = defaultdict(int)
     for candidate in candidates:
-        for clip in candidate.clips:
+        for clip in candidate.video_clips:
             counts[clip.clip_id] += 1
     return dict(counts)
