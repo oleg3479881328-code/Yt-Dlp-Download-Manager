@@ -1,8 +1,9 @@
 from pathlib import Path
 
 from video_mix.core.asset_scan import detect_media_type, stable_id
-from video_mix.core.models import CandidateStatus, Clip, SegmenterName
-from video_mix.core.storage import build_candidate, to_jsonable
+from video_mix.core.models import CandidateStatus, Clip, MediaType, Orientation, Project, SegmenterName
+from video_mix.core.review import build_review_html, write_review_html
+from video_mix.core.storage import build_asset, build_candidate, build_clip, to_jsonable
 
 
 def test_detect_media_type_video() -> None:
@@ -60,3 +61,84 @@ def test_clip_duration_property() -> None:
         segmenter=SegmenterName.FIXED_INTERVAL,
     )
     assert clip.duration_ms == 3000
+
+
+def test_review_html_contains_candidate_metadata_and_commands(tmp_path: Path) -> None:
+    project = Project(project_id="project_1", name="Wedding Validation", root_path=tmp_path, industry_pack="wedding")
+    asset = build_asset(
+        {
+            "asset_id": "asset_1",
+            "project_id": "project_1",
+            "path": str(tmp_path / "rings_detail.mp4"),
+            "media_type": MediaType.VIDEO.value,
+            "duration_ms": 4000,
+            "width": 1080,
+            "height": 1920,
+            "fps": 30.0,
+            "orientation": Orientation.VERTICAL.value,
+            "has_audio": True,
+            "probe_status": "ok",
+            "quality_score": 80.0,
+            "metadata": {},
+        }
+    )
+    clip = build_clip(
+        {
+            "clip_id": "clip_1",
+            "project_id": "project_1",
+            "asset_id": "asset_1",
+            "source_path": str(tmp_path / "rings_detail.mp4"),
+            "source_start_ms": 0,
+            "source_end_ms": 3000,
+            "segmenter": SegmenterName.FIXED_INTERVAL.value,
+            "working_path": str(tmp_path / "clip_1.mp4"),
+            "tags": ["details", "rings"],
+            "quality_score": 88.0,
+            "usable": True,
+            "metadata": {},
+        }
+    )
+    candidate = build_candidate(
+        {
+            "candidate_id": "cand_1",
+            "project_id": "project_1",
+            "pack_id": "wedding",
+            "template_id": "romantic_story",
+            "status": CandidateStatus.GENERATED.value,
+            "score": 88.0,
+            "duration_ms": 3000,
+            "tracks": [
+                {
+                    "track_id": "video_main",
+                    "track_type": "video",
+                    "clips": [
+                        {
+                            "clip_id": "clip_1",
+                            "slot_id": "opening_detail",
+                            "source_asset_id": "asset_1",
+                            "source_start_ms": 0,
+                            "source_end_ms": 3000,
+                            "timeline_start_ms": 0,
+                            "timeline_end_ms": 3000,
+                        }
+                    ],
+                    "overlays": [],
+                }
+            ],
+            "platform_preset": {"width": 1080, "height": 1920, "fps": 30, "format": "mp4"},
+            "warnings": ["missing_slot:closing"],
+            "review_notes": "",
+        }
+    )
+
+    html = build_review_html(project, [candidate], [clip], [asset], tmp_path)
+    assert "VIDEO MIX Review" in html
+    assert "cand_1" in html
+    assert "romantic_story" in html
+    assert "rings_detail.mp4" in html
+    assert "details, rings" in html
+    assert "python -m video_mix.cli approve" in html
+
+    review_path = write_review_html(project, [candidate], [clip], [asset], tmp_path)
+    assert review_path.exists()
+    assert "cand_1" in review_path.read_text(encoding="utf-8")

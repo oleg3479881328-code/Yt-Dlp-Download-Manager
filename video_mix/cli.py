@@ -9,6 +9,7 @@ from .core.duplicate_detection import apply_duplicate_detection
 from .core.export_plan import export_candidate
 from .core.media_probe import probe_assets
 from .core.models import CandidateStatus, Project
+from .core.review import write_review_html
 from .core.scoring import score_assets, score_clips
 from .core.segmenters import FixedIntervalSegmenter, PySceneDetectSegmenter, plan_segments_for_assets
 from .core.storage import (
@@ -120,6 +121,17 @@ def run_export(args: argparse.Namespace) -> None:
     print(f"exported_count={exported}")
 
 
+def run_review(args: argparse.Namespace) -> None:
+    work_dir = Path(args.work_dir).resolve()
+    project = load_project(work_dir)
+    assets = load_assets(work_dir)
+    clips = load_clips(work_dir)
+    candidates = load_candidates(work_dir)
+    review_path = write_review_html(project, candidates, clips, assets, work_dir)
+    print(f"review={review_path}")
+    print(f"candidates={len(candidates)}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="VIDEO MIX Stage 1 CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -148,6 +160,10 @@ def build_parser() -> argparse.ArgumentParser:
     reject.add_argument("candidate_id")
     reject.add_argument("--note", default="")
     reject.set_defaults(func=run_reject)
+
+    review = sub.add_parser("review", help="Generate a local static review artifact")
+    review.add_argument("work_dir")
+    review.set_defaults(func=run_review)
 
     export = sub.add_parser("export", help="Export approved candidates to MP4")
     export.add_argument("work_dir")

@@ -385,3 +385,54 @@ ffprobe -v error -show_entries format=filename,size,duration -show_entries strea
 ### Current Next Action
 
 Owner reviews Issue `#21`, the linked PR and `14_STAGE_1_EXECUTION_REPORT.md`, then either accepts this Stage 1 baseline or requests one isolated follow-up pass.
+
+---
+
+## 2026-06-26 — VIDEO MIX Stage 1.1 review UX implemented and locally validated
+
+### Trigger
+
+Owner opened GitHub Issue `#23` for a narrow follow-up: add a simple local review surface for generated candidates before approval/export.
+
+### Verified Before Change
+
+- `video_mix/` already existed as the accepted Stage 1 baseline.
+- Candidate metadata already lived in `reports/candidates.json`, `reports/clips.json`, `reports/assets.json`.
+- No dedicated review artifact existed after `plan`.
+
+### Changes Made
+
+1. Added `video_mix/core/review.py` to generate a local static `review.html` artifact.
+2. Added `python -m video_mix.cli review <work_dir>`.
+3. Added test coverage for review artifact content and file writing.
+4. Updated project-state handoff files and created `17_REVIEW_UX_EXECUTION_REPORT.md`.
+
+### Commands Run
+
+```powershell
+python -m pytest tests/test_video_mix_pipeline.py
+python -m ruff check video_mix tests/test_video_mix_pipeline.py
+python -m video_mix.cli plan video_mix_validation/input --project-name "Wedding Validation" --work-dir video_mix_validation/work
+python -m video_mix.cli review video_mix_validation/work
+```
+
+### Validation Results
+
+- `pytest` passed
+- `ruff` passed
+- `plan` passed on synthetic validation media
+- `review` passed
+- created artifact:
+  - `video_mix_validation/work/reports/review.html`
+  - `24156 bytes`
+- artifact includes candidate metadata and approve/reject CLI instructions
+
+### State Separation
+
+- Stage 1 baseline: already committed and validated.
+- Stage 1.1 review UX: now completed locally.
+- Owner review: pending.
+
+### Current Next Action
+
+Owner reviews Issue `#23`, the linked PR and `17_REVIEW_UX_EXECUTION_REPORT.md`, then either accepts this review baseline or requests one isolated next pass.

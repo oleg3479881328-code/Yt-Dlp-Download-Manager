@@ -52,6 +52,7 @@ Current validated Stage 1 allows:
 - ffprobe metadata;
 - pluggable segmentation with fixed-interval fallback;
 - timeline-like candidate manifests;
+- static local review artifact generation;
 - approve/reject metadata through CLI;
 - export of approved candidates through ffmpeg;
 - one pilot pack: wedding.
@@ -83,4 +84,4 @@ Still not allowed without a separate owner decision:
 
 ## Current Next Action
 
-Use Issue `#21`, PR review and `workflow-runs/0003-video-mix-reel-mixer/14_STAGE_1_EXECUTION_REPORT.md` as the review surface for the validated Stage 1 baseline. Any next pass should stay narrow and preserve the review gate before export.
+Use Issue `#23`, PR review and `workflow-runs/0003-video-mix-reel-mixer/17_REVIEW_UX_EXECUTION_REPORT.md` as the review surface for the current Stage 1.1 baseline. Any next pass should stay narrow and preserve the review gate before export.
