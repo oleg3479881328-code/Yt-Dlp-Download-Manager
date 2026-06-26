@@ -2,87 +2,87 @@
 
 ## Scope
 
-Этот проект — личный локальный Windows-инструмент Олега для:
+This project is Oleg's personal local Windows tool for:
 
-- скачивания медиа через `yt-dlp`;
-- управления загрузками через web dashboard (веб-панель);
-- запуска загрузок через Chrome extension (расширение Chrome);
-- local transcription (локальной транскрибации) в `.srt` и `.txt`;
-- создания собственных видео с burned-in animated subtitles (вшитыми анимированными субтитрами), включая karaoke highlighting (караоке-подсветку слов), стили, анимации и позиционирование.
+- downloading media through `yt-dlp`;
+- managing downloads through a web dashboard;
+- launching downloads through Chrome extension/native host;
+- local transcription into `.srt` and `.txt`;
+- creating videos with burned-in animated subtitles;
+- planning `VIDEO MIX`, a scalable Reel Mixer Engine for batch Reels from local media.
 
-Не считать проект публичным продуктом, коммерческим приложением или расширением для Chrome Web Store без отдельного решения владельца.
+Do not treat the project as a public product unless the owner separately decides that.
 
 ## Operating Mode
 
 - Project Execution OS mode: `compact`.
-- Repository is the durable source of truth (долгосрочный источник истины).
+- Repository is the durable source of truth.
 - Current state lives in `PROJECT_STATE.md`.
 - Historical sequence lives in `logs/PROJECT_LOG.md`.
-- Each substantial review or implementation change should leave one concrete next action.
+- Active workflow lives in `workflow-runs/0003-video-mix-reel-mixer/`.
+- Each substantial change should leave one concrete next action.
 
 ## State Separation Rules
 
-Всегда различать:
+Always distinguish:
 
-- proposed state (предложенное состояние) — обсуждено, но не записано и не проверено;
-- committed state (зафиксированное состояние) — записано в GitHub repository;
-- validated state (проверенное состояние) — подтверждено реальным запуском или тестом;
-- reviewed state (проверенное ревью состояние) — оценено с выводом о принятии, предупреждении или блокировке.
+- proposed state — discussed but not recorded or tested;
+- committed state — recorded in the repository;
+- validated state — confirmed by real run or test;
+- reviewed state — evaluated as accepted, warning or blocked.
 
-Нельзя утверждать, что загрузка, расширение, транскрибация, рендеринг видео или исправление работают, пока нет результата реального запуска или теста.
+Do not claim that download, transcription, rendering, VIDEO MIX generation or export works unless validated by execution.
 
 ## Current Architecture Rules
 
-1. Web dashboard (веб-панель) и standalone Chrome extension/native host (отдельное расширение с локальным мостом) сейчас разрешены как два отдельных runtime contours (исполнительных контура), потому что инструмент личный.
-2. Не начинать архитектурное объединение существующих контуров без отдельной задачи и подтверждённой боли от дублирования.
-3. Новый `Animated Subtitle Video Maker` (модуль создания роликов с анимированными субтитрами) разрешён внутри текущего репозитория как отдельный узкий модуль.
-4. Планируемое ядро модуля: `Remotion` + `@remotion/captions` для preview/rendering (предпросмотра/отрисовки), `stable-ts` / `faster-whisper` для word-level timing (временных меток слов), `yt-dlp` для существующих субтитров источника.
-5. Новый модуль не должен ломать или переписывать существующую загрузку медиа на первом этапе.
+1. Web dashboard and Chrome extension/native host remain allowed as separate runtime contours for personal use.
+2. Do not unify or rewrite existing runtime contours without a separate task.
+3. `Animated Subtitle Video Maker` is accepted after Phase 1 MVP.
+4. `Video Content Analyzer` remains research-only until separately authorized.
+5. `VIDEO MIX` is planned as a module inside this repository.
+6. `VIDEO MIX` must separate reusable core logic from industry packs.
+7. Wedding photographer is the first pilot pack only; do not hardcode wedding assumptions into the core.
+8. Source media, derived clips, local databases and rendered exports must stay out of GitHub.
+
+## VIDEO MIX Planning Boundary
+
+Current active task is planning only.
+
+Allowed now:
+
+- owner brief;
+- MVP scope;
+- architecture plan;
+- data model;
+- pack schema;
+- review/scoring rules;
+- roadmap;
+- future implementation handoff boundary.
+
+Not allowed until owner approval:
+
+- code implementation;
+- local execution claims;
+- UI implementation;
+- ffmpeg/ffprobe integration work;
+- adding new industry packs beyond the pilot;
+- unrelated refactors.
 
 ## Quality Rules
 
-1. MVP-first (сначала минимально рабочий результат): первая версия нового модуля должна содержать один рабочий караоке-пресет, а не конструктор десятков эффектов.
-2. Один проверяемый шаг за раз.
-3. Любой предполагаемый баг сначала помечать как `suspected` (подозреваемый), затем подтверждать запуском и только после этого исправлять.
-4. После реализации запускать тот сценарий, который доказывает результат.
-5. Не хранить скачанные файлы, исходные пользовательские ролики, отрендеренные видео, локальную базу данных, сборки native host или виртуальное окружение в GitHub.
-
-## Phase 1 MVP Boundary
-
-Первая реализация `Animated Subtitle Video Maker` должна ограничиваться сценарием:
-
-1. выбрать собственный локальный ролик;
-2. получить или передать word-level timing (временные метки отдельных слов);
-3. применить один karaoke preset (караоке-пресет);
-4. показать preview (предпросмотр);
-5. экспортировать MP4 с вшитыми субтитрами.
-
-Настройка множества стилей, редактор таймлайна, перевод, разделение говорящих и массовое производство роликов не входят в Phase 1 MVP.
-
-## Current Forbidden Actions
-
-- не превращать личный инструмент в публичный продукт без отдельного решения;
-- не начинать публикацию Chrome extension;
-- не переписывать существующие download runtimes (исполнительные контуры загрузки) ради нового модуля;
-- не считать `RISK-001` доказанным багом без реального запуска;
-- не расширять subtitle module (модуль субтитров) за пределы Phase 1 MVP до первого подтверждённого экспорта видео.
+1. MVP-first.
+2. One verifiable step at a time.
+3. Any suspected bug must be marked as suspected until validated.
+4. After implementation, run the scenario that proves the result.
+5. Do not store user media, generated clips, exports, local database, build outputs or virtual environment in GitHub.
+6. Batch generation must still include a human review gate before final export.
 
 ## Local Safety Rules
 
-- Приложение должно оставаться локальным и использовать loopback address (локальный адрес) `127.0.0.1`, если отдельно не принято другое решение.
-- Не публиковать локальные пути, скачанные пользовательские медиа, исходные ролики, отрендеренные видео, логи с приватными URL или локальную SQLite-базу.
-- Проверять изменения в native host особенно внимательно: он взаимодействует с локальной файловой системой и запускает локальные программы.
-
-## Evidence Rules
-
-Для существенных изменений сохранять в `logs/PROJECT_LOG.md`:
-
-- дату;
-- что проверено или изменено;
-- какой вывод подтверждён;
-- что ещё не проверено;
-- один следующий шаг.
+- Keep local app behavior on loopback unless separately changed.
+- Do not publish local paths, private URLs, user media, rendered videos or local database contents.
+- Check native-host changes carefully because it can interact with local files and programs.
 
 ## Current Next Action
 
-Phase 1 MVP принят после визуальной проверки владельцем. Планировать Phase 2 (интеграция транскрибации с stable-ts / faster-whisper и импорт субтитров через yt-dlp). Ожидать отдельного решения владельца для авторизации Phase 2. Не начинать `Video Content Analyzer` до отдельного решения владельца.
+Review `workflow-runs/0003-video-mix-reel-mixer/`. If approved, open a narrow Stage 1 implementation task for Codex/local coding agent.
