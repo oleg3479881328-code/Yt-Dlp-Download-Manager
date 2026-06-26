@@ -1,15 +1,20 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 16_VIDEO_MIX_STAGE_1_1_REVIEW_UX_ACCEPTED
+current_step: 17_VIDEO_MIX_STAGE_1_2_REVIEW_THUMBNAILS_PENDING_REVIEW
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-26
-next_action: Choose one narrow next follow-up for VIDEO MIX.
+next_action: Owner reviews the Stage 1.2 review thumbnails follow-up, execution report and PR linked from GitHub Issue #25.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
 
 VIDEO MIX Stage 1.1 Review UX is accepted and merged.
+
+New active follow-up:
+
+- Stage 1.2 review thumbnails
+- GitHub Issue `#25`
 
 Merged PR:
 
@@ -52,10 +57,34 @@ Boundaries:
 - no full dashboard
 - no segmentation changes in this pass
 
-Recommended next options:
+Current Stage 1.2 focus:
 
-1. Add optional local thumbnails to review.html.
-2. Improve candidate diversity.
-3. Improve segmentation quality.
+- extend `video_mix review`
+- generate local thumbnail JPGs for candidate clips
+- render those thumbnails inside `reports/review.html`
+- keep thumbnails local and ignored by git
 
-Recommendation: thumbnails next, because review.html is useful but still lacks visual preview.
+Execution artifacts:
+
+- `workflow-runs/0003-video-mix-reel-mixer/19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md`
+
+Validation result:
+
+- pytest passed
+- ruff passed
+- plan passed on synthetic media
+- review passed
+- `review.html` created
+- `10` local thumbnails created in `reports/thumbnails/`
+- generated artifacts remain ignored and uncommitted
+
+Boundaries:
+
+- no dashboard UI
+- no AI tagging
+- no segmentation changes in this pass
+- no export behavior changes except what review thumbnail generation needs
+
+Current next action:
+
+Owner reviews Issue `#25`, the linked PR and `19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md`, then either accepts this thumbnail baseline or requests one isolated next pass.

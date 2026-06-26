@@ -32,8 +32,8 @@ Local tool for:
 2. `PROJECT_RULES.md`
 3. `logs/PROJECT_LOG.md`
 4. `workflow-runs/0003-video-mix-reel-mixer/`
-5. `workflow-runs/0003-video-mix-reel-mixer/17_REVIEW_UX_EXECUTION_REPORT.md`
-6. GitHub Issue `#23`
+5. `workflow-runs/0003-video-mix-reel-mixer/19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md`
+6. GitHub Issue `#25`
 7. `workflow-runs/0002-animated-subtitle-module/` only if subtitle/rendering context is needed.
 8. `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` only if needed.
 
@@ -44,7 +44,7 @@ Local tool for:
 - `native_host/` — native messaging host.
 - local transcription through `faster-whisper`.
 - `subtitle_studio/` — accepted Remotion Phase 1 MVP.
-- `video_mix/` — local Stage 1 VIDEO MIX implementation with Stage 1.1 review CLI.
+- `video_mix/` — local Stage 1 VIDEO MIX implementation with review thumbnails.
 - `workflow-runs/0003-video-mix-reel-mixer/` — active VIDEO MIX planning and execution package.
 
 ## Active Work — VIDEO MIX
@@ -80,6 +80,7 @@ The first pack is only a pilot. The core must remain reusable.
 - `workflow-runs/0003-video-mix-reel-mixer/14_STAGE_1_EXECUTION_REPORT.md`
 - `workflow-runs/0003-video-mix-reel-mixer/16_REVIEW_UX_TASK.md`
 - `workflow-runs/0003-video-mix-reel-mixer/17_REVIEW_UX_EXECUTION_REPORT.md`
+- `workflow-runs/0003-video-mix-reel-mixer/19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md`
 
 ## Completed Previous Work
 
@@ -91,9 +92,9 @@ Research only. Implementation is not authorized.
 
 ## Canonical Next Action
 
-Review the Stage 1.1 review UX follow-up through GitHub Issue `#23`, the linked PR and `17_REVIEW_UX_EXECUTION_REPORT.md`.
+Review the Stage 1.2 review thumbnails follow-up through GitHub Issue `#25`, the linked PR and `19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md`.
 
-If accepted, keep `video_mix review` as the local review baseline and choose the next narrow follow-up only.
+If accepted, keep `video_mix review` with thumbnails as the local review baseline and choose the next narrow follow-up only.
 
 ## Canonical State Rule
 

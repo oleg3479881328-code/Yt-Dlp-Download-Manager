@@ -13,3 +13,5 @@ __pycache__/
 *.pyd
 _video_mix_work/
 video_mix_validation/
+**/reports/review.html
+**/reports/thumbnails/

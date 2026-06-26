@@ -53,6 +53,7 @@ Current validated Stage 1 allows:
 - pluggable segmentation with fixed-interval fallback;
 - timeline-like candidate manifests;
 - static local review artifact generation;
+- local thumbnail generation for review;
 - approve/reject metadata through CLI;
 - export of approved candidates through ffmpeg;
 - one pilot pack: wedding.
@@ -84,4 +85,4 @@ Still not allowed without a separate owner decision:
 
 ## Current Next Action
 
-Use Issue `#23`, PR review and `workflow-runs/0003-video-mix-reel-mixer/17_REVIEW_UX_EXECUTION_REPORT.md` as the review surface for the current Stage 1.1 baseline. Any next pass should stay narrow and preserve the review gate before export.
+Use Issue `#25`, PR review and `workflow-runs/0003-video-mix-reel-mixer/19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md` as the review surface for the current Stage 1.2 baseline. Any next pass should stay narrow and preserve the review gate before export.

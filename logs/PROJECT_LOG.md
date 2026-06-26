@@ -436,3 +436,57 @@ python -m video_mix.cli review video_mix_validation/work
 ### Current Next Action
 
 Owner reviews Issue `#23`, the linked PR and `17_REVIEW_UX_EXECUTION_REPORT.md`, then either accepts this review baseline or requests one isolated next pass.
+
+---
+
+## 2026-06-26 — VIDEO MIX Stage 1.2 review thumbnails implemented and locally validated
+
+### Trigger
+
+Owner opened GitHub Issue `#25` for a narrow follow-up: add visual thumbnails to the local review page.
+
+### Verified Before Change
+
+- `video_mix review` already generated a static `reports/review.html`.
+- Review metadata was already visible, but visual scanning still required opening source clips separately.
+- No thumbnail generation existed in the accepted Stage 1.1 baseline.
+
+### Changes Made
+
+1. Extended `video_mix/core/review.py` to generate local JPG thumbnails with `ffmpeg`.
+2. Added thumbnail rendering to `reports/review.html`.
+3. Extended `python -m video_mix.cli review <work_dir>` to report thumbnail count.
+4. Added test coverage for thumbnail command generation and thumbnail references in HTML.
+5. Updated `.gitignore` to ignore generated `review.html` and `reports/thumbnails/` paths.
+6. Added `19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md` and updated project handoff state.
+
+### Commands Run
+
+```powershell
+python -m pytest tests/test_video_mix_pipeline.py
+python -m ruff check video_mix tests/test_video_mix_pipeline.py
+python -m video_mix.cli plan video_mix_validation/input --project-name "Wedding Validation" --work-dir video_mix_validation/work
+python -m video_mix.cli review video_mix_validation/work
+```
+
+### Validation Results
+
+- `pytest` passed
+- `ruff` passed
+- `plan` passed on synthetic validation media
+- `review` passed
+- created:
+  - `video_mix_validation/work/reports/review.html`
+  - `video_mix_validation/work/reports/thumbnails/`
+- thumbnail count: `10`
+- review HTML references local thumbnails successfully
+
+### State Separation
+
+- Stage 1.1 review UX baseline: already accepted.
+- Stage 1.2 thumbnail follow-up: now completed locally.
+- Owner review: pending.
+
+### Current Next Action
+
+Owner reviews Issue `#25`, the linked PR and `19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md`, then either accepts this thumbnail baseline or requests one isolated next pass.
