@@ -176,3 +176,34 @@ def test_video_mix_dashboard_export_uses_existing_export_flow(tmp_path: Path, mo
     payload = response.json()
     assert payload["exported_paths"] == ["exports/wedding_validation_wedding_romantic_story_cand_1.mp4"]
     assert payload["dashboard"]["candidates"][0]["status"] == "exported"
+
+
+def test_video_mix_file_endpoint_restricts_allowed_artifacts(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    secret = work_dir / "reports" / "assets.json"
+    secret.write_text("not allowed", encoding="utf-8")
+
+    response = client.get(
+        "/api/video-mix/file",
+        params={"work_dir": str(work_dir), "relative_path": "reports/assets.json"},
+    )
+
+    assert response.status_code == 403
+    assert "allowed dashboard artifacts" in response.json()["detail"]
+
+
+def test_video_mix_dashboard_approve_does_not_regenerate_thumbnails(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+
+    def fail_generate(*_args, **_kwargs):
+        raise AssertionError("thumbnail generation should not run for metadata-only approve")
+
+    monkeypatch.setattr("video_mix.core.review.generate_thumbnails", fail_generate)
+
+    response = client.post(
+        "/api/video-mix/candidates/cand_1/approve",
+        json={"work_dir": str(work_dir), "note": "owner approved"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["dashboard"]["candidates"][0]["status"] == "approved"

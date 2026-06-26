@@ -300,7 +300,7 @@ async def open_video_mix_target(payload: VideoMixOpenRequest) -> dict[str, Any]:
 
 @app.get("/api/video-mix/file")
 async def video_mix_file(work_dir: str, relative_path: str) -> FileResponse:
-    path = resolve_relative_work_path(Path(work_dir).expanduser().resolve(), relative_path)
+    path = resolve_relative_work_path(work_dir, relative_path)
     return FileResponse(path=path, filename=path.name)
 
 

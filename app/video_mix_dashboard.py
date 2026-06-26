@@ -21,6 +21,12 @@ from video_mix.core.storage import (
     work_file,
 )
 
+ALLOWED_FILE_PREFIXES = (
+    "reports/review.html",
+    "reports/thumbnails/",
+    "exports/",
+)
+
 
 def resolve_work_dir(raw_work_dir: str) -> Path:
     work_dir = Path(raw_work_dir).expanduser().resolve()
@@ -39,8 +45,16 @@ def resolve_work_dir(raw_work_dir: str) -> Path:
     return work_dir
 
 
-def resolve_relative_work_path(work_dir: Path, relative_path: str) -> Path:
-    path = (work_dir / relative_path).resolve()
+def resolve_relative_work_path(raw_work_dir: str, relative_path: str) -> Path:
+    work_dir = resolve_work_dir(raw_work_dir)
+    normalized_relative = relative_path.replace("\\", "/").lstrip("/")
+    if not any(
+        normalized_relative == allowed_prefix or normalized_relative.startswith(allowed_prefix)
+        for allowed_prefix in ALLOWED_FILE_PREFIXES
+    ):
+        raise HTTPException(status_code=403, detail="Requested VIDEO MIX file is outside the allowed dashboard artifacts")
+
+    path = (work_dir / normalized_relative).resolve()
     if work_dir not in path.parents and path != work_dir:
         raise HTTPException(status_code=403, detail="Requested path escapes the VIDEO MIX work_dir")
     if not path.exists():
@@ -183,13 +197,26 @@ def build_dashboard_payload(raw_work_dir: str) -> dict[str, Any]:
     }
 
 
-def _persist_dashboard_state(work_dir: Path, candidates: list[CandidateReel], ffmpeg_path: str = "ffmpeg") -> None:
+def _persist_dashboard_state(
+    work_dir: Path,
+    candidates: list[CandidateReel],
+    ffmpeg_path: str = "ffmpeg",
+    regenerate_thumbnails: bool = True,
+) -> None:
     project = load_project(work_dir)
     assets = load_assets(work_dir)
     clips = load_clips(work_dir)
     save_candidates(work_dir, candidates)
     save_summary(work_dir, build_summary(project, assets, clips, candidates))
-    write_review_html(project, candidates, clips, assets, work_dir, ffmpeg_path=ffmpeg_path)
+    write_review_html(
+        project,
+        candidates,
+        clips,
+        assets,
+        work_dir,
+        ffmpeg_path=ffmpeg_path,
+        regenerate_thumbnails=regenerate_thumbnails,
+    )
 
 
 def update_candidate_status(raw_work_dir: str, candidate_id: str, status: CandidateStatus, note: str = "") -> dict[str, Any]:
@@ -200,7 +227,7 @@ def update_candidate_status(raw_work_dir: str, candidate_id: str, status: Candid
         raise HTTPException(status_code=404, detail=f"Candidate not found: {candidate_id}")
     target.status = status
     target.review_notes = note
-    _persist_dashboard_state(work_dir, candidates)
+    _persist_dashboard_state(work_dir, candidates, regenerate_thumbnails=False)
     return build_dashboard_payload(str(work_dir))
 
 
