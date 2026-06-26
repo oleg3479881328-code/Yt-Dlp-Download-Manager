@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 14_VIDEO_MIX_STAGE_1_IMPLEMENTED_PENDING_REVIEW
+current_step: 15_VIDEO_MIX_STAGE_1_1_REVIEW_UX_PENDING_REVIEW
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-26
-next_action: Owner reviews the implemented Stage 1 VIDEO MIX module, execution report and PR linked from GitHub Issue #21.
+next_action: Owner reviews the Stage 1.1 review UX follow-up, execution report and PR linked from GitHub Issue #23.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -25,20 +25,22 @@ New active direction:
 
 ## Current Focus
 
-Stage 1 has now been implemented locally in `video_mix/` and validated through the required path:
+Stage 1 remains implemented locally in `video_mix/` and Stage 1.1 adds a local static review surface after `plan`.
 
 ```text
-scan -> probe -> segment -> candidate manifests -> approve -> MP4 export
+scan -> probe -> segment -> candidate manifests -> review -> approve -> MP4 export
 ```
 
 Execution channel:
 
-- GitHub Issue `#21` — `VIDEO MIX Stage 1 implementation channel`
+- GitHub Issue `#23` — `VIDEO MIX Stage 1.1 — Review UX`
 
 Execution artifacts:
 
 - `workflow-runs/0003-video-mix-reel-mixer/13_STAGE_1_CODEX_EXECUTION_TASK.md`
 - `workflow-runs/0003-video-mix-reel-mixer/14_STAGE_1_EXECUTION_REPORT.md`
+- `workflow-runs/0003-video-mix-reel-mixer/16_REVIEW_UX_TASK.md`
+- `workflow-runs/0003-video-mix-reel-mixer/17_REVIEW_UX_EXECUTION_REPORT.md`
 
 ## Confirmed Existing State
 
@@ -47,7 +49,7 @@ Execution artifacts:
 - `native_host/` — native messaging host.
 - local transcription exists through `faster-whisper` into `.srt` and `.txt`.
 - `subtitle_studio/` exists as accepted Remotion MVP for animated subtitles.
-- `video_mix/` now exists as a local Stage 1 module with CLI entrypoints for planning, approval and export.
+- `video_mix/` now exists as a local Stage 1 module with CLI entrypoints for planning, review, approval and export.
 - `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` stores future video-analysis research only.
 - `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts, donor research, revised draft code, Stage 1 task packet and execution report.
 
@@ -66,7 +68,7 @@ Execution artifacts:
 11. Draft code was reference material only; the real Stage 1 implementation now lives in `video_mix/`.
 12. Donor research shows VIDEO MIX should be a layered production engine, not a clone of any single SaaS product.
 13. Draft code was revised after donor research to use pluggable segmentation, timeline-like candidates and duplicate/reuse placeholders.
-14. Stage 1 execution uses GitHub Issue `#21` as the communication channel.
+14. Stage 1.1 review UX uses GitHub Issue `#23` as the communication channel.
 15. Owner shorthand `0-2 проверь ответ` means ChatGPT should check the latest executor response in Issue/PR and advise or respond.
 
 ## VIDEO MIX Planning Model
@@ -152,17 +154,15 @@ Do not build:
 
 ## Latest Validation Result
 
-Validated locally on 2026-06-26:
+Validated locally on 2026-06-26 for Stage 1.1:
 
 - `python -m pytest tests/test_video_mix_pipeline.py` — passed;
 - `python -m ruff check video_mix tests/test_video_mix_pipeline.py` — passed;
 - synthetic media set generated locally under ignored `video_mix_validation/input/`;
 - `python -m video_mix.cli plan ...` — passed;
-- one candidate approved through CLI;
-- `python -m video_mix.cli export ...` — passed;
-- exported MP4: `video_mix_validation/work/exports/wedding_validation_wedding_romantic_story_cand_b3bf1f07989e.mp4`;
-- `ffprobe` confirmed `1080x1920`, `30fps`, `12.033333s`, `54537 bytes`.
+- `python -m video_mix.cli review ...` — passed;
+- review artifact created: `video_mix_validation/work/reports/review.html`.
 
 ## Current Next Action
 
-Owner reviews Stage 1 implementation via Issue `#21`, PR and `14_STAGE_1_EXECUTION_REPORT.md`, then decides whether to accept this baseline or request one isolated follow-up pass.
+Owner reviews Stage 1.1 review UX via Issue `#23`, PR and `17_REVIEW_UX_EXECUTION_REPORT.md`, then decides whether to accept this baseline or request one isolated follow-up pass.
