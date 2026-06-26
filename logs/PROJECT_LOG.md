@@ -322,3 +322,66 @@ npx remotion render KaraokeVideo out/karaoke-preview-v2.mp4
 ### Current Next Action
 
 Phase 1 MVP принят. Планировать Phase 2 (интеграция транскрибации через stable-ts / faster-whisper). Ожидание отдельного решения владельца о начале Phase 2.
+
+---
+
+## 2026-06-26 — VIDEO MIX Stage 1 implemented and locally validated
+
+### Trigger
+
+Owner opened GitHub Issue `#21` as the authorized Stage 1 execution channel for `VIDEO MIX`.
+
+### Verified Before Change
+
+- `PROJECT_STATE.md` already pointed to the Stage 1 execution packet in `workflow-runs/0003-video-mix-reel-mixer/13_STAGE_1_CODEX_EXECUTION_TASK.md`.
+- The real repository did not yet contain an integrated `video_mix/` module.
+- Draft code existed only under `workflow-runs/0003-video-mix-reel-mixer/draft-code/` and was explicitly unvalidated.
+
+### Changes Made
+
+1. Created the real `video_mix/` module with:
+   - CLI commands: `plan`, `approve`, `reject`, `export`;
+   - industry-neutral core for scan, probe, segmentation, scoring, candidate manifests, storage and export;
+   - pilot wedding pack isolated under `video_mix/packs/wedding/`.
+2. Added targeted tests in `tests/test_video_mix_pipeline.py`.
+3. Updated `.gitignore` to exclude `_video_mix_work/` and `video_mix_validation/`.
+4. Updated `PROJECT_ENTRYPOINT.md`, `PROJECT_STATE.md`, `PROJECT_RULES.md` and added `logs/latest.md` to reflect the new review-ready state.
+5. Created `workflow-runs/0003-video-mix-reel-mixer/14_STAGE_1_EXECUTION_REPORT.md`.
+
+### Commands Run
+
+```powershell
+python -m pytest tests/test_video_mix_pipeline.py
+python -m ruff check video_mix tests/test_video_mix_pipeline.py
+python -m video_mix.cli plan video_mix_validation/input --project-name "Wedding Validation" --work-dir video_mix_validation/work
+python -m video_mix.cli approve video_mix_validation/work cand_b3bf1f07989e --note "approved during synthetic validation"
+python -m video_mix.cli export video_mix_validation/work
+ffprobe -v error -show_entries format=filename,size,duration -show_entries stream=width,height,r_frame_rate -of default=noprint_wrappers=1 video_mix_validation/work/exports/wedding_validation_wedding_romantic_story_cand_b3bf1f07989e.mp4
+```
+
+### Validation Results
+
+- `pytest` passed
+- `ruff` passed
+- synthetic local media set created with `5` input videos
+- asset scan: `5`
+- planned clips: `10`
+- candidate manifests: `10`
+- approved candidates: `1`
+- exported MP4: `1`
+- exported proof confirmed by `ffprobe`:
+  - `1080x1920`
+  - `30fps`
+  - `12.033333s`
+  - `54537 bytes`
+
+### State Separation
+
+- Planning and donor research: committed earlier.
+- Stage 1 implementation: now completed locally in `video_mix/`.
+- Local validation: completed.
+- Owner review: pending.
+
+### Current Next Action
+
+Owner reviews Issue `#21`, the linked PR and `14_STAGE_1_EXECUTION_REPORT.md`, then either accepts this Stage 1 baseline or requests one isolated follow-up pass.
