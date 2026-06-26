@@ -1,71 +1,99 @@
 # PROJECT ENTRYPOINT — yt-dlp Download Manager
 
+## Project
+
+Personal local Windows video toolkit.
+
+Repository:
+
+- `oleg3479881328-code/Yt-Dlp-Download-Manager`
+
 ## Project Goal
 
-Личный локальный Windows-инструмент для полного цикла работы с роликами:
+Local tool for:
 
-- скачивание медиа через `yt-dlp`;
-- управление загрузками из web dashboard (веб-панели) и Chrome extension (расширения Chrome);
-- получение или создание субтитров и текста в `SRT + TXT`;
-- создание собственных роликов с burned-in animated subtitles (вшитыми анимированными субтитрами), включая karaoke highlighting (караоке-подсветку слов), стили, анимации и позиционирование;
-- future candidate module (будущий кандидат-модуль): `Video Content Analyzer` (модуль анализа содержания видео) для анализа роликов через транскрипт с таймкодами и выбранные кадры.
+- media download through `yt-dlp`;
+- web dashboard and Chrome extension download control;
+- subtitle/text creation;
+- animated subtitle video creation;
+- future bounded video analysis;
+- active planning: `VIDEO MIX` / scalable Reel Mixer Engine.
 
 ## Project Mode
 
 - mode: `compact`
 - use case: personal local tool only
-- repository: private dedicated GitHub repository; this is the only primary video project
-- normalization status: existing project normalized into Project Execution OS on 2026-05-25
-- active scope decision: add `Animated Subtitle Video Maker` (модуль создания роликов с анимированными субтитрами) inside this repository
-- captured future decision: preserve the analyzed video-intelligence donor pattern here as future `Video Content Analyzer`; do not develop a separate parallel video-analysis product
+- source of truth: this GitHub repository
+- active run: `workflow-runs/0003-video-mix-reel-mixer/`
 
 ## Required Read Order
 
-1. `PROJECT_STATE.md` — текущее подтверждённое состояние и следующий шаг.
-2. `PROJECT_RULES.md` — ограничения и правила работы.
-3. `logs/PROJECT_LOG.md` — хронология решений и изменений.
-4. Latest active workflow material: `workflow-runs/0002-animated-subtitle-module/` and GitHub Issue `#1`.
-5. Future video-analysis research: `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md`.
+1. `PROJECT_STATE.md`
+2. `PROJECT_RULES.md`
+3. `logs/PROJECT_LOG.md`
+4. `workflow-runs/0003-video-mix-reel-mixer/`
+5. GitHub Issue `#20`
+6. `workflow-runs/0002-animated-subtitle-module/` only if subtitle/rendering context is needed.
+7. `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` only if needed.
 
 ## Verified Current Components
 
-- `app/` — FastAPI web dashboard (локальная веб-панель), SQLite state (хранилище состояния), background download worker (фоновый обработчик загрузок).
-- `chrome_extension/` — standalone Chrome extension (отдельное расширение Chrome).
-- `native_host/` — native messaging host (локальный мост между расширением и Windows-инструментами).
-- optional transcription (опциональная транскрибация) through `faster-whisper` into `.srt` and `.txt`.
-- `subtitle_studio/` — isolated Remotion implementation (изолированная реализация на Remotion) of the animated subtitle Phase 1 MVP; code exists, validated, and **accepted after owner visual review**.
+- `app/` — FastAPI web dashboard, SQLite state and download worker.
+- `chrome_extension/` — standalone Chrome extension.
+- `native_host/` — native messaging host.
+- local transcription through `faster-whisper`.
+- `subtitle_studio/` — accepted Remotion Phase 1 MVP.
+- `workflow-runs/0003-video-mix-reel-mixer/` — active VIDEO MIX planning package.
 
-## Active Work — Animated Subtitle Video Maker
+## Active Work — VIDEO MIX
 
-`Animated Subtitle Video Maker` (модуль создания роликов с анимированными субтитрами) Phase 1 MVP:
+`VIDEO MIX` is a planned module inside this repository.
 
-- input (вход): собственное видео пользователя;
-- timed caption input (вход временных меток субтитров): prepared word-level timing (подготовленные временные метки отдельных слов);
-- one karaoke preset (один караоке-пресет);
-- preview (предпросмотр);
-- export (экспорт) готового MP4 с вшитыми анимированными субтитрами.
+Purpose:
 
-Implementation state (статус реализации): **accepted after owner visual review**. Phase 1 MVP завершён. Финальный артефакт: `subtitle_studio/out/karaoke-preview-v5.mp4` (255 frames, 805.8 kB).
+- batch-generate short vertical Reels from local media packages;
+- first pilot: wedding photographer materials;
+- long-term design: reusable core plus industry packs.
 
-Следующий шаг: планирование Phase 2 (интеграция транскрибации). Ожидание отдельного решения владельца для авторизации Phase 2.
+Core architecture:
+
+```text
+VIDEO MIX
+├── Reel Mixer Core
+└── Industry Packs
+```
+
+The first pack is only a pilot. The core must remain reusable.
+
+## Current Planning Artifacts
+
+- `workflow-runs/0003-video-mix-reel-mixer/01_OWNER_BRIEF.md`
+- `workflow-runs/0003-video-mix-reel-mixer/02_MVP_SCOPE.md`
+- `workflow-runs/0003-video-mix-reel-mixer/03_ARCHITECTURE_PLAN.md`
+- `workflow-runs/0003-video-mix-reel-mixer/04_DATA_MODEL_AND_PACK_SCHEMA.md`
+- `workflow-runs/0003-video-mix-reel-mixer/05_REVIEW_RULES.md`
+- `workflow-runs/0003-video-mix-reel-mixer/06_ROADMAP.md`
+- `workflow-runs/0003-video-mix-reel-mixer/07_FUTURE_HANDOFF.md`
+
+## Completed Previous Work
+
+`Animated Subtitle Video Maker` Phase 1 MVP is accepted after owner visual review.
 
 ## Future Captured Module — Video Content Analyzer
 
-Research only; implementation is not authorized yet.
-
-Captured direction:
-
-- analyze downloaded or local videos using timestamped transcript plus selected visual frames;
-- first valuable use case: analysis of competitor short-form videos for hook (крючок внимания), on-screen text, visual structure, product timing and CTA (призыв к действию);
-- primary donor pattern: `bradautomates/claude-video`;
-- secondary donor ideas: `jordanrendric/claude-video-vision`;
-- later ideas only: `thoughtpunch/claudetube`;
-- separate parallel video-analysis development is unnecessary after the captured research is retained here.
+Research only. Implementation is not authorized.
 
 ## Canonical Next Action
 
-Phase 1 MVP принят. Планировать Phase 2 (интеграция транскрибации с stable-ts / faster-whisper и импорт субтитров через yt-dlp). Ожидать отдельного решения владельца для авторизации Phase 2. Не начинать `Video Content Analyzer` до отдельного решения владельца.
+Review the `VIDEO MIX` planning package. If approved, create a narrow Stage 1 implementation task for Codex/local coding agent.
+
+Do not start implementation before owner approval.
 
 ## Canonical State Rule
 
-При конфликте между разговором и репозиторием источником истины являются `PROJECT_STATE.md`, активный workflow run (цикл работы), GitHub Issue/PR thread (ветка GitHub Issue/PR) для текущего исполнения и `logs/PROJECT_LOG.md`.
+If there is conflict between conversation and repository, use:
+
+1. `PROJECT_STATE.md`;
+2. active workflow run;
+3. GitHub Issue/PR thread;
+4. `logs/PROJECT_LOG.md`.
