@@ -2,7 +2,7 @@ from pathlib import Path
 
 from video_mix.core.asset_scan import detect_media_type, stable_id
 from video_mix.core.models import CandidateStatus, Clip, MediaType, Orientation, Project, SegmenterName
-from video_mix.core.review import build_review_html, write_review_html
+from video_mix.core.review import build_review_html, build_thumbnail_command, write_review_html
 from video_mix.core.storage import build_asset, build_candidate, build_clip, to_jsonable
 
 
@@ -131,14 +131,37 @@ def test_review_html_contains_candidate_metadata_and_commands(tmp_path: Path) ->
         }
     )
 
-    html = build_review_html(project, [candidate], [clip], [asset], tmp_path)
+    html = build_review_html(
+        project,
+        [candidate],
+        [clip],
+        [asset],
+        tmp_path,
+        {"clip_1": "thumbnails/clip_1.jpg"},
+        {},
+    )
     assert "VIDEO MIX Review" in html
     assert "cand_1" in html
     assert "romantic_story" in html
     assert "rings_detail.mp4" in html
     assert "details, rings" in html
     assert "python -m video_mix.cli approve" in html
+    assert 'src="thumbnails/clip_1.jpg"' in html
 
-    review_path = write_review_html(project, [candidate], [clip], [asset], tmp_path)
+    review_path, _, _ = write_review_html(project, [candidate], [clip], [asset], tmp_path, ffmpeg_path="ffmpeg")
     assert review_path.exists()
     assert "cand_1" in review_path.read_text(encoding="utf-8")
+
+
+def test_build_thumbnail_command_uses_clip_midpoint(tmp_path: Path) -> None:
+    clip = Clip(
+        clip_id="clip_1",
+        project_id="project_1",
+        asset_id="asset_1",
+        source_path=tmp_path / "demo.mp4",
+        source_start_ms=2000,
+        source_end_ms=6000,
+        segmenter=SegmenterName.FIXED_INTERVAL,
+    )
+    command = build_thumbnail_command(clip, tmp_path / "thumb.jpg")
+    assert command[:5] == ["ffmpeg", "-y", "-ss", "4.000", "-i"]

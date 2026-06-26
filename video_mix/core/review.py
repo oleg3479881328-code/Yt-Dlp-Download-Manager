@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from html import escape
 from pathlib import Path
 
@@ -15,17 +16,30 @@ def _format_ms(value: int) -> str:
     return f"{minutes:02d}:{seconds:02d}"
 
 
-def _candidate_block(candidate: CandidateReel, clip_lookup: dict[str, Clip], asset_lookup: dict[str, Asset], work_dir: Path) -> str:
+def _candidate_block(
+    candidate: CandidateReel,
+    clip_lookup: dict[str, Clip],
+    asset_lookup: dict[str, Asset],
+    work_dir: Path,
+    thumbnail_lookup: dict[str, str],
+    thumbnail_warnings: dict[str, str],
+) -> str:
     warnings = "<br>".join(escape(item) for item in candidate.warnings) if candidate.warnings else "none"
     rows: list[str] = []
     for timeline_clip in candidate.video_clips:
         clip = clip_lookup[timeline_clip.clip_id]
         asset = asset_lookup[clip.asset_id]
         tags = ", ".join(clip.tags) if clip.tags else "none"
+        thumbnail_html = (
+            f'<img class="thumb" src="{escape(thumbnail_lookup[clip.clip_id])}" alt="{escape(asset.path.name)} thumbnail">'
+            if clip.clip_id in thumbnail_lookup
+            else f'<span class="thumb-missing">{escape(thumbnail_warnings.get(clip.clip_id, "thumbnail unavailable"))}</span>'
+        )
         rows.append(
             "\n".join(
                 [
                     "<tr>",
+                    f"<td>{thumbnail_html}</td>",
                     f"<td><code>{escape(clip.clip_id)}</code></td>",
                     f"<td>{escape(asset.path.name)}</td>",
                     f"<td>{escape(_format_ms(timeline_clip.source_start_ms))} - {escape(_format_ms(timeline_clip.source_end_ms))}</td>",
@@ -59,6 +73,7 @@ def _candidate_block(candidate: CandidateReel, clip_lookup: dict[str, Clip], ass
       <table>
         <thead>
           <tr>
+            <th>thumbnail</th>
             <th>clip id</th>
             <th>source file</th>
             <th>source range</th>
@@ -74,11 +89,58 @@ def _candidate_block(candidate: CandidateReel, clip_lookup: dict[str, Clip], ass
     """
 
 
-def build_review_html(project: Project, candidates: list[CandidateReel], clips: list[Clip], assets: list[Asset], work_dir: Path) -> str:
+def build_thumbnail_command(clip: Clip, output_path: Path, ffmpeg_path: str = "ffmpeg") -> list[str]:
+    midpoint_seconds = (clip.source_start_ms + max(500, clip.duration_ms // 2)) / 1000
+    return [
+        ffmpeg_path,
+        "-y",
+        "-ss",
+        f"{midpoint_seconds:.3f}",
+        "-i",
+        str(clip.source_path),
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=320:-2",
+        str(output_path),
+    ]
+
+
+def generate_thumbnails(clips: list[Clip], work_dir: Path, ffmpeg_path: str = "ffmpeg") -> tuple[dict[str, str], dict[str, str]]:
+    thumbnails_dir = work_dir / "reports" / "thumbnails"
+    thumbnails_dir.mkdir(parents=True, exist_ok=True)
+    thumbnail_lookup: dict[str, str] = {}
+    thumbnail_warnings: dict[str, str] = {}
+
+    for clip in clips:
+        output_path = thumbnails_dir / f"{clip.clip_id}.jpg"
+        command = build_thumbnail_command(clip, output_path, ffmpeg_path=ffmpeg_path)
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        if result.returncode == 0 and output_path.exists():
+            thumbnail_lookup[clip.clip_id] = f"thumbnails/{output_path.name}"
+        else:
+            message = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "thumbnail generation failed"
+            thumbnail_warnings[clip.clip_id] = message
+
+    return thumbnail_lookup, thumbnail_warnings
+
+
+def build_review_html(
+    project: Project,
+    candidates: list[CandidateReel],
+    clips: list[Clip],
+    assets: list[Asset],
+    work_dir: Path,
+    thumbnail_lookup: dict[str, str] | None = None,
+    thumbnail_warnings: dict[str, str] | None = None,
+) -> str:
     clip_lookup = {clip.clip_id: clip for clip in clips}
     asset_lookup = {asset.asset_id: asset for asset in assets}
+    thumbnails = thumbnail_lookup or {}
+    thumb_warnings = thumbnail_warnings or {}
     candidate_sections = "".join(
-        _candidate_block(candidate, clip_lookup, asset_lookup, work_dir) for candidate in candidates
+        _candidate_block(candidate, clip_lookup, asset_lookup, work_dir, thumbnails, thumb_warnings)
+        for candidate in candidates
     )
 
     return f"""<!DOCTYPE html>
@@ -189,6 +251,21 @@ def build_review_html(project: Project, candidates: list[CandidateReel], clips: 
       text-align: left;
       vertical-align: top;
     }}
+    .thumb {{
+      width: 88px;
+      height: 156px;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      display: block;
+      background: #efe5d5;
+    }}
+    .thumb-missing {{
+      display: inline-block;
+      max-width: 120px;
+      color: var(--bad);
+      font-size: 0.85rem;
+    }}
     th {{ color: var(--muted); font-weight: 600; }}
     code {{
       font-family: "Cascadia Code", Consolas, monospace;
@@ -232,8 +309,19 @@ def build_review_html(project: Project, candidates: list[CandidateReel], clips: 
 """
 
 
-def write_review_html(project: Project, candidates: list[CandidateReel], clips: list[Clip], assets: list[Asset], work_dir: Path) -> Path:
+def write_review_html(
+    project: Project,
+    candidates: list[CandidateReel],
+    clips: list[Clip],
+    assets: list[Asset],
+    work_dir: Path,
+    ffmpeg_path: str = "ffmpeg",
+) -> tuple[Path, int, dict[str, str]]:
     review_path = work_dir / "reports" / "review.html"
     review_path.parent.mkdir(parents=True, exist_ok=True)
-    review_path.write_text(build_review_html(project, candidates, clips, assets, work_dir), encoding="utf-8")
-    return review_path
+    thumbnail_lookup, thumbnail_warnings = generate_thumbnails(clips, work_dir, ffmpeg_path=ffmpeg_path)
+    review_path.write_text(
+        build_review_html(project, candidates, clips, assets, work_dir, thumbnail_lookup, thumbnail_warnings),
+        encoding="utf-8",
+    )
+    return review_path, len(thumbnail_lookup), thumbnail_warnings

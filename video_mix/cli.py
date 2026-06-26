@@ -127,9 +127,19 @@ def run_review(args: argparse.Namespace) -> None:
     assets = load_assets(work_dir)
     clips = load_clips(work_dir)
     candidates = load_candidates(work_dir)
-    review_path = write_review_html(project, candidates, clips, assets, work_dir)
+    review_path, thumbnail_count, thumbnail_warnings = write_review_html(
+        project,
+        candidates,
+        clips,
+        assets,
+        work_dir,
+        ffmpeg_path=args.ffmpeg,
+    )
     print(f"review={review_path}")
     print(f"candidates={len(candidates)}")
+    print(f"thumbnails={thumbnail_count}")
+    if thumbnail_warnings:
+        print(f"thumbnail_warnings={len(thumbnail_warnings)}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -163,6 +173,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     review = sub.add_parser("review", help="Generate a local static review artifact")
     review.add_argument("work_dir")
+    review.add_argument("--ffmpeg", default="ffmpeg")
     review.set_defaults(func=run_review)
 
     export = sub.add_parser("export", help="Export approved candidates to MP4")
