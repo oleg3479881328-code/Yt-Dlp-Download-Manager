@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 11_VIDEO_MIX_DEEP_DONOR_RESEARCH_DONE
+current_step: 12_VIDEO_MIX_READY_FOR_STAGE_1_DECISION
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-26
-next_action: Review deep donor research, then revise draft code before any Stage 1 implementation approval.
+next_action: Owner decides whether to authorize a narrow Stage 1 Codex implementation task.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -25,9 +25,9 @@ New active direction:
 
 ## Current Focus
 
-Assistant has completed planning, created draft code, and added deep donor research for VIDEO MIX as a general production combiner.
+Assistant has completed planning, deep donor research and draft-code revision for VIDEO MIX as a general production combiner.
 
-Codex should receive only future implementation/local execution work after owner approval.
+Codex should receive only a narrow Stage 1 implementation task after owner approval.
 
 ## Confirmed Existing State
 
@@ -37,7 +37,7 @@ Codex should receive only future implementation/local execution work after owner
 - local transcription exists through `faster-whisper` into `.srt` and `.txt`.
 - `subtitle_studio/` exists as accepted Remotion MVP for animated subtitles.
 - `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` stores future video-analysis research only.
-- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts, draft code and donor research.
+- `workflow-runs/0003-video-mix-reel-mixer/` stores active VIDEO MIX planning artifacts, donor research and revised draft code.
 
 ## Confirmed Decisions
 
@@ -53,6 +53,7 @@ Codex should receive only future implementation/local execution work after owner
 10. Source media, derived clips, local databases and rendered exports must not be committed.
 11. Draft code is reference material only; it is not integrated or validated.
 12. Donor research shows VIDEO MIX should be a layered production engine, not a clone of any single SaaS product.
+13. Draft code was revised after donor research to use pluggable segmentation, timeline-like candidates and duplicate/reuse placeholders.
 
 ## VIDEO MIX Planning Model
 
@@ -69,10 +70,10 @@ First MVP target:
 ```text
 local media folder
 → asset scan
-→ micro-clip extraction
+→ segmentation
 → basic scoring
 → pilot pack templates
-→ candidate Reels
+→ timeline candidate manifests
 → preview/review
 → approved MP4 exports
 ```
@@ -108,8 +109,9 @@ Created artifacts:
 - `09_DRAFT_CODE_REPORT.md`
 - `10_DONOR_RESEARCH.md`
 - `11_DEEP_DONOR_RESEARCH_PRODUCTION_ENGINE.md`
+- `12_DRAFT_CODE_REVISION_REPORT.md`
 
-Draft code folder:
+Revised draft code folder:
 
 - `workflow-runs/0003-video-mix-reel-mixer/draft-code/`
 
@@ -120,8 +122,6 @@ Coordination issue:
 ## Current Boundaries
 
 Do not treat the draft code as validated implementation.
-
-Do not approve Stage 1 before reviewing the donor research and revising the draft code to reflect the donor decisions.
 
 Do not build:
 
@@ -134,4 +134,4 @@ Do not build:
 
 ## Current Next Action
 
-Review deep donor research, then revise the draft code/handoff so Codex receives a better Stage 1 task.
+Owner decides whether to authorize a narrow Stage 1 Codex implementation task.
