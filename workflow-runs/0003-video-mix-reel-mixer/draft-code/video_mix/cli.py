@@ -14,6 +14,7 @@ from .core.clip_extract import plan_all_micro_clips
 from .core.media_probe import probe_assets
 from .core.models import Project
 from .core.scoring import score_assets, score_clips
+from .core.tagging import apply_filename_tags
 from .packs.wedding import get_wedding_templates
 
 
@@ -43,7 +44,8 @@ def run_plan(args: argparse.Namespace) -> None:
     reports_dir = work_dir / "reports"
 
     assets = score_assets(probe_assets(scan_project_assets(project), ffprobe_path=args.ffprobe))
-    clips = score_clips(plan_all_micro_clips(assets, work_dir / "clips"), assets)
+    clips = plan_all_micro_clips(assets, work_dir / "clips")
+    clips = apply_filename_tags(score_clips(clips, assets))
     templates = get_wedding_templates()
     candidates = build_candidates(project.project_id, args.pack, templates, clips, args.max_candidates)
 
