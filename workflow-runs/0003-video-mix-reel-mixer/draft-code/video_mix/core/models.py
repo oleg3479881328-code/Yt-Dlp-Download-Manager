@@ -1,7 +1,12 @@
 """Draft data models for VIDEO MIX.
 
-These models are intentionally simple dataclasses so Codex can adapt them
-into the real project without adding framework dependencies too early.
+Draft only. Not integrated or validated.
+
+The model is intentionally timeline-like, inspired by donor research:
+- local media first;
+- candidate manifests before rendering;
+- industry-pack rules outside the core;
+- render layer replaceable later.
 """
 
 from __future__ import annotations
@@ -32,12 +37,36 @@ class CandidateStatus(str, Enum):
     EXPORTED = "exported"
 
 
+class TrackType(str, Enum):
+    VIDEO = "video"
+    AUDIO = "audio"
+    OVERLAY = "overlay"
+    CAPTION = "caption"
+
+
+class SegmenterName(str, Enum):
+    FIXED_INTERVAL = "fixed_interval"
+    PYSCENEDETECT = "pyscenedetect"
+    AUDIO = "audio"
+    MANUAL = "manual"
+
+
 @dataclass(slots=True)
 class Project:
     project_id: str
     name: str
     root_path: Path
     industry_pack: str = "wedding"
+
+
+@dataclass(slots=True)
+class PlatformPreset:
+    preset_id: str = "vertical_social"
+    width: int = 1080
+    height: int = 1920
+    fps: int = 30
+    max_duration_ms: int = 180_000
+    format: str = "mp4"
 
 
 @dataclass(slots=True)
@@ -65,13 +94,16 @@ class Clip:
     source_path: Path
     source_start_ms: int
     source_end_ms: int
+    segmenter: SegmenterName = SegmenterName.FIXED_INTERVAL
     working_path: Path | None = None
     thumbnail_path: Path | None = None
+    perceptual_hash: str | None = None
     tags: list[str] = field(default_factory=list)
     quality_score: float = 0.0
     duplicate_group_id: str | None = None
     usable: bool = True
     reject_reason: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def duration_ms(self) -> int:
@@ -86,6 +118,17 @@ class TemplateSlot:
     required_tags: list[str] = field(default_factory=list)
     preferred_tags: list[str] = field(default_factory=list)
     forbidden_tags: list[str] = field(default_factory=list)
+    allowed_track_type: TrackType = TrackType.VIDEO
+
+
+@dataclass(slots=True)
+class OverlayRule:
+    overlay_id: str
+    text: str
+    start_ms: int
+    end_ms: int
+    placement: str = "safe_center_lower"
+    style_id: str = "default"
 
 
 @dataclass(slots=True)
@@ -96,16 +139,30 @@ class ReelTemplate:
     target_duration_ms: int
     pacing: str
     slots: list[TemplateSlot]
+    overlays: list[OverlayRule] = field(default_factory=list)
+    platform_preset: PlatformPreset = field(default_factory=PlatformPreset)
 
 
 @dataclass(slots=True)
-class CandidateClip:
+class TimelineClip:
     clip_id: str
     slot_id: str
-    start_in_reel_ms: int
-    end_in_reel_ms: int
+    source_asset_id: str
+    source_start_ms: int
+    source_end_ms: int
+    timeline_start_ms: int
+    timeline_end_ms: int
     crop_mode: str = "fill_9_16"
     speed: float = 1.0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class TimelineTrack:
+    track_id: str
+    track_type: TrackType
+    clips: list[TimelineClip] = field(default_factory=list)
+    overlays: list[OverlayRule] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -117,8 +174,18 @@ class CandidateReel:
     status: CandidateStatus
     score: float
     duration_ms: int
-    clips: list[CandidateClip]
+    tracks: list[TimelineTrack]
+    platform_preset: PlatformPreset = field(default_factory=PlatformPreset)
     warnings: list[str] = field(default_factory=list)
+    review_notes: str = ""
+
+    @property
+    def video_clips(self) -> list[TimelineClip]:
+        clips: list[TimelineClip] = []
+        for track in self.tracks:
+            if track.track_type == TrackType.VIDEO:
+                clips.extend(track.clips)
+        return clips
 
 
 @dataclass(slots=True)
@@ -129,3 +196,4 @@ class ExportPlan:
     height: int = 1920
     fps: int = 30
     format: str = "mp4"
+    renderer: str = "ffmpeg"
