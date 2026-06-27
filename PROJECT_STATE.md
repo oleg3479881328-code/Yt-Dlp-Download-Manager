@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 19_VIDEO_MIX_STAGE_1_4_DASHBOARD_LAUNCHER_PENDING_REVIEW
+current_step: 20_VIDEO_MIX_STAGE_1_6_DASHBOARD_REVIEW_CONTROLS_PENDING_REVIEW
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-27
-next_action: Owner reviews the Stage 1.4 launcher follow-up, execution report and PR linked from GitHub Issue #34.
+next_action: Owner reviews the Stage 1.6 dashboard review controls follow-up, execution report and PR linked from GitHub Issue #37.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -147,3 +147,35 @@ Boundaries:
 Current next action:
 
 Owner reviews Issue `#34`, the linked PR and `22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md`, then either accepts this launcher baseline or requests one isolated next pass.
+
+Current Stage 1.6 focus:
+
+- add dashboard-side filtering, sorting, selection and bulk actions for fast candidate triage
+- keep the workflow local-only and reuse the existing review/export flow
+- preserve single approve/reject behavior while adding bulk approve/reject
+
+Execution artifacts:
+
+- `workflow-runs/0003-video-mix-reel-mixer/23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md`
+
+Validation result:
+
+- pytest passed
+- ruff passed
+- synthetic `plan` passed
+- synthetic `review` passed
+- launcher/dashboard smoke check passed
+- dashboard URL returned `200`
+- dashboard API returned `assets=5`, `clips=10`, `candidates=10`
+
+Boundaries:
+
+- dashboard review controls only
+- local-only behavior
+- no segmentation redesign
+- no export redesign beyond calling the existing export flow
+- no AI tagging or Remotion work
+
+Current next action:
+
+Owner reviews Issue `#37`, the linked PR and `23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md`, then either accepts this dashboard review baseline or requests one isolated next pass.

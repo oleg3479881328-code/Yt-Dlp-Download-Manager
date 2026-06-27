@@ -623,3 +623,108 @@ Invoke-WebRequest "http://127.0.0.1:8765/video-mix?work_dir=C%3A%5CUsers%5Coleg3
 ### Current Next Action
 
 Owner reviews Issue `#34`, the linked PR and `22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md`, then either accepts this launcher baseline or requests one isolated next pass.
+
+---
+
+## 2026-06-27 — VIDEO MIX Stage 1.6 dashboard review controls implemented and locally validated
+
+### Trigger
+
+Owner opened GitHub Issue `#37` for a narrow follow-up: make the local dashboard useful for fast candidate triage without command-line review work.
+
+### Verified Before Change
+
+- The dashboard already launched locally through `start_video_mix_dashboard.ps1`.
+- Single approve/reject and export actions already existed.
+- The review surface still lacked practical triage controls:
+  - filtering
+  - sorting
+  - selection
+  - bulk approve/reject
+
+### Changes Made
+
+1. Extended dashboard frontend to add:
+   - status filtering
+   - warnings filtering
+   - search by template/source filename
+   - sorting by score, duration, status, template and source filename
+   - candidate selection
+   - select visible / clear selection
+   - selected-count and visible-count summary
+   - bulk approve / bulk reject with confirmation
+   - clearer empty state when filters hide all cards
+2. Added backend bulk approve/reject endpoints with candidate-id validation.
+3. Preserved the existing single approve/reject and export behavior.
+4. Added API tests for bulk action success and invalid candidate ids.
+
+### Commands Run
+
+```powershell
+python -m pytest tests/test_video_mix_pipeline.py tests/test_segment_api.py tests/test_video_mix_dashboard_api.py tests/test_video_mix_dashboard_launcher.py
+python -m ruff check app video_mix tests
+python -m video_mix.cli plan video_mix_validation/input --project-name "Wedding Validation" --work-dir video_mix_validation/work
+python -m video_mix.cli review video_mix_validation/work
+powershell -ExecutionPolicy Bypass -File .\start_video_mix_dashboard.ps1 -WorkDir .\video_mix_validation\work -NoBrowser
+Invoke-WebRequest "http://127.0.0.1:8765/video-mix?work_dir=C%3A%5CUsers%5Coleg3%5COneDrive%5CDocuments%5CYt-Dlp-Download-Manager%5Cvideo_mix_validation%5Cwork"
+Invoke-WebRequest "http://127.0.0.1:8765/api/video-mix/dashboard?work_dir=C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager\video_mix_validation\work"
+```
+
+### Validation Results
+
+- `pytest` passed
+- `ruff` passed
+- synthetic `plan` passed:
+  - `assets=5`
+  - `clips=10`
+  - `candidates=10`
+- synthetic `review` passed:
+  - `thumbnails=10`
+- local launcher/dashboard smoke check passed
+- dashboard URL returned `200`
+- dashboard API returned:
+  - `assets=5`
+  - `clips=10`
+  - `candidates=10`
+  - `approved=0`
+  - `exported=0`
+
+### Current Next Action
+
+Owner reviews Issue `#37`, the linked PR and `23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md`, then either accepts this dashboard review baseline or requests one isolated next pass.
+
+---
+
+## 2026-06-27 — VIDEO MIX Stage 1.6 P2 review-feedback follow-up applied
+
+### Trigger
+
+Owner left PR feedback on `#38` requiring two safety fixes before acceptance:
+
+- bulk actions must not submit candidates hidden by the current filters
+- selection toggles must not erase unsaved review-note edits
+
+### Changes Made
+
+1. Updated dashboard bulk actions to submit only the selected candidate ids that are currently visible under the active filters.
+2. Added draft note caching so checkbox toggles and other local re-renders keep in-progress textarea edits intact until an explicit approve/reject action persists them.
+3. Added frontend regression coverage for:
+   - hidden selected candidates excluded from bulk submission
+   - draft note capture
+   - draft note precedence over stale persisted note text
+
+### Commands Run
+
+```powershell
+node --test frontend-tests\video-mix-dashboard.test.mjs
+python -m pytest tests/test_video_mix_dashboard_api.py
+python -m ruff check app video_mix tests
+```
+
+### Validation Results
+
+- frontend node tests passed
+- dashboard API tests passed
+- `ruff` passed
+- confirmed by code path that bulk requests now send only visible selected candidate ids
+- confirmed by regression helper coverage that in-progress note drafts survive re-render sources that previously rebuilt the textarea from persisted state

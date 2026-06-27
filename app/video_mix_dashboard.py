@@ -231,6 +231,32 @@ def update_candidate_status(raw_work_dir: str, candidate_id: str, status: Candid
     return build_dashboard_payload(str(work_dir))
 
 
+def bulk_update_candidate_status(
+    raw_work_dir: str,
+    candidate_ids: list[str],
+    status: CandidateStatus,
+    note: str = "",
+) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    normalized_ids = [candidate_id for candidate_id in dict.fromkeys(candidate_ids) if candidate_id]
+    if not normalized_ids:
+        raise HTTPException(status_code=400, detail="No candidate ids were provided for the bulk action.")
+
+    candidates = load_candidates(work_dir)
+    candidate_lookup = {candidate.candidate_id: candidate for candidate in candidates}
+    missing = [candidate_id for candidate_id in normalized_ids if candidate_id not in candidate_lookup]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Candidate not found: {', '.join(missing)}")
+
+    for candidate_id in normalized_ids:
+        candidate = candidate_lookup[candidate_id]
+        candidate.status = status
+        candidate.review_notes = note or candidate.review_notes
+
+    _persist_dashboard_state(work_dir, candidates, regenerate_thumbnails=False)
+    return build_dashboard_payload(str(work_dir))
+
+
 def export_approved_candidates(raw_work_dir: str, ffmpeg_path: str = "ffmpeg") -> dict[str, Any]:
     work_dir = resolve_work_dir(raw_work_dir)
     project = load_project(work_dir)

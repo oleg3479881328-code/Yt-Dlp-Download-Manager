@@ -22,6 +22,7 @@ from .video_mix_dashboard import (
     build_dashboard_payload as build_video_mix_dashboard_payload,
 )
 from .video_mix_dashboard import (
+    bulk_update_candidate_status,
     export_approved_candidates,
     open_dashboard_target,
     resolve_relative_work_path,
@@ -70,6 +71,12 @@ class VideoMixCandidateRequest(BaseModel):
 class VideoMixExportRequest(BaseModel):
     work_dir: str
     ffmpeg: str = "ffmpeg"
+
+
+class VideoMixBulkRequest(BaseModel):
+    work_dir: str
+    candidate_ids: list[str]
+    note: str = ""
 
 
 class VideoMixOpenRequest(BaseModel):
@@ -274,6 +281,18 @@ async def save_settings(payload: SettingsRequest) -> dict[str, Any]:
 @app.get("/api/video-mix/dashboard")
 async def video_mix_dashboard(work_dir: str) -> dict[str, Any]:
     return build_video_mix_dashboard_payload(work_dir)
+
+
+@app.post("/api/video-mix/candidates/bulk/approve")
+async def approve_video_mix_candidates_bulk(payload: VideoMixBulkRequest) -> dict[str, Any]:
+    dashboard = bulk_update_candidate_status(payload.work_dir, payload.candidate_ids, CandidateStatus.APPROVED, payload.note)
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/candidates/bulk/reject")
+async def reject_video_mix_candidates_bulk(payload: VideoMixBulkRequest) -> dict[str, Any]:
+    dashboard = bulk_update_candidate_status(payload.work_dir, payload.candidate_ids, CandidateStatus.REJECTED, payload.note)
+    return {"ok": True, "dashboard": dashboard}
 
 
 @app.post("/api/video-mix/candidates/{candidate_id}/approve")
