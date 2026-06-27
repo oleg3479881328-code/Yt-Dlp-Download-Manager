@@ -1,10 +1,10 @@
 ---
-status: in-progress
+status: review-ready
 project_mode: compact
-current_step: 21_VIDEO_MIX_STAGE_1_7_RUSSIAN_DASHBOARD_UI_PENDING_REVIEW
+current_step: 23_VIDEO_MIX_STAGE_1_8_SIMPLIFIED_SOURCE_TO_MP4_READY_FOR_REVIEW
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-27
-next_action: Owner reviews the Stage 1.7 Russian dashboard UI execution report and PR linked from GitHub Issue #39.
+next_action: Owner reviews the Stage 1.8 simplified source-to-MP4 execution report and PR linked from GitHub Issue #41.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -211,3 +211,44 @@ Boundaries:
 Current next action:
 
 Owner reviews Issue `#39`, the linked PR and `24_RUSSIAN_DASHBOARD_UI_EXECUTION_REPORT.md`, then either accepts this Russian dashboard baseline or requests one isolated next pass.
+
+Current Stage 1.8 focus:
+
+- keep the existing materials scan and work_dir flows intact
+- add a direct `Quick Mix` path from source materials to finished MP4 outputs
+- allow owner inputs:
+  - source folder
+  - duration seconds per output video
+  - output count
+- generate ready MP4 exports without forcing manual approve/reject first
+
+Execution artifacts:
+
+- `workflow-runs/0003-video-mix-reel-mixer/25_SIMPLIFIED_SOURCE_TO_MP4_MVP_EXECUTION_REPORT.md`
+
+Validation result:
+
+- frontend node tests passed
+- broader VIDEO MIX/dashboard pytest set passed
+- `ruff` passed
+- live quick-mix endpoint smoke returned HTTP `200`
+- local smoke generated `2` finished MP4 outputs
+- both outputs were probeable:
+  - `1080x1920`
+  - `30fps`
+  - `6.000000s`
+- smoke source included both videos and a photo asset
+
+Boundaries:
+
+- local Windows dashboard only
+- direct source-to-MP4 MVP only
+- no SaaS
+- no login
+- no posting automation
+- no AI tagging or Remotion work
+- no `whiteboard_studio/` changes
+
+Current next action:
+
+Owner reviews Issue `#41`, the linked PR and `25_SIMPLIFIED_SOURCE_TO_MP4_MVP_EXECUTION_REPORT.md`, then either accepts this Quick Mix baseline or requests one isolated next pass.

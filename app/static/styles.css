@@ -351,7 +351,8 @@ code {
 .video-mix-project-meta,
 .video-mix-summary-grid,
 .video-mix-action-stack,
-.video-mix-exports-list {
+.video-mix-exports-list,
+.video-mix-source-summary {
   margin-top: 16px;
 }
 .video-mix-project-panel {
@@ -394,6 +395,15 @@ code {
 .video-mix-exports-list {
   display: grid;
   gap: 10px;
+}
+.video-mix-preview-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+.video-mix-preview-list li {
+  color: var(--text);
 }
 .video-mix-main {
   display: grid;

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from video_mix.core.asset_scan import detect_media_type, stable_id
-from video_mix.core.models import CandidateStatus, Clip, MediaType, Orientation, Project, SegmenterName
+from video_mix.core.models import Asset, CandidateStatus, Clip, MediaType, Orientation, Project, SegmenterName
 from video_mix.core.review import (
     build_review_html,
     build_thumbnail_command,
@@ -9,6 +9,7 @@ from video_mix.core.review import (
     write_review_html,
 )
 from video_mix.core.storage import build_asset, build_candidate, build_clip, to_jsonable
+from video_mix.service import quick_mix_source_materials, resolve_work_dir
 
 
 def test_detect_media_type_video() -> None:
@@ -190,3 +191,79 @@ def test_collect_existing_thumbnails_uses_local_files(tmp_path: Path) -> None:
 
     assert lookup == {"clip_1": "thumbnails/clip_1.jpg"}
     assert warnings == {}
+
+
+def test_resolve_work_dir_defaults_under_source_dir(tmp_path: Path) -> None:
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+
+    resolved = resolve_work_dir(source_dir)
+
+    assert resolved == (source_dir / "_video_mix_work").resolve()
+
+
+def test_resolve_work_dir_preserves_relative_cli_semantics(tmp_path: Path) -> None:
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+    cwd = tmp_path / "workspace"
+    cwd.mkdir()
+
+    resolved = resolve_work_dir(source_dir, "video_mix_validation/work", cwd=cwd)
+
+    assert resolved == (cwd / "video_mix_validation" / "work").resolve()
+
+
+def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    video_path = source_dir / "clip.mp4"
+    photo_path = source_dir / "photo.jpg"
+    video_path.write_bytes(b"video")
+    photo_path.write_bytes(b"photo")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            if asset.media_type == MediaType.VIDEO:
+                asset.duration_ms = 4000
+                asset.width = 1080
+                asset.height = 1920
+                asset.fps = 30.0
+                asset.orientation = Orientation.VERTICAL
+                asset.probe_status = "ok"
+            else:
+                asset.probe_status = "skipped_photo"
+        return assets
+
+    rendered_segments: list[Path] = []
+    rendered_outputs: list[Path] = []
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(f"{asset.media_type}:{start_ms}:{duration_ms}".encode())
+        rendered_segments.append(output_path)
+
+    def fake_render_output(segment_paths: list[Path], output_path: Path, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes("\n".join(path.name for path in segment_paths).encode("utf-8"))
+        rendered_outputs.append(output_path)
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", fake_render_output)
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=2,
+        project_name="Quick Mix Validation",
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert result["generated_count"] == 2
+    assert result["video_count"] == 1
+    assert result["image_count"] == 1
+    assert result["photo_support"] is True
+    assert result["output_paths"] == ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"]
+    assert len(rendered_segments) >= 2
+    assert len(rendered_outputs) == 2
