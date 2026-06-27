@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VIDEO MIX Dashboard</title>
+  <title>VIDEO MIX Дашборд</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -13,14 +13,14 @@
   <div class="video-mix-shell">
     <section class="video-mix-hero">
       <div>
-        <p class="eyebrow">VIDEO MIX / Stage 1.3</p>
-        <h1>Local dashboard for review, approval, and export</h1>
-        <p class="hero-copy">Load an existing VIDEO MIX work directory, inspect the pipeline state, review candidate thumbnails, and approve or reject without leaving the local browser.</p>
+        <p class="eyebrow">VIDEO MIX / Stage 1.7</p>
+        <h1>Локальный дашборд для ревью, одобрения и экспорта</h1>
+        <p class="hero-copy">Загрузите готовый VIDEO MIX work_dir, проверьте состояние пайплайна, просмотрите миниатюры кандидатов и одобрите или отклоните их прямо в локальном браузере.</p>
       </div>
       <div class="video-mix-hero-actions">
-        <button id="vm-open-review" class="ghost-btn" type="button">Open review.html</button>
-        <button id="vm-open-exports" class="ghost-btn" type="button">Open exports</button>
-        <button id="vm-open-workdir" class="ghost-btn" type="button">Open work_dir</button>
+        <button id="vm-open-review" class="ghost-btn" type="button">Открыть review.html</button>
+        <button id="vm-open-exports" class="ghost-btn" type="button">Открыть exports</button>
+        <button id="vm-open-workdir" class="ghost-btn" type="button">Открыть work_dir</button>
       </div>
     </section>
 
@@ -28,39 +28,39 @@
       <aside class="video-mix-sidebar card">
         <div class="card-header">
           <div>
-            <h2>Load work_dir</h2>
-            <p class="muted">Use an already generated VIDEO MIX work folder.</p>
+            <h2>Загрузка work_dir</h2>
+            <p class="muted">Используйте уже созданную рабочую папку VIDEO MIX.</p>
           </div>
-          <span id="vm-load-state" class="status-chip status-queued">Waiting</span>
+          <span id="vm-load-state" class="status-chip status-queued">Ожидание</span>
         </div>
         <label class="field">
           <span>VIDEO MIX work_dir</span>
           <input id="vm-workdir-input" type="text" placeholder="C:\path\to\video_mix_validation\work">
         </label>
         <div class="actions-row">
-          <button id="vm-load-btn" class="accent-btn" type="button">Load dashboard</button>
-          <button id="vm-copy-url-btn" class="ghost-btn" type="button">Copy URL</button>
+          <button id="vm-load-btn" class="accent-btn" type="button">Загрузить дашборд</button>
+          <button id="vm-copy-url-btn" class="ghost-btn" type="button">Копировать URL</button>
         </div>
         <div id="vm-project-meta" class="video-mix-project-meta">
-          <div class="empty">Load a work_dir to see project metadata and summary counts.</div>
+          <div class="empty">Загрузите work_dir, чтобы увидеть метаданные проекта и сводные счётчики.</div>
         </div>
         <div class="video-mix-summary-grid" id="vm-summary-grid"></div>
         <div class="card-header video-mix-section-header">
           <div>
-            <h2>Pipeline</h2>
-            <p class="muted">Assets to export in one local flow.</p>
+            <h2>Пайплайн</h2>
+            <p class="muted">Путь от ассетов до экспорта в одном локальном процессе.</p>
           </div>
         </div>
         <div id="vm-pipeline" class="pipeline-map"></div>
         <div class="card-header video-mix-section-header">
           <div>
-            <h2>Actions</h2>
-            <p class="muted">Use existing VIDEO MIX behavior only.</p>
+            <h2>Действия</h2>
+            <p class="muted">Используется только текущее поведение VIDEO MIX.</p>
           </div>
         </div>
         <div class="video-mix-action-stack">
-          <button id="vm-export-btn" class="accent-btn full-width" type="button">Export approved candidates</button>
-          <button id="vm-refresh-btn" class="ghost-btn full-width" type="button">Refresh dashboard</button>
+          <button id="vm-export-btn" class="accent-btn full-width" type="button">Экспортировать одобренных кандидатов</button>
+          <button id="vm-refresh-btn" class="ghost-btn full-width" type="button">Обновить дашборд</button>
         </div>
         <div id="vm-exports-list" class="video-mix-exports-list"></div>
       </aside>
@@ -69,61 +69,61 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <h2>Candidate cards</h2>
-              <p class="muted">Thumbnail, score, template, warnings, source files, and direct actions.</p>
+              <h2>Карточки кандидатов</h2>
+              <p class="muted">Миниатюра, score, template, предупреждения, исходные файлы и быстрые действия.</p>
             </div>
-            <span id="vm-candidate-count" class="status-chip status-idle">0 candidates</span>
+            <span id="vm-candidate-count" class="status-chip status-idle">0 кандидатов</span>
           </div>
           <div class="video-mix-toolbar">
             <label class="field">
-              <span>Status</span>
+              <span>Статус</span>
               <select id="vm-filter-status">
-                <option value="all">All</option>
-                <option value="generated">Generated</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="exported">Exported</option>
+                <option value="all">Все</option>
+                <option value="generated">Сгенерированы</option>
+                <option value="approved">Одобрены</option>
+                <option value="rejected">Отклонены</option>
+                <option value="exported">Экспортированы</option>
               </select>
             </label>
             <label class="field">
-              <span>Warnings</span>
+              <span>Предупреждения</span>
               <select id="vm-filter-warnings">
-                <option value="all">All</option>
-                <option value="with_warnings">With warnings</option>
-                <option value="without_warnings">Without warnings</option>
+                <option value="all">Все</option>
+                <option value="with_warnings">С предупреждениями</option>
+                <option value="without_warnings">Без предупреждений</option>
               </select>
             </label>
             <label class="field">
-              <span>Sort</span>
+              <span>Сортировка</span>
               <select id="vm-sort">
-                <option value="score_desc">Score desc</option>
-                <option value="score_asc">Score asc</option>
-                <option value="duration_desc">Duration desc</option>
-                <option value="duration_asc">Duration asc</option>
-                <option value="status_asc">Status</option>
-                <option value="template_asc">Template</option>
-                <option value="source_asc">Source filename</option>
+                <option value="score_desc">Score по убыванию</option>
+                <option value="score_asc">Score по возрастанию</option>
+                <option value="duration_desc">Длительность по убыванию</option>
+                <option value="duration_asc">Длительность по возрастанию</option>
+                <option value="status_asc">По статусу</option>
+                <option value="template_asc">По template</option>
+                <option value="source_asc">По имени исходного файла</option>
               </select>
             </label>
             <label class="field video-mix-search-field">
-              <span>Search</span>
-              <input id="vm-search" type="text" placeholder="template or source filename">
+              <span>Поиск</span>
+              <input id="vm-search" type="text" placeholder="template или имя исходного файла">
             </label>
           </div>
           <div class="video-mix-selection-bar">
             <div class="video-mix-selection-summary">
-              <strong id="vm-selected-count">0 selected</strong>
-              <span class="muted" id="vm-visible-count">0 visible</span>
+              <strong id="vm-selected-count">0 выбрано</strong>
+              <span class="muted" id="vm-visible-count">0 видно</span>
             </div>
             <div class="video-mix-selection-actions">
-              <button id="vm-select-visible" class="ghost-btn" type="button">Select visible</button>
-              <button id="vm-clear-selection" class="ghost-btn" type="button">Clear selection</button>
-              <button id="vm-approve-selected" class="accent-btn" type="button">Approve selected</button>
-              <button id="vm-reject-selected" class="ghost-btn" type="button">Reject selected</button>
+              <button id="vm-select-visible" class="ghost-btn" type="button">Выбрать видимые</button>
+              <button id="vm-clear-selection" class="ghost-btn" type="button">Сбросить выбор</button>
+              <button id="vm-approve-selected" class="accent-btn" type="button">Одобрить выбранные</button>
+              <button id="vm-reject-selected" class="ghost-btn" type="button">Отклонить выбранные</button>
             </div>
           </div>
           <div id="vm-candidates" class="video-mix-candidate-grid">
-            <div class="empty">No work_dir loaded yet.</div>
+            <div class="empty">work_dir ещё не загружен.</div>
           </div>
         </div>
       </main>

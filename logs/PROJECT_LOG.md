@@ -728,3 +728,66 @@ python -m ruff check app video_mix tests
 - `ruff` passed
 - confirmed by code path that bulk requests now send only visible selected candidate ids
 - confirmed by regression helper coverage that in-progress note drafts survive re-render sources that previously rebuilt the textarea from persisted state
+
+---
+
+## 2026-06-27 — VIDEO MIX Stage 1.7 Russian dashboard UI implemented and locally validated
+
+### Trigger
+
+Owner opened GitHub Issue `#39` for a narrow follow-up: translate the local VIDEO MIX dashboard UI into Russian without changing API values or dashboard behavior.
+
+### Verified Before Change
+
+- Stage 1.6 dashboard review controls were already merged.
+- The local dashboard already supported:
+  - filtering
+  - sorting
+  - selection
+  - bulk approve/reject
+  - export of approved candidates
+- The owner-facing dashboard UI was still mostly English.
+
+### Changes Made
+
+1. Translated static dashboard page text in `app/templates/video_mix_dashboard.html`:
+   - hero title and helper copy
+   - sidebar labels and helper text
+   - action button labels
+   - filter labels and option labels
+   - selection bar labels
+   - empty states
+2. Translated dynamic dashboard strings in `app/static/video-mix-dashboard.js`:
+   - load and success messages
+   - confirmation dialogs
+   - candidate card labels
+   - no-data and no-export text
+   - selected/visible counters
+   - copy/open/export status messages
+3. Added display-only label mapping for visible candidate statuses and pipeline state labels while keeping API/status values unchanged.
+4. Recorded the Stage 1.7 execution artifact for re-entry and review.
+
+### Commands Run
+
+```powershell
+node --test frontend-tests\video-mix-dashboard.test.mjs
+python -m pytest tests/test_video_mix_pipeline.py tests/test_segment_api.py tests/test_video_mix_dashboard_api.py tests/test_video_mix_dashboard_launcher.py
+python -m ruff check app video_mix tests
+powershell -ExecutionPolicy Bypass -File .\start_video_mix_dashboard.ps1 -WorkDir .\video_mix_validation\work -NoBrowser
+Invoke-WebRequest "http://127.0.0.1:8765/video-mix?work_dir=C%3A%5CUsers%5Coleg3%5COneDrive%5CDocuments%5CYt-Dlp-Download-Manager%5Cvideo_mix_validation%5Cwork"
+Invoke-WebRequest "http://127.0.0.1:8765/api/video-mix/dashboard?work_dir=C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager\video_mix_validation\work"
+```
+
+### Validation Results
+
+- frontend node tests passed
+- broader VIDEO MIX/dashboard pytest set passed
+- `ruff` passed
+- local launcher/dashboard smoke check passed
+- dashboard URL returned `200`
+- dashboard API returned:
+  - `assets=5`
+  - `clips=10`
+  - `candidates=10`
+  - `approved=0`
+  - `exported=0`

@@ -19,6 +19,29 @@ const STATUS_ORDER = {
   exported: 4,
 };
 
+const STATUS_LABELS = {
+  generated: "Сгенерирован",
+  previewed: "Просмотрен",
+  approved: "Одобрен",
+  rejected: "Отклонён",
+  exported: "Экспортирован",
+};
+
+const PIPELINE_LABELS = {
+  assets: "Ассеты",
+  clips: "Клипы",
+  candidates: "Кандидаты",
+  review: "Ревью",
+  approval: "Одобрение",
+  export: "Экспорт",
+};
+
+const PIPELINE_STATE_LABELS = {
+  ready: "готово",
+  pending: "ожидание",
+  active: "в работе",
+};
+
 const qs = (selector) => document.querySelector(selector);
 
 function escapeHtml(value) {
@@ -61,7 +84,7 @@ async function fetchJson(url, options = {}) {
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.detail || "Request failed");
+    throw new Error(payload.detail || "Запрос не выполнен");
   }
   return response.json();
 }
@@ -71,6 +94,18 @@ function setLoadState(label, className) {
   if (!element) return;
   element.textContent = label;
   element.className = `status-chip ${className}`;
+}
+
+function statusLabel(status) {
+  return STATUS_LABELS[status] || status;
+}
+
+function pipelineLabel(step) {
+  return PIPELINE_LABELS[step.id] || step.label || step.id;
+}
+
+function pipelineStateLabel(stateValue) {
+  return PIPELINE_STATE_LABELS[stateValue] || stateValue;
 }
 
 function visibleCandidates() {
@@ -165,9 +200,9 @@ function renderProjectMeta() {
   const summaryTarget = qs("#vm-summary-grid");
   const countChip = qs("#vm-candidate-count");
   if (!state.dashboard) {
-    target.innerHTML = `<div class="empty">Load a work_dir to see project metadata and summary counts.</div>`;
+    target.innerHTML = `<div class="empty">Загрузите work_dir, чтобы увидеть метаданные проекта и сводные счётчики.</div>`;
     summaryTarget.innerHTML = "";
-    countChip.textContent = "0 candidates";
+    countChip.textContent = "0 кандидатов";
     countChip.className = "status-chip status-idle";
     return;
   }
@@ -175,19 +210,19 @@ function renderProjectMeta() {
   const { project, work_dir: workDir, summary } = state.dashboard;
   target.innerHTML = `
     <div class="video-mix-project-panel">
-      <div><span>Project</span><strong>${escapeHtml(project.name)}</strong></div>
-      <div><span>Pack</span><strong>${escapeHtml(project.industry_pack)}</strong></div>
-      <div><span>Root</span><code>${escapeHtml(project.root_path)}</code></div>
+      <div><span>Проект</span><strong>${escapeHtml(project.name)}</strong></div>
+      <div><span>Пакет</span><strong>${escapeHtml(project.industry_pack)}</strong></div>
+      <div><span>Корень</span><code>${escapeHtml(project.root_path)}</code></div>
       <div><span>work_dir</span><code>${escapeHtml(workDir)}</code></div>
     </div>
   `;
   const items = [
-    ["Assets", summary.asset_count],
-    ["Clips", summary.clip_count],
-    ["Candidates", summary.candidate_count],
-    ["Approved", summary.approved_candidate_count],
-    ["Exported", summary.exported_candidate_count],
-    ["Rejected", summary.status_totals.rejected || 0],
+    ["Ассеты", summary.asset_count],
+    ["Клипы", summary.clip_count],
+    ["Кандидаты", summary.candidate_count],
+    ["Одобрено", summary.approved_candidate_count],
+    ["Экспортировано", summary.exported_candidate_count],
+    ["Отклонено", summary.status_totals.rejected || 0],
   ];
   summaryTarget.innerHTML = items.map(([label, value]) => `
     <div class="video-mix-summary-card">
@@ -196,36 +231,36 @@ function renderProjectMeta() {
     </div>
   `).join("");
 
-  countChip.textContent = `${summary.candidate_count} candidate(s)`;
+  countChip.textContent = `${summary.candidate_count} кандидатов`;
   countChip.className = `status-chip ${summary.candidate_count ? "status-completed" : "status-idle"}`;
 }
 
 function renderPipeline() {
   const target = qs("#vm-pipeline");
   if (!state.dashboard) {
-    target.innerHTML = `<div class="empty">Pipeline state will appear after loading a work_dir.</div>`;
+    target.innerHTML = `<div class="empty">Состояние пайплайна появится после загрузки work_dir.</div>`;
     return;
   }
   target.innerHTML = state.dashboard.pipeline.map((step) => `
     <div class="pipeline-step ${escapeAttr(step.state === "ready" ? "active" : "")}">
-      <strong>${escapeHtml(step.label)}</strong>
-      <span>${escapeHtml(step.count)} item(s)</span>
-      <span class="video-mix-step-state">${escapeHtml(step.state)}</span>
+      <strong>${escapeHtml(pipelineLabel(step))}</strong>
+      <span>${escapeHtml(step.count)} шт.</span>
+      <span class="video-mix-step-state">${escapeHtml(pipelineStateLabel(step.state))}</span>
     </div>
   `).join("");
 }
 
 function candidateCommandButtons(candidate) {
   return `
-    <button class="ghost-btn" type="button" data-copy-command="${escapeAttr(candidate.approve_command)}">Copy approve</button>
-    <button class="ghost-btn" type="button" data-copy-command="${escapeAttr(candidate.reject_command)}">Copy reject</button>
+    <button class="ghost-btn" type="button" data-copy-command="${escapeAttr(candidate.approve_command)}">Копировать approve</button>
+    <button class="ghost-btn" type="button" data-copy-command="${escapeAttr(candidate.reject_command)}">Копировать reject</button>
   `;
 }
 
 function renderSelectionSummary(visible) {
   const selectedCount = state.selectedCandidateIds.size;
-  qs("#vm-selected-count").textContent = `${selectedCount} selected`;
-  qs("#vm-visible-count").textContent = `${visible.length} visible`;
+  qs("#vm-selected-count").textContent = `${selectedCount} выбрано`;
+  qs("#vm-visible-count").textContent = `${visible.length} видно`;
 }
 
 function cacheDraftNotes() {
@@ -239,7 +274,7 @@ function cacheDraftNotes() {
 function renderCandidates() {
   const target = qs("#vm-candidates");
   if (!state.dashboard) {
-    target.innerHTML = `<div class="empty">No work_dir loaded yet.</div>`;
+    target.innerHTML = `<div class="empty">work_dir ещё не загружен.</div>`;
     renderSelectionSummary([]);
     return;
   }
@@ -247,41 +282,41 @@ function renderCandidates() {
   const candidates = visibleCandidates();
   renderSelectionSummary(candidates);
   if (!candidates.length) {
-    target.innerHTML = `<div class="empty">No candidates match the current filters.</div>`;
+    target.innerHTML = `<div class="empty">Нет кандидатов, подходящих под текущие фильтры.</div>`;
     return;
   }
 
   target.innerHTML = candidates.map((candidate) => {
     const isSelected = state.selectedCandidateIds.has(candidate.candidate_id);
     const thumbnail = candidate.thumbnail_path
-      ? `<img class="video-mix-thumb" src="${escapeAttr(fileUrl(candidate.thumbnail_path))}" alt="${escapeAttr(candidate.candidate_id)} thumbnail">`
-      : `<div class="video-mix-thumb video-mix-thumb-placeholder">No thumbnail</div>`;
+      ? `<img class="video-mix-thumb" src="${escapeAttr(fileUrl(candidate.thumbnail_path))}" alt="Миниатюра кандидата ${escapeAttr(candidate.candidate_id)}">`
+      : `<div class="video-mix-thumb video-mix-thumb-placeholder">Без миниатюры</div>`;
     const warnings = candidate.warnings.length
       ? candidate.warnings.map((warning) => `<span class="video-mix-pill warning">${escapeHtml(warning)}</span>`).join("")
-      : `<span class="video-mix-pill ok">No warnings</span>`;
+      : `<span class="video-mix-pill ok">Без предупреждений</span>`;
     const exports = candidate.export_paths.length
       ? candidate.export_paths.map((path) => `
           <a class="video-mix-export-link" href="${escapeAttr(fileUrl(path))}" target="_blank" rel="noreferrer">${escapeHtml(path)}</a>
         `).join("")
-      : `<div class="muted">No exports yet.</div>`;
+      : `<div class="muted">Экспортов пока нет.</div>`;
     const sources = candidate.source_clips.length
       ? candidate.source_clips.map((clip) => `
           <div class="video-mix-source-row">
             <strong>${escapeHtml(clip.source_filename)}</strong>
             <span>${escapeHtml(formatDurationMs(clip.start_ms))} → ${escapeHtml(formatDurationMs(clip.end_ms))}</span>
-            <span>${escapeHtml(clip.tags.join(", ") || "untagged")}</span>
+            <span>${escapeHtml(clip.tags.join(", ") || "без тегов")}</span>
           </div>
         `).join("")
-      : `<div class="muted">No source clips attached.</div>`;
+      : `<div class="muted">Исходные клипы не привязаны.</div>`;
     const noteValue = escapeAttr(resolveReviewNoteValue(candidate, state.draftNotesByCandidateId));
     return `
       <article class="video-mix-candidate-card ${isSelected ? "is-selected" : ""}">
         <div class="video-mix-card-toolbar">
           <label class="video-mix-select-toggle">
             <input type="checkbox" data-select-candidate="${escapeAttr(candidate.candidate_id)}" ${isSelected ? "checked" : ""}>
-            <span>Select</span>
+            <span>Выбрать</span>
           </label>
-          <span class="status-chip status-${escapeAttr(candidate.status)}">${escapeHtml(candidate.status)}</span>
+          <span class="status-chip status-${escapeAttr(candidate.status)}">${escapeHtml(statusLabel(candidate.status))}</span>
         </div>
         <div class="video-mix-card-top">
           ${thumbnail}
@@ -294,30 +329,30 @@ function renderCandidates() {
             </div>
             <div class="video-mix-metrics">
               <div><span>Score</span><strong>${escapeHtml(candidate.score)}</strong></div>
-              <div><span>Duration</span><strong>${escapeHtml(formatDurationMs(candidate.duration_ms))}</strong></div>
-              <div><span>Source files</span><strong>${escapeHtml(candidate.source_filenames.length)}</strong></div>
+              <div><span>Длительность</span><strong>${escapeHtml(formatDurationMs(candidate.duration_ms))}</strong></div>
+              <div><span>Исходные файлы</span><strong>${escapeHtml(candidate.source_filenames.length)}</strong></div>
             </div>
           </div>
         </div>
         <div class="video-mix-section">
-          <h4>Warnings</h4>
+          <h4>Предупреждения</h4>
           <div class="video-mix-pill-row">${warnings}</div>
         </div>
         <div class="video-mix-section">
-          <h4>Source filenames</h4>
+          <h4>Имена исходных файлов</h4>
           <div class="video-mix-source-list">${sources}</div>
         </div>
         <div class="video-mix-section">
-          <h4>Review note</h4>
-          <textarea class="video-mix-note" data-note-for="${escapeAttr(candidate.candidate_id)}" rows="3" placeholder="optional review note">${noteValue}</textarea>
+          <h4>Комментарий ревью</h4>
+          <textarea class="video-mix-note" data-note-for="${escapeAttr(candidate.candidate_id)}" rows="3" placeholder="необязательный комментарий ревью">${noteValue}</textarea>
         </div>
         <div class="video-mix-section">
-          <h4>Exports</h4>
+          <h4>Экспорт</h4>
           <div class="video-mix-export-list">${exports}</div>
         </div>
         <div class="video-mix-actions">
-          <button class="accent-btn" type="button" data-approve="${escapeAttr(candidate.candidate_id)}">Approve</button>
-          <button class="ghost-btn" type="button" data-reject="${escapeAttr(candidate.candidate_id)}">Reject</button>
+          <button class="accent-btn" type="button" data-approve="${escapeAttr(candidate.candidate_id)}">Одобрить</button>
+          <button class="ghost-btn" type="button" data-reject="${escapeAttr(candidate.candidate_id)}">Отклонить</button>
           ${candidateCommandButtons(candidate)}
         </div>
       </article>
@@ -336,7 +371,7 @@ function renderCandidates() {
   document.querySelectorAll("[data-copy-command]").forEach((button) => {
     button.onclick = async () => {
       await navigator.clipboard.writeText(button.dataset.copyCommand);
-      setLoadState("Command copied", "status-completed");
+      setLoadState("Команда скопирована", "status-completed");
     };
   });
   document.querySelectorAll("[data-note-for]").forEach((textarea) => {
@@ -349,7 +384,7 @@ function renderCandidates() {
 function renderExportsPanel(paths = []) {
   const target = qs("#vm-exports-list");
   if (!paths.length) {
-    target.innerHTML = `<div class="muted">No new export paths in this session.</div>`;
+    target.innerHTML = `<div class="muted">В этой сессии новых путей экспорта пока нет.</div>`;
     return;
   }
   target.innerHTML = paths.map((path) => `
@@ -379,17 +414,17 @@ async function loadDashboard(workDirOverride = "") {
   const input = qs("#vm-workdir-input");
   const workDir = workDirOverride || input.value.trim();
   if (!workDir) {
-    setLoadState("Enter work_dir", "status-failed");
+    setLoadState("Укажите work_dir", "status-failed");
     return;
   }
   state.workDir = workDir;
-  setLoadState("Loading...", "status-downloading");
+  setLoadState("Загрузка...", "status-downloading");
   try {
     const payload = await fetchJson(`/api/video-mix/dashboard?${new URLSearchParams({ work_dir: workDir }).toString()}`);
     applyDashboardPayload(payload);
     input.value = workDir;
     renderExportsPanel([]);
-    setLoadState("Loaded", "status-completed");
+    setLoadState("Загружено", "status-completed");
     history.replaceState({}, "", `${window.location.pathname}?${new URLSearchParams({ work_dir: workDir }).toString()}`);
   } catch (error) {
     state.dashboard = null;
@@ -439,7 +474,7 @@ function clearSelection() {
 
 async function submitCandidateStatus(candidateId, action) {
   if (!candidateId || !state.workDir) return;
-  setLoadState(`${action}...`, "status-downloading");
+  setLoadState(action === "approve" ? "Одобрение..." : "Отклонение...", "status-downloading");
   try {
     const payload = await fetchJson(`/api/video-mix/candidates/${encodeURIComponent(candidateId)}/${action}`, {
       method: "POST",
@@ -450,7 +485,7 @@ async function submitCandidateStatus(candidateId, action) {
     });
     applyDashboardPayload(payload.dashboard);
     renderExportsPanel([]);
-    setLoadState(`${action}d`, "status-completed");
+    setLoadState(action === "approve" ? "Одобрено" : "Отклонено", "status-completed");
   } catch (error) {
     setLoadState(error.message, "status-failed");
   }
@@ -459,20 +494,20 @@ async function submitCandidateStatus(candidateId, action) {
 async function submitBulkCandidateAction(action) {
   const candidateIds = visibleSelectedCandidateIds();
   if (!state.workDir || state.selectedCandidateIds.size === 0) {
-    setLoadState("Select at least one candidate first", "status-failed");
+    setLoadState("Сначала выберите хотя бы одного кандидата", "status-failed");
     return;
   }
   if (candidateIds.length === 0) {
-    setLoadState("No selected candidates match the current filters", "status-failed");
+    setLoadState("Среди выбранных нет кандидатов, видимых по текущим фильтрам", "status-failed");
     return;
   }
-  if (action === "reject" && !window.confirm(`Reject ${candidateIds.length} selected candidate(s)?`)) {
+  if (action === "reject" && !window.confirm(`Отклонить ${candidateIds.length} выбранных кандидатов?`)) {
     return;
   }
-  if (action === "approve" && !window.confirm(`Approve ${candidateIds.length} selected candidate(s)?`)) {
+  if (action === "approve" && !window.confirm(`Одобрить ${candidateIds.length} выбранных кандидатов?`)) {
     return;
   }
-  setLoadState(`Bulk ${action}...`, "status-downloading");
+  setLoadState(action === "approve" ? "Массовое одобрение..." : "Массовое отклонение...", "status-downloading");
   try {
     const payload = await fetchJson(`/api/video-mix/candidates/bulk/${action}`, {
       method: "POST",
@@ -485,7 +520,7 @@ async function submitBulkCandidateAction(action) {
     applyDashboardPayload(payload.dashboard);
     renderExportsPanel([]);
     clearSelection();
-    setLoadState(`Bulk ${action} complete`, "status-completed");
+    setLoadState(action === "approve" ? "Массовое одобрение завершено" : "Массовое отклонение завершено", "status-completed");
   } catch (error) {
     setLoadState(error.message, "status-failed");
   }
@@ -493,10 +528,10 @@ async function submitBulkCandidateAction(action) {
 
 async function exportApprovedCandidates() {
   if (!state.workDir) return;
-  if (!window.confirm("Export all currently approved candidates?")) {
+  if (!window.confirm("Экспортировать всех кандидатов, которые сейчас одобрены?")) {
     return;
   }
-  setLoadState("Exporting...", "status-downloading");
+  setLoadState("Экспорт...", "status-downloading");
   try {
     const payload = await fetchJson("/api/video-mix/export", {
       method: "POST",
@@ -504,7 +539,7 @@ async function exportApprovedCandidates() {
     });
     applyDashboardPayload(payload.dashboard);
     renderExportsPanel(payload.exported_paths || []);
-    setLoadState("Export complete", "status-completed");
+    setLoadState("Экспорт завершён", "status-completed");
   } catch (error) {
     setLoadState(error.message, "status-failed");
   }
@@ -517,7 +552,7 @@ async function openTarget(target) {
       method: "POST",
       body: JSON.stringify({ work_dir: state.workDir, target }),
     });
-    setLoadState(`Opened ${target}`, "status-completed");
+    setLoadState(`Открыто: ${target}`, "status-completed");
   } catch (error) {
     setLoadState(error.message, "status-failed");
   }
@@ -525,7 +560,7 @@ async function openTarget(target) {
 
 function copyCurrentUrl() {
   navigator.clipboard.writeText(window.location.href);
-  setLoadState("URL copied", "status-completed");
+  setLoadState("URL скопирован", "status-completed");
 }
 
 function bindFilterControls() {

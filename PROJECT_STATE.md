@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 20_VIDEO_MIX_STAGE_1_6_DASHBOARD_REVIEW_CONTROLS_PENDING_REVIEW
+current_step: 21_VIDEO_MIX_STAGE_1_7_RUSSIAN_DASHBOARD_UI_PENDING_REVIEW
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-27
-next_action: Owner reviews the Stage 1.6 dashboard review controls follow-up, execution report and PR linked from GitHub Issue #37.
+next_action: Owner reviews the Stage 1.7 Russian dashboard UI execution report and PR linked from GitHub Issue #39.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -179,3 +179,35 @@ Boundaries:
 Current next action:
 
 Owner reviews Issue `#37`, the linked PR and `23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md`, then either accepts this dashboard review baseline or requests one isolated next pass.
+
+Current Stage 1.7 focus:
+
+- translate the owner-facing VIDEO MIX dashboard UI into Russian
+- keep route paths, API values, enum values and existing dashboard behavior unchanged
+- preserve the existing local review, bulk approve/reject and export-approved flow
+
+Execution artifacts:
+
+- `workflow-runs/0003-video-mix-reel-mixer/24_RUSSIAN_DASHBOARD_UI_EXECUTION_REPORT.md`
+
+Validation result:
+
+- frontend node tests passed
+- dashboard API tests passed
+- broader VIDEO MIX/dashboard pytest set passed
+- `ruff` passed
+- local launcher/dashboard smoke check passed
+- dashboard URL returned `200`
+- dashboard API returned `assets=5`, `clips=10`, `candidates=10`
+
+Boundaries:
+
+- Russian UI only
+- no backend API contract changes
+- no segmentation redesign
+- no export redesign beyond the existing flow
+- no AI tagging or Remotion work
+
+Current next action:
+
+Owner reviews Issue `#39`, the linked PR and `24_RUSSIAN_DASHBOARD_UI_EXECUTION_REPORT.md`, then either accepts this Russian dashboard baseline or requests one isolated next pass.
