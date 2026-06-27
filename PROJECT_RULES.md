@@ -56,6 +56,7 @@ Current validated Stage 1 allows:
 - local thumbnail generation for review;
 - local dashboard inspection over an existing work_dir;
 - local launcher/diagnostics around the accepted dashboard route;
+- local dashboard-side review controls such as filtering, sorting, selection and bulk review actions;
 - approve/reject metadata through CLI;
 - export of approved candidates through ffmpeg;
 - one pilot pack: wedding.
@@ -87,4 +88,4 @@ Still not allowed without a separate owner decision:
 
 ## Current Next Action
 
-Use Issue `#34`, PR review and `workflow-runs/0003-video-mix-reel-mixer/22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md` as the review surface for the current Stage 1.4 baseline. Any next pass should stay narrow and preserve the review gate before export.
+Use Issue `#37`, PR review and `workflow-runs/0003-video-mix-reel-mixer/23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md` as the review surface for the current Stage 1.6 baseline. Any next pass should stay narrow and preserve the review gate before export.

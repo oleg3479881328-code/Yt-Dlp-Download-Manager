@@ -9,6 +9,7 @@ from video_mix.core.models import CandidateStatus, Clip, MediaType, Orientation,
 from video_mix.core.storage import (
     build_asset,
     build_candidate,
+    load_candidates,
     save_assets,
     save_candidates,
     save_clips,
@@ -207,3 +208,64 @@ def test_video_mix_dashboard_approve_does_not_regenerate_thumbnails(tmp_path: Pa
 
     assert response.status_code == 200
     assert response.json()["dashboard"]["candidates"][0]["status"] == "approved"
+
+
+def test_video_mix_dashboard_bulk_approve_updates_multiple_candidates(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    candidates = load_candidates(work_dir)
+    second = build_candidate(
+        {
+            "candidate_id": "cand_2",
+            "project_id": "project_1",
+            "pack_id": "wedding",
+            "template_id": "fast_highlight",
+            "status": CandidateStatus.GENERATED.value,
+            "score": 77.0,
+            "duration_ms": 2500,
+            "tracks": [
+                {
+                    "track_id": "video_main",
+                    "track_type": "video",
+                    "clips": [
+                        {
+                            "clip_id": "clip_1",
+                            "slot_id": "opening_detail",
+                            "source_asset_id": "asset_1",
+                            "source_start_ms": 0,
+                            "source_end_ms": 3000,
+                            "timeline_start_ms": 0,
+                            "timeline_end_ms": 3000,
+                        }
+                    ],
+                    "overlays": [],
+                }
+            ],
+            "platform_preset": {"width": 1080, "height": 1920, "fps": 30, "format": "mp4"},
+            "warnings": [],
+            "review_notes": "",
+        }
+    )
+    save_candidates(work_dir, [*candidates, second])
+    monkeypatch.setattr("app.video_mix_dashboard.write_review_html", lambda *args, **kwargs: (work_dir / "reports" / "review.html", 1, {}))
+
+    response = client.post(
+        "/api/video-mix/candidates/bulk/approve",
+        json={"work_dir": str(work_dir), "candidate_ids": ["cand_1", "cand_2"], "note": "bulk approved"},
+    )
+
+    assert response.status_code == 200
+    statuses = {candidate["candidate_id"]: candidate["status"] for candidate in response.json()["dashboard"]["candidates"]}
+    assert statuses["cand_1"] == "approved"
+    assert statuses["cand_2"] == "approved"
+
+
+def test_video_mix_dashboard_bulk_reject_reports_invalid_candidate_id(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+
+    response = client.post(
+        "/api/video-mix/candidates/bulk/reject",
+        json={"work_dir": str(work_dir), "candidate_ids": ["cand_missing"]},
+    )
+
+    assert response.status_code == 404
+    assert "Candidate not found" in response.json()["detail"]

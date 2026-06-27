@@ -74,6 +74,54 @@
             </div>
             <span id="vm-candidate-count" class="status-chip status-idle">0 candidates</span>
           </div>
+          <div class="video-mix-toolbar">
+            <label class="field">
+              <span>Status</span>
+              <select id="vm-filter-status">
+                <option value="all">All</option>
+                <option value="generated">Generated</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="exported">Exported</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Warnings</span>
+              <select id="vm-filter-warnings">
+                <option value="all">All</option>
+                <option value="with_warnings">With warnings</option>
+                <option value="without_warnings">Without warnings</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Sort</span>
+              <select id="vm-sort">
+                <option value="score_desc">Score desc</option>
+                <option value="score_asc">Score asc</option>
+                <option value="duration_desc">Duration desc</option>
+                <option value="duration_asc">Duration asc</option>
+                <option value="status_asc">Status</option>
+                <option value="template_asc">Template</option>
+                <option value="source_asc">Source filename</option>
+              </select>
+            </label>
+            <label class="field video-mix-search-field">
+              <span>Search</span>
+              <input id="vm-search" type="text" placeholder="template or source filename">
+            </label>
+          </div>
+          <div class="video-mix-selection-bar">
+            <div class="video-mix-selection-summary">
+              <strong id="vm-selected-count">0 selected</strong>
+              <span class="muted" id="vm-visible-count">0 visible</span>
+            </div>
+            <div class="video-mix-selection-actions">
+              <button id="vm-select-visible" class="ghost-btn" type="button">Select visible</button>
+              <button id="vm-clear-selection" class="ghost-btn" type="button">Clear selection</button>
+              <button id="vm-approve-selected" class="accent-btn" type="button">Approve selected</button>
+              <button id="vm-reject-selected" class="ghost-btn" type="button">Reject selected</button>
+            </div>
+          </div>
           <div id="vm-candidates" class="video-mix-candidate-grid">
             <div class="empty">No work_dir loaded yet.</div>
           </div>

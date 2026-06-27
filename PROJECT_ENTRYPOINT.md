@@ -32,8 +32,8 @@ Local tool for:
 2. `PROJECT_RULES.md`
 3. `logs/PROJECT_LOG.md`
 4. `workflow-runs/0003-video-mix-reel-mixer/`
-5. `workflow-runs/0003-video-mix-reel-mixer/22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md`
-6. GitHub Issue `#34`
+5. `workflow-runs/0003-video-mix-reel-mixer/23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md`
+6. GitHub Issue `#37`
 7. `workflow-runs/0002-animated-subtitle-module/` only if subtitle/rendering context is needed.
 8. `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` only if needed.
 
@@ -47,6 +47,7 @@ Local tool for:
 - `video_mix/` — local Stage 1 VIDEO MIX implementation with review thumbnails.
 - `app/video_mix_dashboard.py` + `/video-mix` — local dashboard MVP for VIDEO MIX review.
 - `start_video_mix_dashboard.ps1` — one-click Windows launcher for VIDEO MIX dashboard.
+- dashboard review controls — filters, sorting, selection and bulk approve/reject actions.
 - `workflow-runs/0003-video-mix-reel-mixer/` — active VIDEO MIX planning and execution package.
 
 ## Active Work — VIDEO MIX
@@ -85,6 +86,7 @@ The first pack is only a pilot. The core must remain reusable.
 - `workflow-runs/0003-video-mix-reel-mixer/19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md`
 - `workflow-runs/0003-video-mix-reel-mixer/21_DASHBOARD_MVP_EXECUTION_REPORT.md`
 - `workflow-runs/0003-video-mix-reel-mixer/22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md`
+- `workflow-runs/0003-video-mix-reel-mixer/23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md`
 
 ## Completed Previous Work
 
@@ -96,9 +98,9 @@ Research only. Implementation is not authorized.
 
 ## Canonical Next Action
 
-Review the Stage 1.4 one-click dashboard launcher through GitHub Issue `#34`, the linked PR and `22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md`.
+Review the Stage 1.6 dashboard review controls through GitHub Issue `#37`, the linked PR and `23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md`.
 
-If accepted, keep `.\start_video_mix_dashboard.ps1` as the owner-facing entrypoint for the local dashboard and choose the next narrow follow-up only.
+If accepted, keep `.\start_video_mix_dashboard.ps1` as the owner-facing entrypoint and use the dashboard itself as the primary review/triage surface before export.
 
 ## Canonical State Rule
 
