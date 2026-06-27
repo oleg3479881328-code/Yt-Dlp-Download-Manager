@@ -2,15 +2,15 @@
 
 - Date: 2026-06-27
 - Status: review-ready
-- Active issue: `#37 VIDEO MIX Stage 1.6 - Dashboard review controls`
+- Active issue: `#39 VIDEO MIX Stage 1.7 - Russian dashboard UI`
 - Active module: `video_mix/`
-- Owner state: pending dashboard review-controls review
+- Owner state: pending Russian dashboard UI review
 
 ## Verified Re-entry Surface
 
-- `PROJECT_STATE.md` marks the current step as `20_VIDEO_MIX_STAGE_1_6_DASHBOARD_REVIEW_CONTROLS_PENDING_REVIEW`.
-- `workflow-runs/0003-video-mix-reel-mixer/23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md` contains the exact validation evidence.
-- GitHub Issue `#37` is the communication thread for progress, PR link and review.
+- `PROJECT_STATE.md` marks the current step as `21_VIDEO_MIX_STAGE_1_7_RUSSIAN_DASHBOARD_UI_PENDING_REVIEW`.
+- `workflow-runs/0003-video-mix-reel-mixer/24_RUSSIAN_DASHBOARD_UI_EXECUTION_REPORT.md` contains the exact validation evidence.
+- GitHub Issue `#39` is the communication thread for progress, PR link and review.
 
 ## Verified Result
 
@@ -33,6 +33,11 @@
 - follow-up safety fixes applied:
   - hidden selected candidates are excluded from bulk actions
   - unsaved note drafts survive local selection-triggered re-renders
+- owner-facing dashboard UI is now localized to Russian:
+  - static page text
+  - filter and action labels
+  - dynamic status and confirmation messages
+  - visible candidate status labels
 - local synthetic validation passed:
   - `asset_count=5`
   - `clip_count=10`
@@ -46,7 +51,7 @@
 ## Safe Re-entry Path
 
 1. Read `PROJECT_STATE.md`.
-2. Read `workflow-runs/0003-video-mix-reel-mixer/23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md`.
-3. Open GitHub Issue `#37`.
+2. Read `workflow-runs/0003-video-mix-reel-mixer/24_RUSSIAN_DASHBOARD_UI_EXECUTION_REPORT.md`.
+3. Open GitHub Issue `#39`.
 4. Review the PR linked there.
 5. Decide accept-as-baseline versus one isolated follow-up pass.

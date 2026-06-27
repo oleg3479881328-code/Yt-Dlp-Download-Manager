@@ -321,6 +321,22 @@ code {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+.video-mix-locale-toggle {
+  display: inline-flex;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid rgba(145, 164, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+}
+.video-mix-locale-toggle .ghost-btn {
+  min-width: 54px;
+  padding: 10px 12px;
+}
+.video-mix-locale-toggle .ghost-btn.is-active {
+  background: linear-gradient(135deg, #3277ff, #8b5dff);
+  color: white;
+}
 .video-mix-layout {
   margin-top: 22px;
   display: grid;
