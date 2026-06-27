@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import {
   collectDraftNotesFromElements,
   filterSelectedCandidateIdsToVisible,
+  resolveInitialLocale,
   resolveReviewNoteValue,
+  translate,
 } from "../app/static/video-mix-dashboard.js";
 
 test("filterSelectedCandidateIdsToVisible excludes selected candidates hidden by filters", () => {
@@ -33,4 +35,16 @@ test("resolveReviewNoteValue prefers draft notes over persisted notes", () => {
   const drafts = new Map([["cand_1", "Unsaved note draft"]]);
 
   assert.equal(resolveReviewNoteValue(candidate, drafts), "Unsaved note draft");
+});
+
+test("resolveInitialLocale prefers query param over stored locale", () => {
+  assert.equal(resolveInitialLocale("?lang=en", "ru"), "en");
+  assert.equal(resolveInitialLocale("", "en"), "en");
+  assert.equal(resolveInitialLocale("", ""), "ru");
+});
+
+test("translate returns locale-specific dashboard strings", () => {
+  assert.equal(translate("ru", "hero_title"), "Локальный дашборд для ревью, одобрения и экспорта");
+  assert.equal(translate("en", "hero_title"), "Local dashboard for review, approval, and export");
+  assert.equal(translate("en", "selected_count", { count: 3 }), "3 selected");
 });

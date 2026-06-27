@@ -30,6 +30,10 @@
   - visible candidate statuses
   - pipeline state labels
   - pipeline step labels where appropriate
+- added a local language switcher:
+  - `RU / EN` toggle in the dashboard header
+  - locale persisted in browser storage
+  - locale reflected in the dashboard URL with `lang=ru` or `lang=en`
 
 ## Validation Commands / Results
 
@@ -55,6 +59,9 @@ Results:
   - `candidates=10`
   - `approved=0`
   - `exported=0`
+- in-app browser live check confirmed both:
+  - Russian owner-facing UI
+  - English owner-facing UI after switching to `EN`
 
 ## Known Limitations
 

@@ -7,17 +7,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=video-mix-stage17-lang-toggle">
 </head>
 <body>
   <div class="video-mix-shell">
     <section class="video-mix-hero">
       <div>
         <p class="eyebrow">VIDEO MIX / Stage 1.7</p>
-        <h1>Локальный дашборд для ревью, одобрения и экспорта</h1>
-        <p class="hero-copy">Загрузите готовый VIDEO MIX work_dir, проверьте состояние пайплайна, просмотрите миниатюры кандидатов и одобрите или отклоните их прямо в локальном браузере.</p>
+        <h1 id="vm-hero-title">Локальный дашборд для ревью, одобрения и экспорта</h1>
+        <p id="vm-hero-copy" class="hero-copy">Загрузите готовый VIDEO MIX work_dir, проверьте состояние пайплайна, просмотрите миниатюры кандидатов и одобрите или отклоните их прямо в локальном браузере.</p>
       </div>
       <div class="video-mix-hero-actions">
+        <div class="video-mix-locale-toggle" role="group" aria-label="Language">
+          <button id="vm-lang-ru" class="ghost-btn" type="button">RU</button>
+          <button id="vm-lang-en" class="ghost-btn" type="button">EN</button>
+        </div>
         <button id="vm-open-review" class="ghost-btn" type="button">Открыть review.html</button>
         <button id="vm-open-exports" class="ghost-btn" type="button">Открыть exports</button>
         <button id="vm-open-workdir" class="ghost-btn" type="button">Открыть work_dir</button>
@@ -28,13 +32,13 @@
       <aside class="video-mix-sidebar card">
         <div class="card-header">
           <div>
-            <h2>Загрузка work_dir</h2>
-            <p class="muted">Используйте уже созданную рабочую папку VIDEO MIX.</p>
+            <h2 id="vm-load-title">Загрузка work_dir</h2>
+            <p id="vm-load-help" class="muted">Используйте уже созданную рабочую папку VIDEO MIX.</p>
           </div>
           <span id="vm-load-state" class="status-chip status-queued">Ожидание</span>
         </div>
         <label class="field">
-          <span>VIDEO MIX work_dir</span>
+          <span id="vm-workdir-label">VIDEO MIX work_dir</span>
           <input id="vm-workdir-input" type="text" placeholder="C:\path\to\video_mix_validation\work">
         </label>
         <div class="actions-row">
@@ -47,15 +51,15 @@
         <div class="video-mix-summary-grid" id="vm-summary-grid"></div>
         <div class="card-header video-mix-section-header">
           <div>
-            <h2>Пайплайн</h2>
-            <p class="muted">Путь от ассетов до экспорта в одном локальном процессе.</p>
+            <h2 id="vm-pipeline-title">Пайплайн</h2>
+            <p id="vm-pipeline-help" class="muted">Путь от ассетов до экспорта в одном локальном процессе.</p>
           </div>
         </div>
         <div id="vm-pipeline" class="pipeline-map"></div>
         <div class="card-header video-mix-section-header">
           <div>
-            <h2>Действия</h2>
-            <p class="muted">Используется только текущее поведение VIDEO MIX.</p>
+            <h2 id="vm-actions-title">Действия</h2>
+            <p id="vm-actions-help" class="muted">Используется только текущее поведение VIDEO MIX.</p>
           </div>
         </div>
         <div class="video-mix-action-stack">
@@ -69,44 +73,44 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <h2>Карточки кандидатов</h2>
-              <p class="muted">Миниатюра, score, template, предупреждения, исходные файлы и быстрые действия.</p>
+              <h2 id="vm-candidates-title">Карточки кандидатов</h2>
+              <p id="vm-candidates-help" class="muted">Миниатюра, score, template, предупреждения, исходные файлы и быстрые действия.</p>
             </div>
             <span id="vm-candidate-count" class="status-chip status-idle">0 кандидатов</span>
           </div>
           <div class="video-mix-toolbar">
             <label class="field">
-              <span>Статус</span>
+              <span id="vm-filter-status-label">Статус</span>
               <select id="vm-filter-status">
-                <option value="all">Все</option>
-                <option value="generated">Сгенерированы</option>
-                <option value="approved">Одобрены</option>
-                <option value="rejected">Отклонены</option>
-                <option value="exported">Экспортированы</option>
+                <option id="vm-filter-status-all" value="all">Все</option>
+                <option id="vm-filter-status-generated" value="generated">Сгенерированы</option>
+                <option id="vm-filter-status-approved" value="approved">Одобрены</option>
+                <option id="vm-filter-status-rejected" value="rejected">Отклонены</option>
+                <option id="vm-filter-status-exported" value="exported">Экспортированы</option>
               </select>
             </label>
             <label class="field">
-              <span>Предупреждения</span>
+              <span id="vm-filter-warnings-label">Предупреждения</span>
               <select id="vm-filter-warnings">
-                <option value="all">Все</option>
-                <option value="with_warnings">С предупреждениями</option>
-                <option value="without_warnings">Без предупреждений</option>
+                <option id="vm-filter-warnings-all" value="all">Все</option>
+                <option id="vm-filter-warnings-with" value="with_warnings">С предупреждениями</option>
+                <option id="vm-filter-warnings-without" value="without_warnings">Без предупреждений</option>
               </select>
             </label>
             <label class="field">
-              <span>Сортировка</span>
+              <span id="vm-sort-label">Сортировка</span>
               <select id="vm-sort">
-                <option value="score_desc">Score по убыванию</option>
-                <option value="score_asc">Score по возрастанию</option>
-                <option value="duration_desc">Длительность по убыванию</option>
-                <option value="duration_asc">Длительность по возрастанию</option>
-                <option value="status_asc">По статусу</option>
-                <option value="template_asc">По template</option>
-                <option value="source_asc">По имени исходного файла</option>
+                <option id="vm-sort-score-desc" value="score_desc">Score по убыванию</option>
+                <option id="vm-sort-score-asc" value="score_asc">Score по возрастанию</option>
+                <option id="vm-sort-duration-desc" value="duration_desc">Длительность по убыванию</option>
+                <option id="vm-sort-duration-asc" value="duration_asc">Длительность по возрастанию</option>
+                <option id="vm-sort-status" value="status_asc">По статусу</option>
+                <option id="vm-sort-template" value="template_asc">По template</option>
+                <option id="vm-sort-source" value="source_asc">По имени исходного файла</option>
               </select>
             </label>
             <label class="field video-mix-search-field">
-              <span>Поиск</span>
+              <span id="vm-search-label">Поиск</span>
               <input id="vm-search" type="text" placeholder="template или имя исходного файла">
             </label>
           </div>
@@ -129,6 +133,6 @@
       </main>
     </section>
   </div>
-  <script type="module" src="/static/video-mix-dashboard.js"></script>
+  <script type="module" src="/static/video-mix-dashboard.js?v=video-mix-stage17-lang-toggle"></script>
 </body>
 </html>

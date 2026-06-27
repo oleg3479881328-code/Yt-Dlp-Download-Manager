@@ -791,3 +791,9 @@ Invoke-WebRequest "http://127.0.0.1:8765/api/video-mix/dashboard?work_dir=C:\Use
   - `candidates=10`
   - `approved=0`
   - `exported=0`
+
+### Follow-Up Refinement
+
+- added a local `RU / EN` dashboard language switcher
+- language choice now persists in browser storage and is reflected in the URL via `?lang=ru|en`
+- verified live switching in the in-app browser for both Russian and English owner-facing labels
