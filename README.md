@@ -35,6 +35,26 @@ Or:
 start.bat
 ```
 
+## VIDEO MIX Dashboard
+
+One-step local launcher:
+
+```powershell
+.\start_video_mix_dashboard.ps1
+```
+
+If auto-detection does not find a `VIDEO MIX` work directory:
+
+```powershell
+.\start_video_mix_dashboard.ps1 -WorkDir C:\path\to\your\work
+```
+
+Diagnostics only:
+
+```powershell
+.\start_video_mix_dashboard.ps1 -DiagnosticsOnly
+```
+
 ## Standalone Chrome Extension
 
 Files:

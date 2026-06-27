@@ -566,3 +566,60 @@ Invoke-WebRequest "http://127.0.0.1:8765/api/video-mix/dashboard?work_dir=C:\Use
 ### Current Next Action
 
 Owner reviews Issue `#32`, the linked PR and `21_DASHBOARD_MVP_EXECUTION_REPORT.md`, then either accepts this dashboard baseline or requests one isolated next pass.
+
+---
+
+## 2026-06-27 — VIDEO MIX Stage 1.4 one-click dashboard launcher implemented and locally validated
+
+### Trigger
+
+Owner opened GitHub Issue `#34` for a narrow follow-up: remove the need to type `uvicorn` commands and long dashboard URLs manually.
+
+### Verified Before Change
+
+- The Stage 1.3 dashboard already existed at `/video-mix`.
+- Launching it still required a manual `uvicorn` command and a long URL with `work_dir`.
+- No dedicated Windows launcher or owner-facing diagnostics existed for the VIDEO MIX dashboard path.
+
+### Changes Made
+
+1. Added `start_video_mix_dashboard.ps1` as a Windows-friendly one-click launcher.
+2. Added `video_mix/dashboard_launcher.py` for:
+   - `work_dir` auto-detection
+   - diagnostics
+   - reusable validation logic under test
+3. Added `tests/test_video_mix_dashboard_launcher.py`.
+4. Updated `README.md` with owner-facing launcher usage.
+5. Updated project-state handoff files and created `22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md`.
+
+### Commands Run
+
+```powershell
+python -m pytest tests/test_video_mix_pipeline.py tests/test_segment_api.py tests/test_video_mix_dashboard_api.py tests/test_video_mix_dashboard_launcher.py
+python -m ruff check app video_mix tests
+python -m video_mix.cli plan video_mix_validation/input --project-name "Wedding Validation" --work-dir video_mix_validation/work
+python -m video_mix.cli review video_mix_validation/work
+powershell -ExecutionPolicy Bypass -File .\start_video_mix_dashboard.ps1 -WorkDir .\video_mix_validation\work -DiagnosticsOnly
+powershell -ExecutionPolicy Bypass -File .\start_video_mix_dashboard.ps1 -WorkDir .\video_mix_validation\work -NoBrowser
+powershell -ExecutionPolicy Bypass -File .\start_video_mix_dashboard.ps1 -NoBrowser
+Invoke-WebRequest "http://127.0.0.1:8765/video-mix?work_dir=C%3A%5CUsers%5Coleg3%5COneDrive%5CDocuments%5CYt-Dlp-Download-Manager%5Cvideo_mix_validation%5Cwork"
+```
+
+### Validation Results
+
+- `pytest` passed
+- `ruff` passed
+- diagnostics mode passed with:
+  - Python ok
+  - `uvicorn` import ok
+  - `app.main` import ok
+  - `ffmpeg` found
+  - `ffprobe` found
+  - `work_dir` ready
+- launcher started the FastAPI server on `127.0.0.1:8765`
+- launcher auto-detected `video_mix_validation/work`
+- expected dashboard URL returned `200`
+
+### Current Next Action
+
+Owner reviews Issue `#34`, the linked PR and `22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md`, then either accepts this launcher baseline or requests one isolated next pass.
