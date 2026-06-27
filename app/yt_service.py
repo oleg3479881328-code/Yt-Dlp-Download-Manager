@@ -4,8 +4,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from yt_dlp import YoutubeDL
-
 from .segment_utils import build_clip_output_template
 
 
@@ -75,7 +73,16 @@ def build_ydl_options(
     return options
 
 
+def _require_youtube_dl():
+    try:
+        from yt_dlp import YoutubeDL
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("yt_dlp is not installed. Install project requirements to use downloader analysis.") from exc
+    return YoutubeDL
+
+
 def analyze_url(url: str) -> dict[str, Any]:
+    YoutubeDL = _require_youtube_dl()
     with YoutubeDL(
         {
             "quiet": True,

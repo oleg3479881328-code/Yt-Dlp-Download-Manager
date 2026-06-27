@@ -125,6 +125,21 @@ def generate_thumbnails(clips: list[Clip], work_dir: Path, ffmpeg_path: str = "f
     return thumbnail_lookup, thumbnail_warnings
 
 
+def collect_existing_thumbnails(clips: list[Clip], work_dir: Path) -> tuple[dict[str, str], dict[str, str]]:
+    thumbnails_dir = work_dir / "reports" / "thumbnails"
+    thumbnail_lookup: dict[str, str] = {}
+    thumbnail_warnings: dict[str, str] = {}
+
+    for clip in clips:
+        output_path = thumbnails_dir / f"{clip.clip_id}.jpg"
+        if output_path.exists():
+            thumbnail_lookup[clip.clip_id] = f"thumbnails/{output_path.name}"
+        else:
+            thumbnail_warnings[clip.clip_id] = "thumbnail unavailable"
+
+    return thumbnail_lookup, thumbnail_warnings
+
+
 def build_review_html(
     project: Project,
     candidates: list[CandidateReel],
@@ -316,10 +331,14 @@ def write_review_html(
     assets: list[Asset],
     work_dir: Path,
     ffmpeg_path: str = "ffmpeg",
+    regenerate_thumbnails: bool = True,
 ) -> tuple[Path, int, dict[str, str]]:
     review_path = work_dir / "reports" / "review.html"
     review_path.parent.mkdir(parents=True, exist_ok=True)
-    thumbnail_lookup, thumbnail_warnings = generate_thumbnails(clips, work_dir, ffmpeg_path=ffmpeg_path)
+    if regenerate_thumbnails:
+        thumbnail_lookup, thumbnail_warnings = generate_thumbnails(clips, work_dir, ffmpeg_path=ffmpeg_path)
+    else:
+        thumbnail_lookup, thumbnail_warnings = collect_existing_thumbnails(clips, work_dir)
     review_path.write_text(
         build_review_html(project, candidates, clips, assets, work_dir, thumbnail_lookup, thumbnail_warnings),
         encoding="utf-8",

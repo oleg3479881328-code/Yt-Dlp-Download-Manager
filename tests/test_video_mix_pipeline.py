@@ -2,7 +2,12 @@ from pathlib import Path
 
 from video_mix.core.asset_scan import detect_media_type, stable_id
 from video_mix.core.models import CandidateStatus, Clip, MediaType, Orientation, Project, SegmenterName
-from video_mix.core.review import build_review_html, build_thumbnail_command, write_review_html
+from video_mix.core.review import (
+    build_review_html,
+    build_thumbnail_command,
+    collect_existing_thumbnails,
+    write_review_html,
+)
 from video_mix.core.storage import build_asset, build_candidate, build_clip, to_jsonable
 
 
@@ -165,3 +170,23 @@ def test_build_thumbnail_command_uses_clip_midpoint(tmp_path: Path) -> None:
     )
     command = build_thumbnail_command(clip, tmp_path / "thumb.jpg")
     assert command[:5] == ["ffmpeg", "-y", "-ss", "4.000", "-i"]
+
+
+def test_collect_existing_thumbnails_uses_local_files(tmp_path: Path) -> None:
+    clip = Clip(
+        clip_id="clip_1",
+        project_id="project_1",
+        asset_id="asset_1",
+        source_path=tmp_path / "demo.mp4",
+        source_start_ms=0,
+        source_end_ms=3000,
+        segmenter=SegmenterName.FIXED_INTERVAL,
+    )
+    thumbnails_dir = tmp_path / "reports" / "thumbnails"
+    thumbnails_dir.mkdir(parents=True, exist_ok=True)
+    (thumbnails_dir / "clip_1.jpg").write_bytes(b"jpg")
+
+    lookup, warnings = collect_existing_thumbnails([clip], tmp_path)
+
+    assert lookup == {"clip_1": "thumbnails/clip_1.jpg"}
+    assert warnings == {}

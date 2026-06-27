@@ -490,3 +490,79 @@ python -m video_mix.cli review video_mix_validation/work
 ### Current Next Action
 
 Owner reviews Issue `#25`, the linked PR and `19_REVIEW_THUMBNAILS_EXECUTION_REPORT.md`, then either accepts this thumbnail baseline or requests one isolated next pass.
+
+---
+
+## 2026-06-26 — VIDEO MIX Stage 1.3 local dashboard MVP implemented and locally validated
+
+### Trigger
+
+Owner opened GitHub Issue `#32` for a narrow follow-up: add a local browser dashboard over an existing `VIDEO MIX` work_dir.
+
+### Verified Before Change
+
+- `video_mix review` already generated `review.html` with thumbnails.
+- No dedicated dashboard route existed for reviewing counts, candidate cards and export state from the browser.
+- The existing FastAPI app could not be imported in this environment because `yt_dlp` was imported at module load time even when downloader features were unused.
+
+### Changes Made
+
+1. Added `app/video_mix_dashboard.py` to read `VIDEO MIX` work_dir state, expose dashboard payloads, update approve/reject state and call the existing export flow.
+2. Added FastAPI routes:
+   - `/video-mix`
+   - `/api/video-mix/dashboard`
+   - `/api/video-mix/candidates/{candidate_id}/approve`
+   - `/api/video-mix/candidates/{candidate_id}/reject`
+   - `/api/video-mix/export`
+   - `/api/video-mix/open`
+   - `/api/video-mix/file`
+3. Added a dedicated local dashboard page and browser script:
+   - `app/templates/video_mix_dashboard.html`
+   - `app/static/video-mix-dashboard.js`
+4. Extended `app/static/styles.css` for the new dashboard layout and candidate cards.
+5. Moved `yt_dlp` requirement behind runtime guards in `app/yt_service.py` and `app/worker.py` so the FastAPI app can launch for local dashboard use even when downloader dependencies are absent.
+6. Added API tests in `tests/test_video_mix_dashboard_api.py`.
+
+### Commands Run
+
+```powershell
+python -m pytest tests/test_video_mix_pipeline.py tests/test_segment_api.py tests/test_video_mix_dashboard_api.py
+python -m ruff check app video_mix tests
+python -m video_mix.cli plan video_mix_validation/input --project-name "Wedding Validation" --work-dir video_mix_validation/work
+python -m video_mix.cli review video_mix_validation/work
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8765
+Invoke-WebRequest "http://127.0.0.1:8765/video-mix?work_dir=C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager\video_mix_validation\work"
+Invoke-WebRequest "http://127.0.0.1:8765/api/video-mix/dashboard?work_dir=C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager\video_mix_validation\work"
+```
+
+### Validation Results
+
+- `pytest` passed
+- `ruff` passed
+- `plan` passed on synthetic validation media
+- `review` passed and kept thumbnail generation working
+- FastAPI app imported successfully in an environment without `yt_dlp`
+- `/video-mix` returned `200`
+- `/api/video-mix/dashboard` returned live JSON including:
+  - `asset_count=5`
+  - `clip_count=10`
+  - `candidate_count=10`
+  - `thumbnail-backed candidate cards`
+  - export-path visibility for generated outputs
+
+### Launch Surface
+
+- Server launch:
+  - `python -m uvicorn app.main:app --host 127.0.0.1 --port 8765`
+- Dashboard URL:
+  - `http://127.0.0.1:8765/video-mix?work_dir=C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager\video_mix_validation\work`
+
+### Limitations
+
+- The dashboard remains local-only and file-path based.
+- Downloader/analyze features still require `yt_dlp` to be installed when those specific routes are used.
+- No timeline editor, AI tagging or segmentation changes were introduced.
+
+### Current Next Action
+
+Owner reviews Issue `#32`, the linked PR and `21_DASHBOARD_MVP_EXECUTION_REPORT.md`, then either accepts this dashboard baseline or requests one isolated next pass.
