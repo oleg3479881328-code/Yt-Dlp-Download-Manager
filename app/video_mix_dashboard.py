@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -59,21 +60,30 @@ def _normalize_initial_dir(initial_dir: str) -> str:
     return str(resolved) if resolved.exists() else ""
 
 
-def _show_windows_folder_picker(initial_dir: str = "") -> str:
+def _show_windows_folder_picker(initial_dir: str = "", title: str = "Select folder") -> str:
+    pwsh_path = shutil.which("pwsh")
+    if not pwsh_path:
+        raise HTTPException(
+            status_code=500,
+            detail="PowerShell 7 (pwsh) is required for the modern Windows folder picker but was not found.",
+        )
+
     script = """
-Add-Type -AssemblyName System.Windows.Forms
-$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-$dialog.Description = 'Select VIDEO MIX work_dir'
-$dialog.ShowNewFolderButton = $false
-if ($args[0]) { $dialog.SelectedPath = $args[0] }
+Add-Type -AssemblyName PresentationFramework
+$dialog = New-Object Microsoft.Win32.OpenFolderDialog
+$dialog.Multiselect = $false
+$dialog.Title = $args[1]
+if ($args[0] -and (Test-Path -LiteralPath $args[0])) {
+    $dialog.InitialDirectory = (Resolve-Path -LiteralPath $args[0]).Path
+}
 $result = $dialog.ShowDialog()
-if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+if ($result -eq $true) {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    Write-Output $dialog.SelectedPath
+    Write-Output $dialog.FolderName
 }
 """.strip()
     completed = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", script, initial_dir],
+        [pwsh_path, "-NoProfile", "-STA", "-Command", script, initial_dir, title],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -88,7 +98,7 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
 
 def pick_dashboard_work_dir(initial_dir: str = "") -> dict[str, Any]:
     normalized_initial_dir = _normalize_initial_dir(initial_dir)
-    selected_path = _show_windows_folder_picker(normalized_initial_dir)
+    selected_path = _show_windows_folder_picker(normalized_initial_dir, "Select VIDEO MIX work_dir")
     if not selected_path:
         return {"ok": False, "canceled": True, "work_dir": ""}
     work_dir = resolve_work_dir(selected_path)
@@ -97,7 +107,7 @@ def pick_dashboard_work_dir(initial_dir: str = "") -> dict[str, Any]:
 
 def pick_source_materials_dir(initial_dir: str = "") -> dict[str, Any]:
     normalized_initial_dir = _normalize_initial_dir(initial_dir)
-    selected_path = _show_windows_folder_picker(normalized_initial_dir)
+    selected_path = _show_windows_folder_picker(normalized_initial_dir, "Select source materials folder")
     if not selected_path:
         return {"ok": False, "canceled": True, "source_dir": ""}
     source_dir = Path(selected_path).expanduser().resolve()
