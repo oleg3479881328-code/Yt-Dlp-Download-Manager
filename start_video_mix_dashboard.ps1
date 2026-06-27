@@ -133,9 +133,12 @@ if ($DiagnosticsOnly) {
     Fail-WithMessage "диагностика не пройдена"
 }
 
-if (-not $payload.work_dir) {
+if (-not $payload.checks.work_dir.ok) {
     Write-Host ""
-    Write-Host "VIDEO MIX work_dir не найден." -ForegroundColor Yellow
+    Write-Host "VIDEO MIX work_dir не готов." -ForegroundColor Yellow
+    if ($payload.checks.work_dir.detail) {
+        Write-Host "Причина: $($payload.checks.work_dir.detail)" -ForegroundColor Yellow
+    }
     Write-Host "Что сделать:" -ForegroundColor Yellow
     Write-Host "1. Сначала создайте work_dir через plan/review."
     Write-Host "2. Затем запустите launcher так:"

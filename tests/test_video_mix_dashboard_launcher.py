@@ -38,3 +38,14 @@ def test_run_diagnostics_reports_missing_work_dir(tmp_path: Path) -> None:
 
     assert result["checks"]["work_dir"]["ok"] is False
     assert result["work_dir"] is None
+
+
+def test_run_diagnostics_reports_invalid_requested_work_dir(tmp_path: Path) -> None:
+    invalid = tmp_path / "not-a-video-mix-workdir"
+    invalid.mkdir()
+
+    result = run_diagnostics(tmp_path, invalid)
+
+    assert result["checks"]["work_dir"]["ok"] is False
+    assert result["work_dir"] == str(invalid.resolve())
+    assert "missing required files" in result["checks"]["work_dir"]["detail"]
