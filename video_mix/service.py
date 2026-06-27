@@ -31,11 +31,14 @@ def resolve_source_dir(raw_source_dir: str) -> Path:
     return source_dir
 
 
-def resolve_work_dir(source_dir: Path, work_dir: str | None = None) -> Path:
+def resolve_work_dir(source_dir: Path, work_dir: str | None = None, *, cwd: Path | None = None) -> Path:
     if not work_dir:
         return source_dir / "_video_mix_work"
     raw = Path(work_dir).expanduser()
-    return (source_dir / raw).resolve() if not raw.is_absolute() else raw.resolve()
+    if raw.is_absolute():
+        return raw.resolve()
+    base_dir = cwd.resolve() if cwd is not None else Path.cwd().resolve()
+    return (base_dir / raw).resolve()
 
 
 def scan_source_materials(raw_source_dir: str, preview_limit: int = 8) -> dict:

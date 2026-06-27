@@ -9,6 +9,7 @@ from video_mix.core.review import (
     write_review_html,
 )
 from video_mix.core.storage import build_asset, build_candidate, build_clip, to_jsonable
+from video_mix.service import resolve_work_dir
 
 
 def test_detect_media_type_video() -> None:
@@ -190,3 +191,23 @@ def test_collect_existing_thumbnails_uses_local_files(tmp_path: Path) -> None:
 
     assert lookup == {"clip_1": "thumbnails/clip_1.jpg"}
     assert warnings == {}
+
+
+def test_resolve_work_dir_defaults_under_source_dir(tmp_path: Path) -> None:
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+
+    resolved = resolve_work_dir(source_dir)
+
+    assert resolved == (source_dir / "_video_mix_work").resolve()
+
+
+def test_resolve_work_dir_preserves_relative_cli_semantics(tmp_path: Path) -> None:
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+    cwd = tmp_path / "workspace"
+    cwd.mkdir()
+
+    resolved = resolve_work_dir(source_dir, "video_mix_validation/work", cwd=cwd)
+
+    assert resolved == (cwd / "video_mix_validation" / "work").resolve()
