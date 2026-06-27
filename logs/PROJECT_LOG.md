@@ -800,41 +800,48 @@ Invoke-WebRequest "http://127.0.0.1:8765/api/video-mix/dashboard?work_dir=C:\Use
 
 ---
 
-## 2026-06-27 — VIDEO MIX Stage 1.8 source materials loading workflow implemented and locally validated
+## 2026-06-27 — VIDEO MIX Stage 1.8 simplified source-to-MP4 MVP implemented and locally validated
 
 ### Trigger
 
-Owner opened GitHub Issue `#41` for a narrow follow-up: remove the requirement to prepare a ready `work_dir` manually before using the VIDEO MIX dashboard.
+Owner rewrote GitHub Issue `#41` into a simplified MVP: source materials + duration seconds + output count -> finished MP4 files, without forcing manual review/approve/reject.
 
 ### Verified Before Change
 
 - The dashboard already supported Russian UI, review controls and loading an existing `work_dir`.
-- A `work_dir` picker is useful for existing projects but did not solve the owner-facing materials-first workflow.
-- The CLI already contained the real VIDEO MIX planning pipeline, but the dashboard had no direct way to:
+- The materials-first source loading flow already existed in the branch.
+- That narrower flow still did not satisfy the simplified owner-facing outcome.
+- The dashboard had no direct way to:
   - select a source folder
-  - scan it before planning
-  - generate a `work_dir`
-  - generate `review.html` and thumbnails
-  - auto-load the resulting dashboard state
+  - specify target seconds per output video
+  - specify how many finished MP4 files to generate
+  - click one button and receive direct exports without manual review first
 
 ### Changes Made
 
-1. Added shared VIDEO MIX service functions in `video_mix/service.py` so both CLI and FastAPI can reuse the same planning path without shelling out to CLI text output.
-2. Refactored `video_mix/cli.py plan` to call the shared service layer while preserving CLI behavior.
+1. Kept the existing materials scan / plan dashboard flow intact.
+2. Added direct Quick Mix generation logic in `video_mix/service.py`:
+   - deterministic segment planning from videos and photos
+   - photo-to-video still segment rendering
+   - direct export creation under `exports/quick_mix_*.mp4`
+   - minimal work_dir metadata so the existing dashboard still loads
 3. Added dashboard/backend endpoints:
    - `POST /api/video-mix/pick-workdir`
    - `POST /api/video-mix/pick-source-folder`
    - `POST /api/video-mix/source/scan`
    - `POST /api/video-mix/source/plan`
-4. Added native Windows folder-picker helpers in `app/video_mix_dashboard.py` for both existing `work_dir` selection and new source-folder selection.
-5. Extended the dashboard UI with a new `Материалы` section:
+   - `POST /api/video-mix/quick-mix`
+4. Switched the folder picker to the modern Explorer-style Windows picker through `pwsh` + `Microsoft.Win32.OpenFolderDialog`.
+5. Extended the dashboard UI with:
+   - the existing `Материалы` section
+   - a new `Быстрый микс` section
+6. The new Quick Mix section accepts:
    - source folder input
-   - project name input
-   - output `work_dir` input
-   - scan summary
-   - create/update project action
-6. Preserved the existing `work_dir` review flow so owners can still open an already generated project directly.
-7. Added API coverage for the new picker, scan and plan routes.
+   - duration seconds
+   - output count
+   - one-click generation action
+7. Preserved the existing `work_dir` review flow so owners can still open an already generated project directly.
+8. Added API coverage for the new quick-mix route and unit coverage for mixed video/photo planning behavior.
 
 ### Commands Run
 
@@ -843,33 +850,61 @@ node --test frontend-tests\video-mix-dashboard.test.mjs
 python -m pytest tests/test_video_mix_pipeline.py tests/test_segment_api.py tests/test_video_mix_dashboard_api.py tests/test_video_mix_dashboard_launcher.py
 python -m ruff check app video_mix tests frontend-tests
 @'
-from pathlib import Path
-from tempfile import gettempdir
+from __future__ import annotations
+
 import json
 import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from app.main import app
 
-source_dir = Path('video_mix_validation/input').resolve()
-work_dir = Path(gettempdir()) / 'yt_dlp_video_mix_issue41_smoke'
+source_seed = Path('video_mix_validation/input').resolve()
+base_tmp = Path(tempfile.gettempdir())
+work_dir = base_tmp / 'yt_dlp_quick_mix_issue41_smoke_v2'
+source_dir = base_tmp / 'yt_dlp_quick_mix_issue41_source_valid_v2'
 if work_dir.exists():
     shutil.rmtree(work_dir)
+if source_dir.exists():
+    shutil.rmtree(source_dir)
+source_dir.mkdir(parents=True, exist_ok=True)
+
+for path in sorted(source_seed.glob('*.mp4'))[:2]:
+    shutil.copy2(path, source_dir / path.name)
+
+photo_path = source_dir / 'photo_valid.jpg'
+subprocess.run([
+    'ffmpeg', '-y', '-f', 'lavfi', '-i', 'color=c=white:s=1080x1920:d=0.1', '-frames:v', '1', str(photo_path)
+], check=True, capture_output=True, text=True)
 
 client = TestClient(app)
-scan_response = client.post('/api/video-mix/source/scan', json={'source_dir': str(source_dir)})
-plan_response = client.post('/api/video-mix/source/plan', json={
+response = client.post('/api/video-mix/quick-mix', json={
     'source_dir': str(source_dir),
-    'project_name': 'Issue 41 Smoke',
+    'project_name': 'Quick Mix Smoke',
     'work_dir': str(work_dir),
+    'duration_seconds': 6,
+    'output_count': 2,
 })
+response.raise_for_status()
+payload = response.json()
+
+probe_results = []
+for relative_path in payload['output_paths']:
+    output_path = work_dir / relative_path
+    probe = subprocess.run([
+        'ffprobe', '-v', 'error',
+        '-show_entries', 'format=filename,duration,size',
+        '-show_entries', 'stream=width,height,r_frame_rate',
+        '-of', 'json',
+        str(output_path),
+    ], check=True, capture_output=True, text=True)
+    probe_results.append(json.loads(probe.stdout))
 
 print(json.dumps({
-    'scan_status': scan_response.status_code,
-    'scan_json': scan_response.json(),
-    'plan_status': plan_response.status_code,
-    'plan_json': {key: value for key, value in plan_response.json().items() if key != 'dashboard'},
-    'dashboard_summary': plan_response.json().get('dashboard', {}).get('summary', {}),
+    'response': payload,
+    'probe_results': probe_results,
 }, ensure_ascii=False, indent=2))
 '@ | python -
 ```
@@ -879,22 +914,20 @@ print(json.dumps({
 - frontend node tests passed
 - broader VIDEO MIX/dashboard pytest set passed
 - `ruff` passed
-- live source scan endpoint returned HTTP `200`
-- live source plan endpoint returned HTTP `200`
-- smoke counts:
-  - `supported_media_count=5`
-  - `asset_count=5`
-  - `clip_count=10`
-  - `candidate_count=10`
-  - `thumbnail_count=10`
-- generated dashboard payload summary matched the planned work_dir contents
+- live quick-mix endpoint returned HTTP `200`
+- smoke generated `2` finished MP4 outputs
+- both outputs were probeable
+- smoke source included `2` video files plus `1` JPG photo asset
+- generated dashboard payload loaded successfully from the quick-mix work_dir
 
 ### Scope Notes
 
-- the `work_dir` picker already exists after this pass and remains available for existing projects
-- source-materials loading is different: it starts from a raw media folder, scans it, builds or updates a VIDEO MIX project, generates review artifacts and then auto-loads the dashboard
+- the `work_dir` picker remains available for existing projects
+- the earlier materials-first source loading workflow remains available
+- Quick Mix is separate: it generates finished MP4 outputs directly without approve/reject
+- the existing review controls were preserved and not removed
 - `whiteboard_studio/` was not touched
 
 ### Current Next Action
 
-Owner reviews Issue `#41`, the linked PR and `25_SOURCE_MATERIALS_LOADING_EXECUTION_REPORT.md`, then either accepts this materials-loading baseline or requests one isolated next pass.
+Owner reviews Issue `#41`, the linked PR and `25_SIMPLIFIED_SOURCE_TO_MP4_MVP_EXECUTION_REPORT.md`, then either accepts this Quick Mix baseline or requests one isolated next pass.

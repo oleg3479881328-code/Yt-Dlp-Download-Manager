@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 
 from .core.asset_scan import SKIP_DIR_NAMES, detect_media_type, scan_project_assets, stable_id
 from .core.candidate_builder import build_candidates
 from .core.duplicate_detection import apply_duplicate_detection
 from .core.media_probe import probe_assets
-from .core.models import MediaType, Project
+from .core.models import Asset, MediaType, Project
 from .core.review import write_review_html
 from .core.scoring import score_assets, score_clips
 from .core.segmenters import FixedIntervalSegmenter, PySceneDetectSegmenter, plan_segments_for_assets
@@ -17,6 +19,7 @@ from .core.storage import (
     save_clips,
     save_project,
     save_summary,
+    write_json,
 )
 from .core.tagging import apply_filename_tags
 from .packs.wedding import get_wedding_templates
@@ -79,6 +82,9 @@ def scan_source_materials(raw_source_dir: str, preview_limit: int = 8) -> dict:
     return {
         "source_dir": str(source_dir),
         "total_files": total_files,
+        "video_count": supported_videos,
+        "image_count": supported_photos,
+        "usable_count": supported_count,
         "supported_media_count": supported_count,
         "supported_video_count": supported_videos,
         "supported_photo_count": supported_photos,
@@ -100,6 +106,271 @@ def _build_segmenters(
     if prefer_pyscenedetect:
         return [PySceneDetectSegmenter(scenedetect_path), fixed]
     return [fixed]
+
+
+def _ensure_ffmpeg_available(ffmpeg_path: str) -> None:
+    candidate = Path(ffmpeg_path).expanduser()
+    if candidate.is_absolute() and candidate.exists():
+        return
+    if shutil.which(ffmpeg_path):
+        return
+    raise FileNotFoundError(f"ffmpeg was not found in PATH: {ffmpeg_path}")
+
+
+def _validate_quick_mix_inputs(duration_seconds: float, output_count: int) -> tuple[int, int]:
+    if duration_seconds <= 0:
+        raise ValueError("duration_seconds must be greater than 0.")
+    if output_count <= 0:
+        raise ValueError("output_count must be greater than 0.")
+    return max(1000, int(duration_seconds * 1000)), output_count
+
+
+def _preferred_segment_ms(asset: Asset, remaining_ms: int) -> int:
+    if asset.media_type == MediaType.PHOTO:
+        return min(remaining_ms, 2000 if remaining_ms > 2000 else remaining_ms)
+    if not asset.duration_ms:
+        return min(remaining_ms, 2000)
+    return min(remaining_ms, min(3000, asset.duration_ms))
+
+
+def _build_video_segment_command(
+    asset: Asset,
+    output_path: Path,
+    *,
+    start_ms: int,
+    duration_ms: int,
+    ffmpeg_path: str,
+) -> list[str]:
+    return [
+        ffmpeg_path,
+        "-y",
+        "-ss",
+        f"{start_ms / 1000:.3f}",
+        "-i",
+        str(asset.path),
+        "-t",
+        f"{duration_ms / 1000:.3f}",
+        "-vf",
+        "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_path),
+    ]
+
+
+def _build_photo_segment_command(
+    asset: Asset,
+    output_path: Path,
+    *,
+    duration_ms: int,
+    ffmpeg_path: str,
+) -> list[str]:
+    return [
+        ffmpeg_path,
+        "-y",
+        "-loop",
+        "1",
+        "-i",
+        str(asset.path),
+        "-t",
+        f"{duration_ms / 1000:.3f}",
+        "-vf",
+        "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_path),
+    ]
+
+
+def _render_quick_mix_segment(
+    asset: Asset,
+    output_path: Path,
+    *,
+    start_ms: int,
+    duration_ms: int,
+    ffmpeg_path: str,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if asset.media_type == MediaType.PHOTO:
+        command = _build_photo_segment_command(asset, output_path, duration_ms=duration_ms, ffmpeg_path=ffmpeg_path)
+    else:
+        command = _build_video_segment_command(
+            asset,
+            output_path,
+            start_ms=start_ms,
+            duration_ms=duration_ms,
+            ffmpeg_path=ffmpeg_path,
+        )
+    subprocess.run(command, check=True)
+
+
+def _build_quick_mix_concat_command(concat_path: Path, output_path: Path, ffmpeg_path: str) -> list[str]:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    return [
+        ffmpeg_path,
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(concat_path),
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+
+
+def _render_quick_mix_output(segment_paths: list[Path], output_path: Path, ffmpeg_path: str) -> None:
+    concat_dir = output_path.parent.parent / "quick_mix_concat"
+    concat_dir.mkdir(parents=True, exist_ok=True)
+    concat_path = concat_dir / f"{output_path.stem}.txt"
+    concat_path.write_text(
+        "".join(f"file '{segment_path.as_posix()}'\n" for segment_path in segment_paths),
+        encoding="utf-8",
+    )
+    subprocess.run(_build_quick_mix_concat_command(concat_path, output_path, ffmpeg_path), check=True)
+
+
+def _prepare_quick_mix_workdir(
+    work_dir: Path,
+    *,
+    project: Project,
+    assets: list[Asset],
+    output_paths: list[Path],
+    duration_seconds: float,
+    output_count: int,
+) -> None:
+    save_project(work_dir, project)
+    save_assets(work_dir, assets)
+    save_clips(work_dir, [])
+    save_candidates(work_dir, [])
+    save_summary(work_dir, build_summary(project, assets, [], []))
+    write_json(
+        work_dir / "reports" / "quick_mix.json",
+        {
+            "source_dir": str(project.root_path),
+            "work_dir": str(work_dir),
+            "duration_seconds": duration_seconds,
+            "output_count": output_count,
+            "generated_count": len(output_paths),
+            "output_paths": [str(path.relative_to(work_dir)).replace("\\", "/") for path in output_paths],
+        },
+    )
+
+
+def quick_mix_source_materials(
+    raw_source_dir: str,
+    *,
+    duration_seconds: float,
+    output_count: int,
+    project_name: str | None = None,
+    pack: str = "wedding",
+    work_dir: str | None = None,
+    ffmpeg_path: str = "ffmpeg",
+    ffprobe_path: str = "ffprobe",
+) -> dict:
+    target_duration_ms, normalized_output_count = _validate_quick_mix_inputs(duration_seconds, output_count)
+    _ensure_ffmpeg_available(ffmpeg_path)
+
+    source_dir = resolve_source_dir(raw_source_dir)
+    project = Project(stable_id("project", str(source_dir)), project_name or source_dir.name, source_dir, pack)
+    resolved_work_dir = resolve_work_dir(source_dir, work_dir)
+
+    assets = score_assets(probe_assets(scan_project_assets(project), ffprobe_path=ffprobe_path))
+    if not assets:
+        raise ValueError("No supported media files were found in the selected source folder.")
+
+    usable_assets = [asset for asset in assets if asset.media_type in {MediaType.VIDEO, MediaType.PHOTO}]
+    if not usable_assets:
+        raise ValueError("No usable video or photo files were found in the selected source folder.")
+
+    exports_dir = resolved_work_dir / "exports"
+    segments_dir = resolved_work_dir / "quick_mix_segments"
+    exports_dir.mkdir(parents=True, exist_ok=True)
+    segments_dir.mkdir(parents=True, exist_ok=True)
+
+    video_offsets: dict[str, int] = {}
+    asset_cursor = 0
+    output_paths: list[Path] = []
+
+    for output_index in range(normalized_output_count):
+        remaining_ms = target_duration_ms
+        segment_paths: list[Path] = []
+        step_index = 0
+
+        while remaining_ms > 0:
+            asset = usable_assets[asset_cursor % len(usable_assets)]
+            asset_cursor += 1
+            preferred_ms = _preferred_segment_ms(asset, remaining_ms)
+            if preferred_ms <= 0:
+                raise ValueError(f"Could not determine a usable segment duration for asset: {asset.path}")
+
+            if asset.media_type == MediaType.VIDEO and asset.duration_ms:
+                segment_ms = min(preferred_ms, asset.duration_ms)
+                max_start = max(0, asset.duration_ms - segment_ms)
+                cursor = video_offsets.get(asset.asset_id, 0)
+                start_ms = min(cursor, max_start)
+                next_cursor = cursor + segment_ms
+                video_offsets[asset.asset_id] = 0 if next_cursor >= max_start and max_start > 0 else next_cursor
+            else:
+                segment_ms = preferred_ms
+                start_ms = 0
+
+            segment_path = segments_dir / f"quick_mix_{output_index + 1:03d}_seg_{step_index + 1:02d}.mp4"
+            _render_quick_mix_segment(
+                asset,
+                segment_path,
+                start_ms=start_ms,
+                duration_ms=segment_ms,
+                ffmpeg_path=ffmpeg_path,
+            )
+            segment_paths.append(segment_path)
+            remaining_ms -= segment_ms
+            step_index += 1
+
+        output_path = exports_dir / f"quick_mix_{output_index + 1:03d}.mp4"
+        _render_quick_mix_output(segment_paths, output_path, ffmpeg_path)
+        output_paths.append(output_path)
+
+    _prepare_quick_mix_workdir(
+        resolved_work_dir,
+        project=project,
+        assets=assets,
+        output_paths=output_paths,
+        duration_seconds=duration_seconds,
+        output_count=normalized_output_count,
+    )
+
+    return {
+        "source_dir": str(source_dir),
+        "work_dir": str(resolved_work_dir),
+        "project_name": project.name,
+        "pack": project.industry_pack,
+        "duration_seconds": duration_seconds,
+        "output_count": normalized_output_count,
+        "generated_count": len(output_paths),
+        "video_count": sum(asset.media_type == MediaType.VIDEO for asset in usable_assets),
+        "image_count": sum(asset.media_type == MediaType.PHOTO for asset in usable_assets),
+        "photo_support": True,
+        "output_paths": [str(path.relative_to(resolved_work_dir)).replace("\\", "/") for path in output_paths],
+    }
 
 
 def plan_source_materials(

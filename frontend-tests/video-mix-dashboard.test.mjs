@@ -44,7 +44,7 @@ test("resolveInitialLocale prefers query param over stored locale", () => {
 });
 
 test("translate returns locale-specific dashboard strings", () => {
-  assert.equal(translate("ru", "hero_title"), "Локальный дашборд для ревью, одобрения и экспорта");
-  assert.equal(translate("en", "hero_title"), "Local dashboard for review, approval, and export");
+  assert.equal(translate("ru", "hero_title"), "Локальный дашборд для Quick Mix, ревью и экспорта");
+  assert.equal(translate("en", "hero_title"), "Local dashboard for Quick Mix, review, and export");
   assert.equal(translate("en", "selected_count", { count: 3 }), "3 selected");
 });

@@ -56,6 +56,7 @@ Current validated Stage 1 allows:
 - local thumbnail generation for review;
 - local dashboard inspection over an existing work_dir;
 - local source-materials loading into a generated or updated work_dir;
+- local Quick Mix direct MP4 generation from source materials without mandatory approve/reject first;
 - local launcher/diagnostics around the accepted dashboard route;
 - local dashboard-side review controls such as filtering, sorting, selection and bulk review actions;
 - owner-facing Russian dashboard UI labels and messages over the accepted local dashboard route;
@@ -80,7 +81,7 @@ Still not allowed without a separate owner decision:
 3. Any suspected bug must be marked as suspected until validated.
 4. After implementation, run the scenario that proves the result.
 5. Do not store user media, generated clips, exports, local database, build outputs or virtual environment in GitHub.
-6. Batch generation must still include a human review gate before final export.
+6. Batch generation normally includes a human review gate before final export, except for the separately accepted Stage 1.8 simplified Quick Mix path where direct MP4 output is the explicit MVP requirement.
 
 ## Local Safety Rules
 
@@ -90,4 +91,4 @@ Still not allowed without a separate owner decision:
 
 ## Current Next Action
 
-Use Issue `#41`, PR review and `workflow-runs/0003-video-mix-reel-mixer/25_SOURCE_MATERIALS_LOADING_EXECUTION_REPORT.md` as the review surface for the current Stage 1.8 baseline. Any next pass should stay narrow, keep `whiteboard_studio/` untouched and preserve the review gate before export.
+Use Issue `#41`, PR review and `workflow-runs/0003-video-mix-reel-mixer/25_SIMPLIFIED_SOURCE_TO_MP4_MVP_EXECUTION_REPORT.md` as the review surface for the current Stage 1.8 baseline. Any next pass should stay narrow, keep `whiteboard_studio/` untouched, preserve the existing review flow and keep Quick Mix direct-output behavior explicit rather than implicit.

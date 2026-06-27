@@ -5,6 +5,7 @@ const state = {
   loadState: { key: "load_waiting", className: "status-queued", params: {} },
   lastExportedPaths: [],
   sourceScan: null,
+  quickMixResult: null,
   sourceWorkDirAuto: true,
   selectedCandidateIds: new Set(),
   draftNotesByCandidateId: new Map(),
@@ -49,8 +50,19 @@ const TRANSLATIONS = {
     source_scan_preview_more: "И ещё {count} файл(ов)",
     source_source_dir: "Папка материалов",
     source_suggested_workdir: "Рекомендуемый work_dir",
-    hero_title: "Локальный дашборд для ревью, одобрения и экспорта",
-    hero_copy: "Загрузите готовый VIDEO MIX work_dir, проверьте состояние пайплайна, просмотрите миниатюры кандидатов и одобрите или отклоните их прямо в локальном браузере.",
+    quickmix_title: "Быстрый микс",
+    quickmix_help: "Прямая генерация готовых MP4 без обязательного approve/reject.",
+    quickmix_duration_label: "Секунд на ролик",
+    quickmix_count_label: "Сколько роликов",
+    quickmix_button: "Сгенерировать ролики",
+    quickmix_empty: "Quick Mix ещё не запускался.",
+    quickmix_result_title: "Результат Quick Mix",
+    quickmix_generated_count: "Сгенерировано MP4",
+    quickmix_output_paths: "Готовые файлы",
+    quickmix_photos_supported: "Фото поддерживаются",
+    quickmix_photos_unsupported: "Фото не поддерживаются",
+    hero_title: "Локальный дашборд для Quick Mix, ревью и экспорта",
+    hero_copy: "Выберите исходные материалы, запустите Быстрый микс для прямой генерации MP4 или загрузите готовый VIDEO MIX work_dir для обычного ревью, approve/reject и экспорта.",
     open_review: "Открыть review.html",
     open_exports: "Открыть exports",
     open_workdir: "Открыть work_dir",
@@ -146,6 +158,8 @@ const TRANSLATIONS = {
     command_copied: "Команда скопирована",
     no_export_paths_session: "В этой сессии новых путей экспорта пока нет.",
     load_state_enter_source_dir: "Укажите папку с материалами",
+    load_state_enter_duration: "Укажите корректную длительность в секундах",
+    load_state_enter_output_count: "Укажите корректное количество роликов",
     load_state_enter_workdir: "Укажите work_dir",
     load_state_browsing_workdir: "Открываю выбор папки...",
     load_state_browse_canceled: "Выбор папки отменён",
@@ -156,6 +170,8 @@ const TRANSLATIONS = {
     load_state_planning_source: "Создаю план проекта...",
     load_state_generating_review: "Генерирую review и thumbnails...",
     load_state_source_loaded: "Проект создан и загружен",
+    load_state_quickmix_generating: "Генерирую Quick Mix MP4...",
+    load_state_quickmix_ready: "Quick Mix готов",
     load_state_loading: "Загрузка...",
     load_state_loaded: "Загружено",
     load_state_approving: "Одобрение...",
@@ -198,8 +214,19 @@ const TRANSLATIONS = {
     source_scan_preview_more: "And {count} more file(s)",
     source_source_dir: "Source folder",
     source_suggested_workdir: "Suggested work_dir",
-    hero_title: "Local dashboard for review, approval, and export",
-    hero_copy: "Load an existing VIDEO MIX work_dir, inspect the pipeline state, review candidate thumbnails, and approve or reject without leaving the local browser.",
+    quickmix_title: "Quick Mix",
+    quickmix_help: "Direct MP4 generation without mandatory approve/reject.",
+    quickmix_duration_label: "Seconds per video",
+    quickmix_count_label: "Number of videos",
+    quickmix_button: "Generate videos",
+    quickmix_empty: "Quick Mix has not been run yet.",
+    quickmix_result_title: "Quick Mix result",
+    quickmix_generated_count: "Generated MP4",
+    quickmix_output_paths: "Output files",
+    quickmix_photos_supported: "Photos supported",
+    quickmix_photos_unsupported: "Photos not supported",
+    hero_title: "Local dashboard for Quick Mix, review, and export",
+    hero_copy: "Choose source materials for direct Quick Mix MP4 generation, or load an existing VIDEO MIX work_dir for review, approve/reject, and export.",
     open_review: "Open review.html",
     open_exports: "Open exports",
     open_workdir: "Open work_dir",
@@ -295,6 +322,8 @@ const TRANSLATIONS = {
     command_copied: "Command copied",
     no_export_paths_session: "No new export paths in this session.",
     load_state_enter_source_dir: "Enter the source materials folder",
+    load_state_enter_duration: "Enter a valid duration in seconds",
+    load_state_enter_output_count: "Enter a valid video count",
     load_state_enter_workdir: "Enter work_dir",
     load_state_browsing_workdir: "Opening folder picker...",
     load_state_browse_canceled: "Folder selection cancelled",
@@ -305,6 +334,8 @@ const TRANSLATIONS = {
     load_state_planning_source: "Creating project plan...",
     load_state_generating_review: "Generating review and thumbnails...",
     load_state_source_loaded: "Project created and loaded",
+    load_state_quickmix_generating: "Generating Quick Mix MP4 files...",
+    load_state_quickmix_ready: "Quick Mix ready",
     load_state_loading: "Loading...",
     load_state_loaded: "Loaded",
     load_state_approving: "Approving...",
@@ -463,12 +494,17 @@ function applyStaticTranslations() {
     ["#vm-load-help", "load_help"],
     ["#vm-source-title", "source_title"],
     ["#vm-source-help", "source_help"],
+    ["#vm-quickmix-title", "quickmix_title"],
+    ["#vm-quickmix-help", "quickmix_help"],
     ["#vm-source-dir-label", "source_dir_label"],
     ["#vm-source-project-name-label", "source_project_name_label"],
     ["#vm-source-workdir-label", "source_workdir_label"],
+    ["#vm-quickmix-duration-label", "quickmix_duration_label"],
+    ["#vm-quickmix-count-label", "quickmix_count_label"],
     ["#vm-source-browse-btn", "source_browse"],
     ["#vm-source-scan-btn", "source_scan"],
     ["#vm-source-plan-btn", "source_plan"],
+    ["#vm-quickmix-btn", "quickmix_button"],
     ["#vm-workdir-label", "workdir_label"],
     ["#vm-browse-workdir-btn", "browse_workdir"],
     ["#vm-load-btn", "load_dashboard"],
@@ -585,6 +621,33 @@ function renderSourceScanSummary() {
       <ul class="video-mix-preview-list">${preview}</ul>
       ${moreLine}
     </div>
+  `;
+}
+
+function renderQuickMixSummary() {
+  const target = qs("#vm-quickmix-summary");
+  if (!target) return;
+  if (!state.quickMixResult) {
+    target.innerHTML = `<div class="empty">${escapeHtml(t("quickmix_empty"))}</div>`;
+    return;
+  }
+  const outputLinks = (state.quickMixResult.output_paths || []).length
+    ? (state.quickMixResult.output_paths || [])
+        .map((path) => `<a class="video-mix-export-link" href="${escapeAttr(fileUrl(path))}" target="_blank" rel="noreferrer">${escapeHtml(path)}</a>`)
+        .join("")
+    : `<div class="muted">${escapeHtml(t("no_exports"))}</div>`;
+  target.innerHTML = `
+    <div class="video-mix-summary-grid">
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("quickmix_generated_count"))}</span><strong>${escapeHtml(state.quickMixResult.generated_count)}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("source_scan_supported_videos"))}</span><strong>${escapeHtml(state.quickMixResult.video_count)}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("source_scan_supported_photos"))}</span><strong>${escapeHtml(state.quickMixResult.image_count)}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("source_workdir_label"))}</span><code>${escapeHtml(state.quickMixResult.work_dir)}</code></div>
+    </div>
+    <div class="video-mix-section">
+      <h4>${escapeHtml(t("quickmix_output_paths"))}</h4>
+      <div class="video-mix-export-list">${outputLinks}</div>
+    </div>
+    <div class="muted">${escapeHtml(state.quickMixResult.photo_support ? t("quickmix_photos_supported") : t("quickmix_photos_unsupported"))}</div>
   `;
 }
 
@@ -885,6 +948,7 @@ function renderAll() {
   cacheDraftNotes();
   syncSelectionToVisible();
   renderSourceScanSummary();
+  renderQuickMixSummary();
   renderProjectMeta();
   renderPipeline();
   renderCandidates();
@@ -964,7 +1028,9 @@ async function browseSourceDir() {
       state.sourceWorkDirAuto = true;
     }
     state.sourceScan = null;
+    state.quickMixResult = null;
     renderSourceScanSummary();
+    renderQuickMixSummary();
     setLocalizedLoadState("load_state_loaded", "status-completed");
   } catch (error) {
     state.loadState = null;
@@ -985,6 +1051,7 @@ async function scanSourceMaterials() {
       body: JSON.stringify({ source_dir: sourceDir }),
     });
     state.sourceScan = payload;
+    state.quickMixResult = null;
     qs("#vm-source-dir-input").value = payload.source_dir;
     if (state.sourceWorkDirAuto || !qs("#vm-source-workdir-input").value.trim()) {
       qs("#vm-source-workdir-input").value = payload.suggested_work_dir;
@@ -994,10 +1061,13 @@ async function scanSourceMaterials() {
       qs("#vm-source-project-name-input").value = payload.source_dir.split(/[/\\]/).pop() || "";
     }
     renderSourceScanSummary();
+    renderQuickMixSummary();
     setLocalizedLoadState("load_state_source_scanned", "status-completed");
   } catch (error) {
     state.sourceScan = null;
+    state.quickMixResult = null;
     renderSourceScanSummary();
+    renderQuickMixSummary();
     state.loadState = null;
     setLoadState(error.message, "status-failed");
   }
@@ -1037,6 +1107,62 @@ async function planSourceMaterials() {
     setLocalizedLoadState("load_state_source_loaded", "status-completed");
     syncLocaleToUrl();
   } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function quickMixSourceMaterials() {
+  const sourceDir = qs("#vm-source-dir-input")?.value?.trim() || "";
+  const projectName = qs("#vm-source-project-name-input")?.value?.trim() || "";
+  const outputWorkDir = qs("#vm-source-workdir-input")?.value?.trim() || defaultSourceWorkDir(sourceDir);
+  const durationSeconds = Number(qs("#vm-quickmix-duration-input")?.value || 0);
+  const outputCount = Number(qs("#vm-quickmix-count-input")?.value || 0);
+  if (!sourceDir) {
+    setLocalizedLoadState("load_state_enter_source_dir", "status-failed");
+    return;
+  }
+  if (!(durationSeconds > 0)) {
+    setLocalizedLoadState("load_state_enter_duration", "status-failed");
+    return;
+  }
+  if (!(outputCount > 0)) {
+    setLocalizedLoadState("load_state_enter_output_count", "status-failed");
+    return;
+  }
+  setLocalizedLoadState("load_state_quickmix_generating", "status-downloading");
+  try {
+    const payload = await fetchJson("/api/video-mix/quick-mix", {
+      method: "POST",
+      body: JSON.stringify({
+        source_dir: sourceDir,
+        project_name: projectName,
+        work_dir: outputWorkDir,
+        duration_seconds: durationSeconds,
+        output_count: outputCount,
+      }),
+    });
+    state.quickMixResult = payload;
+    state.sourceScan = {
+      ...(state.sourceScan || {}),
+      source_dir: payload.source_dir,
+      suggested_work_dir: payload.work_dir,
+      supported_video_count: payload.video_count,
+      supported_photo_count: payload.image_count,
+    };
+    qs("#vm-source-dir-input").value = payload.source_dir;
+    qs("#vm-source-project-name-input").value = payload.project_name || projectName;
+    qs("#vm-source-workdir-input").value = payload.work_dir;
+    qs("#vm-workdir-input").value = payload.work_dir;
+    state.workDir = payload.work_dir;
+    applyDashboardPayload(payload.dashboard);
+    state.lastExportedPaths = payload.output_paths || [];
+    renderExportsPanel(state.lastExportedPaths);
+    setLocalizedLoadState("load_state_quickmix_ready", "status-completed");
+    syncLocaleToUrl();
+  } catch (error) {
+    state.quickMixResult = null;
+    renderQuickMixSummary();
     state.loadState = null;
     setLoadState(error.message, "status-failed");
   }
@@ -1201,6 +1327,7 @@ function bindActions() {
   qs("#vm-source-browse-btn").onclick = () => browseSourceDir();
   qs("#vm-source-scan-btn").onclick = () => scanSourceMaterials();
   qs("#vm-source-plan-btn").onclick = () => planSourceMaterials();
+  qs("#vm-quickmix-btn").onclick = () => quickMixSourceMaterials();
   qs("#vm-browse-workdir-btn").onclick = () => browseWorkDir();
   qs("#vm-load-btn").onclick = () => loadDashboard();
   qs("#vm-refresh-btn").onclick = () => loadDashboard(state.workDir);
@@ -1224,6 +1351,7 @@ function bindActions() {
       qs("#vm-source-workdir-input").value = defaultSourceWorkDir(qs("#vm-source-dir-input").value.trim());
       state.sourceWorkDirAuto = true;
     }
+    state.quickMixResult = null;
   });
   qs("#vm-source-workdir-input").addEventListener("input", () => {
     const sourceDir = qs("#vm-source-dir-input").value.trim();

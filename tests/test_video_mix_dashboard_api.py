@@ -361,3 +361,40 @@ def test_video_mix_dashboard_source_plan_returns_dashboard_payload(tmp_path: Pat
     assert payload["work_dir"] == expected["work_dir"]
     assert payload["asset_count"] == 1
     assert payload["dashboard"]["summary"]["candidate_count"] == 1
+
+
+def test_video_mix_dashboard_quick_mix_returns_output_paths_and_dashboard(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    expected = {
+        "source_dir": str((tmp_path / "source").resolve()),
+        "work_dir": str(work_dir.resolve()),
+        "project_name": "Quick Mix Validation",
+        "pack": "wedding",
+        "duration_seconds": 10,
+        "output_count": 2,
+        "generated_count": 2,
+        "video_count": 1,
+        "image_count": 1,
+        "photo_support": True,
+        "output_paths": ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"],
+    }
+    monkeypatch.setattr("app.main.quick_mix_source_materials", lambda *args, **kwargs: expected)
+
+    response = client.post(
+        "/api/video-mix/quick-mix",
+        json={
+            "source_dir": str(tmp_path / "source"),
+            "duration_seconds": 10,
+            "output_count": 2,
+            "project_name": "Quick Mix Validation",
+            "work_dir": str(work_dir),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["generated_count"] == 2
+    assert payload["photo_support"] is True
+    assert payload["output_paths"] == ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"]
+    assert payload["dashboard"]["summary"]["candidate_count"] == 1

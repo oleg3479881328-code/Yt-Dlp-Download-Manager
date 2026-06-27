@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from video_mix.core.models import CandidateStatus
-from video_mix.service import plan_source_materials, scan_source_materials
+from video_mix.service import plan_source_materials, quick_mix_source_materials, scan_source_materials
 
 from .path_safety import MissingPathError, UnsafePathError, resolve_existing_output_path
 from .segment_utils import SegmentValidationError, normalize_segment_payload
@@ -111,6 +111,17 @@ class VideoMixSourcePlanRequest(BaseModel):
     clip_ms: int = 3000
     max_clips_per_asset: int = 12
     max_candidates: int = 10
+
+
+class VideoMixQuickMixRequest(BaseModel):
+    source_dir: str
+    duration_seconds: float = Field(gt=0)
+    output_count: int = Field(gt=0)
+    project_name: str = ""
+    pack: str = "wedding"
+    work_dir: str = ""
+    ffmpeg: str = "ffmpeg"
+    ffprobe: str = "ffprobe"
 
 
 @asynccontextmanager
@@ -383,6 +394,32 @@ async def plan_video_mix_source(payload: VideoMixSourcePlanRequest) -> dict[str,
             clip_ms=payload.clip_ms,
             max_clips_per_asset=payload.max_clips_per_asset,
             max_candidates=payload.max_candidates,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except NotADirectoryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        **result,
+        "dashboard": build_video_mix_dashboard_payload(result["work_dir"]),
+    }
+
+
+@app.post("/api/video-mix/quick-mix")
+async def quick_mix_video_mix_source(payload: VideoMixQuickMixRequest) -> dict[str, Any]:
+    try:
+        result = quick_mix_source_materials(
+            payload.source_dir,
+            duration_seconds=payload.duration_seconds,
+            output_count=payload.output_count,
+            project_name=payload.project_name or None,
+            pack=payload.pack,
+            work_dir=payload.work_dir or None,
+            ffmpeg_path=payload.ffmpeg,
+            ffprobe_path=payload.ffprobe,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
