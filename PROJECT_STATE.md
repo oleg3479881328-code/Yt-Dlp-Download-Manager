@@ -1,10 +1,10 @@
 ---
 status: in-progress
 project_mode: compact
-current_step: 18_VIDEO_MIX_STAGE_1_3_DASHBOARD_MVP_PENDING_REVIEW
+current_step: 19_VIDEO_MIX_STAGE_1_4_DASHBOARD_LAUNCHER_PENDING_REVIEW
 current_run: workflow-runs/0003-video-mix-reel-mixer/
-last_updated: 2026-06-26
-next_action: Owner reviews the Stage 1.3 dashboard MVP follow-up, execution report and PR linked from GitHub Issue #32.
+last_updated: 2026-06-27
+next_action: Owner reviews the Stage 1.4 launcher follow-up, execution report and PR linked from GitHub Issue #34.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -115,6 +115,35 @@ Boundaries:
 - no segmentation changes in this pass
 - no export logic redesign beyond calling the existing export flow
 
+Current Stage 1.4 focus:
+
+- add a one-click Windows launcher for the local VIDEO MIX dashboard
+- auto-detect or accept a `work_dir`
+- start the FastAPI server on `127.0.0.1:8765`
+- open the browser automatically
+- provide a first-run diagnostics mode with clear next steps
+
+Execution artifacts:
+
+- `workflow-runs/0003-video-mix-reel-mixer/22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md`
+
+Validation result:
+
+- pytest passed
+- ruff passed
+- launcher diagnostics mode passed
+- launcher auto-detected `video_mix_validation/work`
+- launcher started local FastAPI server and returned the expected dashboard URL
+- dashboard URL returned `200`
+
+Boundaries:
+
+- local Windows helper only
+- no SaaS
+- no dashboard redesign
+- no segmentation or export changes in this pass
+- no AI tagging or Remotion work
+
 Current next action:
 
-Owner reviews Issue `#32`, the linked PR and `21_DASHBOARD_MVP_EXECUTION_REPORT.md`, then either accepts this dashboard baseline or requests one isolated next pass.
+Owner reviews Issue `#34`, the linked PR and `22_DASHBOARD_LAUNCHER_EXECUTION_REPORT.md`, then either accepts this launcher baseline or requests one isolated next pass.
