@@ -55,6 +55,7 @@ Current validated Stage 1 allows:
 - static local review artifact generation;
 - local thumbnail generation for review;
 - local dashboard inspection over an existing work_dir;
+- local source-materials loading into a generated or updated work_dir;
 - local launcher/diagnostics around the accepted dashboard route;
 - local dashboard-side review controls such as filtering, sorting, selection and bulk review actions;
 - owner-facing Russian dashboard UI labels and messages over the accepted local dashboard route;
@@ -89,4 +90,4 @@ Still not allowed without a separate owner decision:
 
 ## Current Next Action
 
-Use Issue `#39`, PR review and `workflow-runs/0003-video-mix-reel-mixer/24_RUSSIAN_DASHBOARD_UI_EXECUTION_REPORT.md` as the review surface for the current Stage 1.7 baseline. Any next pass should stay narrow and preserve the review gate before export.
+Use Issue `#41`, PR review and `workflow-runs/0003-video-mix-reel-mixer/25_SOURCE_MATERIALS_LOADING_EXECUTION_REPORT.md` as the review surface for the current Stage 1.8 baseline. Any next pass should stay narrow, keep `whiteboard_studio/` untouched and preserve the review gate before export.

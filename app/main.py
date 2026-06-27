@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from video_mix.core.models import CandidateStatus
+from video_mix.service import plan_source_materials, scan_source_materials
 
 from .path_safety import MissingPathError, UnsafePathError, resolve_existing_output_path
 from .segment_utils import SegmentValidationError, normalize_segment_payload
@@ -25,6 +26,8 @@ from .video_mix_dashboard import (
     bulk_update_candidate_status,
     export_approved_candidates,
     open_dashboard_target,
+    pick_dashboard_work_dir,
+    pick_source_materials_dir,
     resolve_relative_work_path,
 )
 from .video_mix_dashboard import (
@@ -82,6 +85,32 @@ class VideoMixBulkRequest(BaseModel):
 class VideoMixOpenRequest(BaseModel):
     work_dir: str
     target: str
+
+
+class VideoMixPickWorkDirRequest(BaseModel):
+    initial_dir: str = ""
+
+
+class VideoMixPickSourceRequest(BaseModel):
+    initial_dir: str = ""
+
+
+class VideoMixSourceScanRequest(BaseModel):
+    source_dir: str
+
+
+class VideoMixSourcePlanRequest(BaseModel):
+    source_dir: str
+    project_name: str = ""
+    pack: str = "wedding"
+    work_dir: str = ""
+    ffmpeg: str = "ffmpeg"
+    ffprobe: str = "ffprobe"
+    scenedetect: str = "scenedetect"
+    prefer_pyscenedetect: bool = False
+    clip_ms: int = 3000
+    max_clips_per_asset: int = 12
+    max_candidates: int = 10
 
 
 @asynccontextmanager
@@ -315,6 +344,57 @@ async def export_video_mix(payload: VideoMixExportRequest) -> dict[str, Any]:
 @app.post("/api/video-mix/open")
 async def open_video_mix_target(payload: VideoMixOpenRequest) -> dict[str, Any]:
     return open_dashboard_target(payload.work_dir, payload.target)
+
+
+@app.post("/api/video-mix/pick-workdir")
+async def pick_video_mix_work_dir(payload: VideoMixPickWorkDirRequest) -> dict[str, Any]:
+    return pick_dashboard_work_dir(payload.initial_dir)
+
+
+@app.post("/api/video-mix/pick-source-folder")
+async def pick_video_mix_source_folder(payload: VideoMixPickSourceRequest) -> dict[str, Any]:
+    return pick_source_materials_dir(payload.initial_dir)
+
+
+@app.post("/api/video-mix/source/scan")
+async def scan_video_mix_source(payload: VideoMixSourceScanRequest) -> dict[str, Any]:
+    try:
+        return {"ok": True, **scan_source_materials(payload.source_dir)}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except NotADirectoryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/video-mix/source/plan")
+async def plan_video_mix_source(payload: VideoMixSourcePlanRequest) -> dict[str, Any]:
+    try:
+        result = plan_source_materials(
+            payload.source_dir,
+            project_name=payload.project_name or None,
+            pack=payload.pack,
+            work_dir=payload.work_dir or None,
+            ffprobe_path=payload.ffprobe,
+            ffmpeg_path=payload.ffmpeg,
+            scenedetect_path=payload.scenedetect,
+            prefer_pyscenedetect=payload.prefer_pyscenedetect,
+            clip_ms=payload.clip_ms,
+            max_clips_per_asset=payload.max_clips_per_asset,
+            max_candidates=payload.max_candidates,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except NotADirectoryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        **result,
+        "dashboard": build_video_mix_dashboard_payload(result["work_dir"]),
+    }
 
 
 @app.get("/api/video-mix/file")

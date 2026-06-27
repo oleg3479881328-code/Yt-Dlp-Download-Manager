@@ -1,10 +1,10 @@
 ---
-status: in-progress
+status: review-ready
 project_mode: compact
-current_step: 21_VIDEO_MIX_STAGE_1_7_RUSSIAN_DASHBOARD_UI_PENDING_REVIEW
+current_step: 22_VIDEO_MIX_STAGE_1_8_SOURCE_MATERIALS_LOADING_READY_FOR_REVIEW
 current_run: workflow-runs/0003-video-mix-reel-mixer/
 last_updated: 2026-06-27
-next_action: Owner reviews the Stage 1.7 Russian dashboard UI execution report and PR linked from GitHub Issue #39.
+next_action: Owner reviews the Stage 1.8 source materials loading execution report and PR linked from GitHub Issue #41.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -211,3 +211,35 @@ Boundaries:
 Current next action:
 
 Owner reviews Issue `#39`, the linked PR and `24_RUSSIAN_DASHBOARD_UI_EXECUTION_REPORT.md`, then either accepts this Russian dashboard baseline or requests one isolated next pass.
+
+Current Stage 1.8 focus:
+
+- add a materials-first dashboard flow for source folder selection, scan and project creation
+- preserve the existing work_dir-first loading path for already generated projects
+- reuse the existing VIDEO MIX plan/review pipeline through shared Python service functions
+
+Execution artifacts:
+
+- `workflow-runs/0003-video-mix-reel-mixer/25_SOURCE_MATERIALS_LOADING_EXECUTION_REPORT.md`
+
+Validation result:
+
+- frontend node tests passed
+- broader VIDEO MIX/dashboard pytest set passed
+- `ruff` passed
+- live source scan endpoint smoke passed with `5` supported media files
+- live source plan endpoint smoke passed with `assets=5`, `clips=10`, `candidates=10`, `thumbnails=10`
+- resulting dashboard payload loaded successfully from the generated work_dir
+
+Boundaries:
+
+- local Windows dashboard only
+- source materials folder loading only
+- no browser byte uploads
+- no segmentation redesign beyond the existing plan/review flow
+- no AI tagging or Remotion work
+- `whiteboard_studio/` untouched
+
+Current next action:
+
+Owner reviews Issue `#41`, the linked PR and `25_SOURCE_MATERIALS_LOADING_EXECUTION_REPORT.md`, then either accepts this materials-loading baseline or requests one isolated next pass.

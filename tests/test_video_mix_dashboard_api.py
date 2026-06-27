@@ -269,3 +269,95 @@ def test_video_mix_dashboard_bulk_reject_reports_invalid_candidate_id(tmp_path: 
 
     assert response.status_code == 404
     assert "Candidate not found" in response.json()["detail"]
+
+
+def test_video_mix_dashboard_pick_workdir_returns_selected_valid_directory(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    monkeypatch.setattr("app.video_mix_dashboard._show_windows_folder_picker", lambda *_args, **_kwargs: str(work_dir))
+
+    response = client.post("/api/video-mix/pick-workdir", json={"initial_dir": str(tmp_path)})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "canceled": False,
+        "work_dir": str(work_dir.resolve()),
+    }
+
+
+def test_video_mix_dashboard_pick_workdir_reports_cancel_without_error(tmp_path: Path, monkeypatch) -> None:
+    create_video_mix_workdir(tmp_path)
+    monkeypatch.setattr("app.video_mix_dashboard._show_windows_folder_picker", lambda *_args, **_kwargs: "")
+
+    response = client.post("/api/video-mix/pick-workdir", json={"initial_dir": str(tmp_path)})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": False,
+        "canceled": True,
+        "work_dir": "",
+    }
+
+
+def test_video_mix_dashboard_pick_source_folder_returns_selected_directory(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    monkeypatch.setattr("app.video_mix_dashboard._show_windows_folder_picker", lambda *_args, **_kwargs: str(source_dir))
+
+    response = client.post("/api/video-mix/pick-source-folder", json={"initial_dir": str(tmp_path)})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "canceled": False,
+        "source_dir": str(source_dir.resolve()),
+    }
+
+
+def test_video_mix_dashboard_source_scan_returns_summary(tmp_path: Path, monkeypatch) -> None:
+    expected = {
+        "source_dir": str(tmp_path.resolve()),
+        "total_files": 4,
+        "supported_media_count": 2,
+        "supported_video_count": 1,
+        "supported_photo_count": 1,
+        "ignored_or_unsupported_count": 2,
+        "ignored_skipped_dir_count": 0,
+        "preview_files": ["a.mp4", "b.jpg"],
+        "suggested_work_dir": str((tmp_path / "_video_mix_work").resolve()),
+    }
+    monkeypatch.setattr("app.main.scan_source_materials", lambda source_dir: expected)
+
+    response = client.post("/api/video-mix/source/scan", json={"source_dir": str(tmp_path)})
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, **expected}
+
+
+def test_video_mix_dashboard_source_plan_returns_dashboard_payload(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    expected = {
+        "source_dir": str((tmp_path / "source").resolve()),
+        "work_dir": str(work_dir.resolve()),
+        "project_name": "Wedding Validation",
+        "pack": "wedding",
+        "asset_count": 1,
+        "clip_count": 1,
+        "candidate_count": 1,
+        "review_path": str((work_dir / "reports" / "review.html").resolve()),
+        "thumbnail_count": 1,
+        "thumbnail_warning_count": 0,
+    }
+    monkeypatch.setattr("app.main.plan_source_materials", lambda *args, **kwargs: expected)
+
+    response = client.post(
+        "/api/video-mix/source/plan",
+        json={"source_dir": str(tmp_path / "source"), "project_name": "Wedding Validation", "work_dir": str(work_dir)},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["work_dir"] == expected["work_dir"]
+    assert payload["asset_count"] == 1
+    assert payload["dashboard"]["summary"]["candidate_count"] == 1

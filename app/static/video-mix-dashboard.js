@@ -4,6 +4,8 @@ const state = {
   locale: "ru",
   loadState: { key: "load_waiting", className: "status-queued", params: {} },
   lastExportedPaths: [],
+  sourceScan: null,
+  sourceWorkDirAuto: true,
   selectedCandidateIds: new Set(),
   draftNotesByCandidateId: new Map(),
   filters: {
@@ -28,6 +30,25 @@ const DASHBOARD_LOCALE_STORAGE_KEY = "videoMixDashboardLocale";
 const TRANSLATIONS = {
   ru: {
     page_title: "VIDEO MIX Дашборд",
+    source_title: "Материалы",
+    source_help: "Сначала выберите папку с исходными видео и создайте или обновите VIDEO MIX проект.",
+    source_dir_label: "Папка с материалами",
+    source_project_name_label: "Имя проекта",
+    source_workdir_label: "Выходной work_dir",
+    source_browse: "Выбрать материалы",
+    source_scan: "Сканировать",
+    source_plan: "Создать / обновить проект",
+    source_scan_empty: "Скан материалов ещё не запускался.",
+    source_scan_result_title: "Результат сканирования",
+    source_scan_total_files: "Всего файлов",
+    source_scan_supported_media: "Поддерживаемых media",
+    source_scan_supported_videos: "Видео",
+    source_scan_supported_photos: "Фото",
+    source_scan_ignored: "Игнорировано / не поддерживается",
+    source_scan_preview: "Превью файлов",
+    source_scan_preview_more: "И ещё {count} файл(ов)",
+    source_source_dir: "Папка материалов",
+    source_suggested_workdir: "Рекомендуемый work_dir",
     hero_title: "Локальный дашборд для ревью, одобрения и экспорта",
     hero_copy: "Загрузите готовый VIDEO MIX work_dir, проверьте состояние пайплайна, просмотрите миниатюры кандидатов и одобрите или отклоните их прямо в локальном браузере.",
     open_review: "Открыть review.html",
@@ -37,6 +58,7 @@ const TRANSLATIONS = {
     load_help: "Используйте уже созданную рабочую папку VIDEO MIX.",
     load_waiting: "Ожидание",
     workdir_label: "VIDEO MIX work_dir",
+    browse_workdir: "Выбрать папку",
     load_dashboard: "Загрузить дашборд",
     copy_url: "Копировать URL",
     project_meta_empty: "Загрузите work_dir, чтобы увидеть метаданные проекта и сводные счётчики.",
@@ -123,7 +145,17 @@ const TRANSLATIONS = {
     reject: "Отклонить",
     command_copied: "Команда скопирована",
     no_export_paths_session: "В этой сессии новых путей экспорта пока нет.",
+    load_state_enter_source_dir: "Укажите папку с материалами",
     load_state_enter_workdir: "Укажите work_dir",
+    load_state_browsing_workdir: "Открываю выбор папки...",
+    load_state_browse_canceled: "Выбор папки отменён",
+    load_state_browsing_source: "Открываю выбор папки с материалами...",
+    load_state_source_browse_canceled: "Выбор папки с материалами отменён",
+    load_state_scanning_source: "Сканирую материалы...",
+    load_state_source_scanned: "Материалы просканированы",
+    load_state_planning_source: "Создаю план проекта...",
+    load_state_generating_review: "Генерирую review и thumbnails...",
+    load_state_source_loaded: "Проект создан и загружен",
     load_state_loading: "Загрузка...",
     load_state_loaded: "Загружено",
     load_state_approving: "Одобрение...",
@@ -147,6 +179,25 @@ const TRANSLATIONS = {
   },
   en: {
     page_title: "VIDEO MIX Dashboard",
+    source_title: "Materials",
+    source_help: "Choose a source videos folder first, then create or update the VIDEO MIX project.",
+    source_dir_label: "Source materials folder",
+    source_project_name_label: "Project name",
+    source_workdir_label: "Output work_dir",
+    source_browse: "Browse materials",
+    source_scan: "Scan",
+    source_plan: "Create / update project",
+    source_scan_empty: "Materials scan has not been run yet.",
+    source_scan_result_title: "Scan result",
+    source_scan_total_files: "Total files",
+    source_scan_supported_media: "Supported media",
+    source_scan_supported_videos: "Videos",
+    source_scan_supported_photos: "Photos",
+    source_scan_ignored: "Ignored / unsupported",
+    source_scan_preview: "Preview files",
+    source_scan_preview_more: "And {count} more file(s)",
+    source_source_dir: "Source folder",
+    source_suggested_workdir: "Suggested work_dir",
     hero_title: "Local dashboard for review, approval, and export",
     hero_copy: "Load an existing VIDEO MIX work_dir, inspect the pipeline state, review candidate thumbnails, and approve or reject without leaving the local browser.",
     open_review: "Open review.html",
@@ -156,6 +207,7 @@ const TRANSLATIONS = {
     load_help: "Use an already generated VIDEO MIX work folder.",
     load_waiting: "Waiting",
     workdir_label: "VIDEO MIX work_dir",
+    browse_workdir: "Browse folder",
     load_dashboard: "Load dashboard",
     copy_url: "Copy URL",
     project_meta_empty: "Load a work_dir to see project metadata and summary counts.",
@@ -242,7 +294,17 @@ const TRANSLATIONS = {
     reject: "Reject",
     command_copied: "Command copied",
     no_export_paths_session: "No new export paths in this session.",
+    load_state_enter_source_dir: "Enter the source materials folder",
     load_state_enter_workdir: "Enter work_dir",
+    load_state_browsing_workdir: "Opening folder picker...",
+    load_state_browse_canceled: "Folder selection cancelled",
+    load_state_browsing_source: "Opening source folder picker...",
+    load_state_source_browse_canceled: "Source folder selection cancelled",
+    load_state_scanning_source: "Scanning source materials...",
+    load_state_source_scanned: "Source materials scanned",
+    load_state_planning_source: "Creating project plan...",
+    load_state_generating_review: "Generating review and thumbnails...",
+    load_state_source_loaded: "Project created and loaded",
     load_state_loading: "Loading...",
     load_state_loaded: "Loaded",
     load_state_approving: "Approving...",
@@ -399,7 +461,16 @@ function applyStaticTranslations() {
     ["#vm-open-workdir", "open_workdir"],
     ["#vm-load-title", "load_title"],
     ["#vm-load-help", "load_help"],
+    ["#vm-source-title", "source_title"],
+    ["#vm-source-help", "source_help"],
+    ["#vm-source-dir-label", "source_dir_label"],
+    ["#vm-source-project-name-label", "source_project_name_label"],
+    ["#vm-source-workdir-label", "source_workdir_label"],
+    ["#vm-source-browse-btn", "source_browse"],
+    ["#vm-source-scan-btn", "source_scan"],
+    ["#vm-source-plan-btn", "source_plan"],
     ["#vm-workdir-label", "workdir_label"],
+    ["#vm-browse-workdir-btn", "browse_workdir"],
     ["#vm-load-btn", "load_dashboard"],
     ["#vm-copy-url-btn", "copy_url"],
     ["#vm-pipeline-title", "pipeline_title"],
@@ -451,6 +522,18 @@ function applyStaticTranslations() {
   if (workDirInput) {
     workDirInput.placeholder = "C:\\path\\to\\video_mix_validation\\work";
   }
+  const sourceDirInput = qs("#vm-source-dir-input");
+  if (sourceDirInput) {
+    sourceDirInput.placeholder = "C:\\path\\to\\source_materials";
+  }
+  const sourceProjectNameInput = qs("#vm-source-project-name-input");
+  if (sourceProjectNameInput) {
+    sourceProjectNameInput.placeholder = "Wedding Validation";
+  }
+  const sourceWorkDirInput = qs("#vm-source-workdir-input");
+  if (sourceWorkDirInput) {
+    sourceWorkDirInput.placeholder = "C:\\path\\to\\source_materials\\_video_mix_work";
+  }
 
   const localeButtons = [
     ["#vm-lang-ru", "ru"],
@@ -466,6 +549,43 @@ function applyStaticTranslations() {
   if (state.loadState?.key) {
     setLoadState(t(state.loadState.key, state.loadState.params || {}), state.loadState.className || "status-queued");
   }
+}
+
+function defaultSourceWorkDir(sourceDir) {
+  if (!sourceDir) return "";
+  return sourceDir.replace(/[\\/]+$/, "") + "\\_video_mix_work";
+}
+
+function renderSourceScanSummary() {
+  const target = qs("#vm-source-scan-summary");
+  if (!target) return;
+  if (!state.sourceScan) {
+    target.innerHTML = `<div class="empty">${escapeHtml(t("source_scan_empty"))}</div>`;
+    return;
+  }
+  const preview = (state.sourceScan.preview_files || [])
+    .map((name) => `<li><code>${escapeHtml(name)}</code></li>`)
+    .join("");
+  const moreCount = Math.max(0, Number(state.sourceScan.supported_media_count || 0) - Number((state.sourceScan.preview_files || []).length));
+  const moreLine = moreCount ? `<div class="muted">${escapeHtml(t("source_scan_preview_more", { count: moreCount }))}</div>` : "";
+  target.innerHTML = `
+    <div class="video-mix-project-panel">
+      <div><span>${escapeHtml(t("source_source_dir"))}</span><code>${escapeHtml(state.sourceScan.source_dir)}</code></div>
+      <div><span>${escapeHtml(t("source_suggested_workdir"))}</span><code>${escapeHtml(state.sourceScan.suggested_work_dir)}</code></div>
+    </div>
+    <div class="video-mix-summary-grid">
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("source_scan_total_files"))}</span><strong>${escapeHtml(state.sourceScan.total_files)}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("source_scan_supported_media"))}</span><strong>${escapeHtml(state.sourceScan.supported_media_count)}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("source_scan_supported_videos"))}</span><strong>${escapeHtml(state.sourceScan.supported_video_count)}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("source_scan_supported_photos"))}</span><strong>${escapeHtml(state.sourceScan.supported_photo_count)}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("source_scan_ignored"))}</span><strong>${escapeHtml(state.sourceScan.ignored_or_unsupported_count)}</strong></div>
+    </div>
+    <div class="video-mix-section">
+      <h4>${escapeHtml(t("source_scan_preview"))}</h4>
+      <ul class="video-mix-preview-list">${preview}</ul>
+      ${moreLine}
+    </div>
+  `;
 }
 
 function setLocale(locale) {
@@ -764,6 +884,7 @@ function renderExportsPanel(paths = []) {
 function renderAll() {
   cacheDraftNotes();
   syncSelectionToVisible();
+  renderSourceScanSummary();
   renderProjectMeta();
   renderPipeline();
   renderCandidates();
@@ -800,6 +921,122 @@ async function loadDashboard(workDirOverride = "") {
     state.selectedCandidateIds = new Set();
     state.draftNotesByCandidateId = new Map();
     renderAll();
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function browseWorkDir() {
+  const initialDir = qs("#vm-workdir-input")?.value?.trim() || state.workDir || "";
+  setLocalizedLoadState("load_state_browsing_workdir", "status-downloading");
+  try {
+    const payload = await fetchJson("/api/video-mix/pick-workdir", {
+      method: "POST",
+      body: JSON.stringify({ initial_dir: initialDir }),
+    });
+    if (payload.canceled) {
+      setLocalizedLoadState("load_state_browse_canceled", "status-idle");
+      return;
+    }
+    qs("#vm-workdir-input").value = payload.work_dir;
+    await loadDashboard(payload.work_dir);
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function browseSourceDir() {
+  const initialDir = qs("#vm-source-dir-input")?.value?.trim() || "";
+  setLocalizedLoadState("load_state_browsing_source", "status-downloading");
+  try {
+    const payload = await fetchJson("/api/video-mix/pick-source-folder", {
+      method: "POST",
+      body: JSON.stringify({ initial_dir: initialDir }),
+    });
+    if (payload.canceled) {
+      setLocalizedLoadState("load_state_source_browse_canceled", "status-idle");
+      return;
+    }
+    qs("#vm-source-dir-input").value = payload.source_dir;
+    if (state.sourceWorkDirAuto || !qs("#vm-source-workdir-input").value.trim()) {
+      qs("#vm-source-workdir-input").value = defaultSourceWorkDir(payload.source_dir);
+      state.sourceWorkDirAuto = true;
+    }
+    state.sourceScan = null;
+    renderSourceScanSummary();
+    setLocalizedLoadState("load_state_loaded", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function scanSourceMaterials() {
+  const sourceDir = qs("#vm-source-dir-input")?.value?.trim() || "";
+  if (!sourceDir) {
+    setLocalizedLoadState("load_state_enter_source_dir", "status-failed");
+    return;
+  }
+  setLocalizedLoadState("load_state_scanning_source", "status-downloading");
+  try {
+    const payload = await fetchJson("/api/video-mix/source/scan", {
+      method: "POST",
+      body: JSON.stringify({ source_dir: sourceDir }),
+    });
+    state.sourceScan = payload;
+    qs("#vm-source-dir-input").value = payload.source_dir;
+    if (state.sourceWorkDirAuto || !qs("#vm-source-workdir-input").value.trim()) {
+      qs("#vm-source-workdir-input").value = payload.suggested_work_dir;
+      state.sourceWorkDirAuto = true;
+    }
+    if (!qs("#vm-source-project-name-input").value.trim()) {
+      qs("#vm-source-project-name-input").value = payload.source_dir.split(/[/\\]/).pop() || "";
+    }
+    renderSourceScanSummary();
+    setLocalizedLoadState("load_state_source_scanned", "status-completed");
+  } catch (error) {
+    state.sourceScan = null;
+    renderSourceScanSummary();
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function planSourceMaterials() {
+  const sourceDir = qs("#vm-source-dir-input")?.value?.trim() || "";
+  const projectName = qs("#vm-source-project-name-input")?.value?.trim() || "";
+  const outputWorkDir = qs("#vm-source-workdir-input")?.value?.trim() || defaultSourceWorkDir(sourceDir);
+  if (!sourceDir) {
+    setLocalizedLoadState("load_state_enter_source_dir", "status-failed");
+    return;
+  }
+  setLocalizedLoadState("load_state_planning_source", "status-downloading");
+  try {
+    const payload = await fetchJson("/api/video-mix/source/plan", {
+      method: "POST",
+      body: JSON.stringify({
+        source_dir: sourceDir,
+        project_name: projectName,
+        work_dir: outputWorkDir,
+      }),
+    });
+    state.sourceScan = {
+      ...(state.sourceScan || {}),
+      source_dir: payload.source_dir,
+      suggested_work_dir: payload.work_dir,
+    };
+    qs("#vm-source-dir-input").value = payload.source_dir;
+    qs("#vm-source-project-name-input").value = payload.project_name || projectName;
+    qs("#vm-source-workdir-input").value = payload.work_dir;
+    qs("#vm-workdir-input").value = payload.work_dir;
+    state.workDir = payload.work_dir;
+    applyDashboardPayload(payload.dashboard);
+    setLocalizedLoadState("load_state_generating_review", "status-downloading");
+    renderExportsPanel([]);
+    setLocalizedLoadState("load_state_source_loaded", "status-completed");
+    syncLocaleToUrl();
+  } catch (error) {
     state.loadState = null;
     setLoadState(error.message, "status-failed");
   }
@@ -961,6 +1198,10 @@ function bindFilterControls() {
 function bindActions() {
   qs("#vm-lang-ru").onclick = () => setLocale("ru");
   qs("#vm-lang-en").onclick = () => setLocale("en");
+  qs("#vm-source-browse-btn").onclick = () => browseSourceDir();
+  qs("#vm-source-scan-btn").onclick = () => scanSourceMaterials();
+  qs("#vm-source-plan-btn").onclick = () => planSourceMaterials();
+  qs("#vm-browse-workdir-btn").onclick = () => browseWorkDir();
   qs("#vm-load-btn").onclick = () => loadDashboard();
   qs("#vm-refresh-btn").onclick = () => loadDashboard(state.workDir);
   qs("#vm-export-btn").onclick = () => exportApprovedCandidates();
@@ -977,6 +1218,16 @@ function bindActions() {
       event.preventDefault();
       loadDashboard();
     }
+  });
+  qs("#vm-source-dir-input").addEventListener("input", () => {
+    if (state.sourceWorkDirAuto || !qs("#vm-source-workdir-input").value.trim()) {
+      qs("#vm-source-workdir-input").value = defaultSourceWorkDir(qs("#vm-source-dir-input").value.trim());
+      state.sourceWorkDirAuto = true;
+    }
+  });
+  qs("#vm-source-workdir-input").addEventListener("input", () => {
+    const sourceDir = qs("#vm-source-dir-input").value.trim();
+    state.sourceWorkDirAuto = qs("#vm-source-workdir-input").value.trim() === defaultSourceWorkDir(sourceDir);
   });
   bindFilterControls();
 }

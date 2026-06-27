@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,68 @@ def resolve_work_dir(raw_work_dir: str) -> Path:
             detail=f"VIDEO MIX work_dir is missing required files: {', '.join(missing)}",
         )
     return work_dir
+
+
+def _normalize_initial_dir(initial_dir: str) -> str:
+    if not initial_dir:
+        return ""
+    path = Path(initial_dir).expanduser()
+    if path.is_file():
+        path = path.parent
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return ""
+    return str(resolved) if resolved.exists() else ""
+
+
+def _show_windows_folder_picker(initial_dir: str = "") -> str:
+    script = """
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = 'Select VIDEO MIX work_dir'
+$dialog.ShowNewFolderButton = $false
+if ($args[0]) { $dialog.SelectedPath = $args[0] }
+$result = $dialog.ShowDialog()
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    Write-Output $dialog.SelectedPath
+}
+""".strip()
+    completed = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script, initial_dir],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+        check=False,
+    )
+    if completed.returncode not in {0, 1}:
+        stderr = completed.stderr.strip() or completed.stdout.strip() or "Folder picker failed"
+        raise HTTPException(status_code=500, detail=stderr)
+    return completed.stdout.strip()
+
+
+def pick_dashboard_work_dir(initial_dir: str = "") -> dict[str, Any]:
+    normalized_initial_dir = _normalize_initial_dir(initial_dir)
+    selected_path = _show_windows_folder_picker(normalized_initial_dir)
+    if not selected_path:
+        return {"ok": False, "canceled": True, "work_dir": ""}
+    work_dir = resolve_work_dir(selected_path)
+    return {"ok": True, "canceled": False, "work_dir": str(work_dir)}
+
+
+def pick_source_materials_dir(initial_dir: str = "") -> dict[str, Any]:
+    normalized_initial_dir = _normalize_initial_dir(initial_dir)
+    selected_path = _show_windows_folder_picker(normalized_initial_dir)
+    if not selected_path:
+        return {"ok": False, "canceled": True, "source_dir": ""}
+    source_dir = Path(selected_path).expanduser().resolve()
+    if not source_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Source folder does not exist: {source_dir}")
+    if not source_dir.is_dir():
+        raise HTTPException(status_code=400, detail=f"Source folder is not a directory: {source_dir}")
+    return {"ok": True, "canceled": False, "source_dir": str(source_dir)}
 
 
 def resolve_relative_work_path(raw_work_dir: str, relative_path: str) -> Path:

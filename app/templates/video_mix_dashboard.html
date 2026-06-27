@@ -32,6 +32,33 @@
       <aside class="video-mix-sidebar card">
         <div class="card-header">
           <div>
+            <h2 id="vm-source-title">Материалы</h2>
+            <p id="vm-source-help" class="muted">Сначала выберите папку с исходными видео и создайте или обновите VIDEO MIX проект.</p>
+          </div>
+        </div>
+        <label class="field">
+          <span id="vm-source-dir-label">Папка с материалами</span>
+          <input id="vm-source-dir-input" type="text" placeholder="C:\path\to\source_materials">
+        </label>
+        <label class="field">
+          <span id="vm-source-project-name-label">Имя проекта</span>
+          <input id="vm-source-project-name-input" type="text" placeholder="Wedding Validation">
+        </label>
+        <label class="field">
+          <span id="vm-source-workdir-label">Выходной work_dir</span>
+          <input id="vm-source-workdir-input" type="text" placeholder="C:\path\to\source_materials\_video_mix_work">
+        </label>
+        <div class="actions-row">
+          <button id="vm-source-browse-btn" class="ghost-btn" type="button">Выбрать материалы</button>
+          <button id="vm-source-scan-btn" class="ghost-btn" type="button">Сканировать</button>
+          <button id="vm-source-plan-btn" class="accent-btn" type="button">Создать / обновить проект</button>
+        </div>
+        <div id="vm-source-scan-summary" class="video-mix-source-summary">
+          <div class="empty">Скан материалов ещё не запускался.</div>
+        </div>
+
+        <div class="card-header">
+          <div>
             <h2 id="vm-load-title">Загрузка work_dir</h2>
             <p id="vm-load-help" class="muted">Используйте уже созданную рабочую папку VIDEO MIX.</p>
           </div>
@@ -42,6 +69,7 @@
           <input id="vm-workdir-input" type="text" placeholder="C:\path\to\video_mix_validation\work">
         </label>
         <div class="actions-row">
+          <button id="vm-browse-workdir-btn" class="ghost-btn" type="button">Выбрать папку</button>
           <button id="vm-load-btn" class="accent-btn" type="button">Загрузить дашборд</button>
           <button id="vm-copy-url-btn" class="ghost-btn" type="button">Копировать URL</button>
         </div>
