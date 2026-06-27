@@ -1,6 +1,6 @@
 # Latest Handoff State
 
-- Date: 2026-06-26
+- Date: 2026-06-27
 - Status: review-ready
 - Active issue: `#37 VIDEO MIX Stage 1.6 - Dashboard review controls`
 - Active module: `video_mix/`
@@ -30,6 +30,9 @@
   - sorting
   - selection count
   - bulk approve/reject
+- follow-up safety fixes applied:
+  - hidden selected candidates are excluded from bulk actions
+  - unsaved note drafts survive local selection-triggered re-renders
 - local synthetic validation passed:
   - `asset_count=5`
   - `clip_count=10`

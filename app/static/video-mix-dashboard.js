@@ -2,6 +2,7 @@ const state = {
   dashboard: null,
   workDir: "",
   selectedCandidateIds: new Set(),
+  draftNotesByCandidateId: new Map(),
   filters: {
     status: "all",
     warnings: "all",
@@ -124,6 +125,30 @@ function visibleCandidates() {
   return sorted;
 }
 
+export function filterSelectedCandidateIdsToVisible(selectedCandidateIds, visibleCandidateIds) {
+  const selected = selectedCandidateIds instanceof Set
+    ? selectedCandidateIds
+    : new Set(selectedCandidateIds || []);
+  return [...(visibleCandidateIds || [])].filter((candidateId) => selected.has(candidateId));
+}
+
+export function collectDraftNotesFromElements(noteElements) {
+  const drafts = new Map();
+  for (const element of noteElements || []) {
+    const candidateId = element?.dataset?.noteFor;
+    if (!candidateId) continue;
+    drafts.set(candidateId, String(element.value ?? ""));
+  }
+  return drafts;
+}
+
+export function resolveReviewNoteValue(candidate, draftNotesByCandidateId = new Map()) {
+  if (draftNotesByCandidateId.has(candidate.candidate_id)) {
+    return draftNotesByCandidateId.get(candidate.candidate_id) || "";
+  }
+  return candidate.review_notes || "";
+}
+
 function syncSelectionToVisible() {
   if (!state.dashboard?.candidates?.length) {
     state.selectedCandidateIds = new Set();
@@ -203,6 +228,14 @@ function renderSelectionSummary(visible) {
   qs("#vm-visible-count").textContent = `${visible.length} visible`;
 }
 
+function cacheDraftNotes() {
+  if (typeof document === "undefined") return;
+  const drafts = collectDraftNotesFromElements(document.querySelectorAll("[data-note-for]"));
+  drafts.forEach((value, candidateId) => {
+    state.draftNotesByCandidateId.set(candidateId, value);
+  });
+}
+
 function renderCandidates() {
   const target = qs("#vm-candidates");
   if (!state.dashboard) {
@@ -240,7 +273,7 @@ function renderCandidates() {
           </div>
         `).join("")
       : `<div class="muted">No source clips attached.</div>`;
-    const noteValue = escapeAttr(candidate.review_notes || "");
+    const noteValue = escapeAttr(resolveReviewNoteValue(candidate, state.draftNotesByCandidateId));
     return `
       <article class="video-mix-candidate-card ${isSelected ? "is-selected" : ""}">
         <div class="video-mix-card-toolbar">
@@ -306,6 +339,11 @@ function renderCandidates() {
       setLoadState("Command copied", "status-completed");
     };
   });
+  document.querySelectorAll("[data-note-for]").forEach((textarea) => {
+    textarea.oninput = () => {
+      state.draftNotesByCandidateId.set(textarea.dataset.noteFor, textarea.value);
+    };
+  });
 }
 
 function renderExportsPanel(paths = []) {
@@ -320,6 +358,7 @@ function renderExportsPanel(paths = []) {
 }
 
 function renderAll() {
+  cacheDraftNotes();
   syncSelectionToVisible();
   renderProjectMeta();
   renderPipeline();
@@ -331,6 +370,7 @@ function renderAll() {
 
 function applyDashboardPayload(payload) {
   state.dashboard = payload;
+  state.draftNotesByCandidateId = new Map();
   syncSelectionToVisible();
   renderAll();
 }
@@ -354,6 +394,7 @@ async function loadDashboard(workDirOverride = "") {
   } catch (error) {
     state.dashboard = null;
     state.selectedCandidateIds = new Set();
+    state.draftNotesByCandidateId = new Map();
     renderAll();
     renderExportsPanel([]);
     setLoadState(error.message, "status-failed");
@@ -365,8 +406,15 @@ function noteForCandidate(candidateId) {
 }
 
 function noteForBulkSelection() {
-  const firstSelected = [...state.selectedCandidateIds][0];
+  const firstSelected = visibleSelectedCandidateIds()[0];
   return firstSelected ? noteForCandidate(firstSelected) : "";
+}
+
+function visibleSelectedCandidateIds() {
+  return filterSelectedCandidateIdsToVisible(
+    state.selectedCandidateIds,
+    visibleCandidates().map((candidate) => candidate.candidate_id),
+  );
 }
 
 function toggleSelection(candidateId, selected) {
@@ -409,14 +457,19 @@ async function submitCandidateStatus(candidateId, action) {
 }
 
 async function submitBulkCandidateAction(action) {
+  const candidateIds = visibleSelectedCandidateIds();
   if (!state.workDir || state.selectedCandidateIds.size === 0) {
     setLoadState("Select at least one candidate first", "status-failed");
     return;
   }
-  if (action === "reject" && !window.confirm(`Reject ${state.selectedCandidateIds.size} selected candidate(s)?`)) {
+  if (candidateIds.length === 0) {
+    setLoadState("No selected candidates match the current filters", "status-failed");
     return;
   }
-  if (action === "approve" && !window.confirm(`Approve ${state.selectedCandidateIds.size} selected candidate(s)?`)) {
+  if (action === "reject" && !window.confirm(`Reject ${candidateIds.length} selected candidate(s)?`)) {
+    return;
+  }
+  if (action === "approve" && !window.confirm(`Approve ${candidateIds.length} selected candidate(s)?`)) {
     return;
   }
   setLoadState(`Bulk ${action}...`, "status-downloading");
@@ -425,7 +478,7 @@ async function submitBulkCandidateAction(action) {
       method: "POST",
       body: JSON.stringify({
         work_dir: state.workDir,
-        candidate_ids: [...state.selectedCandidateIds],
+        candidate_ids: candidateIds,
         note: noteForBulkSelection(),
       }),
     });
@@ -529,4 +582,6 @@ function init() {
   initFromQuery();
 }
 
-init();
+if (typeof document !== "undefined") {
+  init();
+}

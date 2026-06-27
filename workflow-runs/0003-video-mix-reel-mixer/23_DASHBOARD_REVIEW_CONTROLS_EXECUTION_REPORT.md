@@ -112,3 +112,30 @@ If this baseline is accepted, the next isolated pass should focus on either:
 
 1. persisted dashboard preferences (last sort/filter), or
 2. a compact side-by-side candidate comparison mode for final triage.
+
+## P2 Review Feedback Follow-Up
+
+PR review required two safety fixes before acceptance:
+
+- bulk approve/reject must not include selected candidates currently hidden by filters
+- checkbox toggles and local re-renders must not erase unsaved review-note textarea edits
+
+### Follow-Up Changes
+
+- bulk actions now submit only the selected candidate ids that remain visible under the active filters
+- draft review-note values are cached client-side and restored during re-render, so local selection changes do not overwrite unsaved note edits with stale persisted text
+- added lightweight frontend regression tests in `frontend-tests/video-mix-dashboard.test.mjs`
+
+### Follow-Up Validation
+
+```powershell
+node --test frontend-tests\video-mix-dashboard.test.mjs
+python -m pytest tests/test_video_mix_dashboard_api.py
+python -m ruff check app video_mix tests
+```
+
+Results:
+
+- frontend node tests passed
+- dashboard API tests passed
+- `ruff` passed

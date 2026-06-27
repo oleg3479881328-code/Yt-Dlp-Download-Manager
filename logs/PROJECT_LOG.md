@@ -692,3 +692,39 @@ Invoke-WebRequest "http://127.0.0.1:8765/api/video-mix/dashboard?work_dir=C:\Use
 ### Current Next Action
 
 Owner reviews Issue `#37`, the linked PR and `23_DASHBOARD_REVIEW_CONTROLS_EXECUTION_REPORT.md`, then either accepts this dashboard review baseline or requests one isolated next pass.
+
+---
+
+## 2026-06-27 — VIDEO MIX Stage 1.6 P2 review-feedback follow-up applied
+
+### Trigger
+
+Owner left PR feedback on `#38` requiring two safety fixes before acceptance:
+
+- bulk actions must not submit candidates hidden by the current filters
+- selection toggles must not erase unsaved review-note edits
+
+### Changes Made
+
+1. Updated dashboard bulk actions to submit only the selected candidate ids that are currently visible under the active filters.
+2. Added draft note caching so checkbox toggles and other local re-renders keep in-progress textarea edits intact until an explicit approve/reject action persists them.
+3. Added frontend regression coverage for:
+   - hidden selected candidates excluded from bulk submission
+   - draft note capture
+   - draft note precedence over stale persisted note text
+
+### Commands Run
+
+```powershell
+node --test frontend-tests\video-mix-dashboard.test.mjs
+python -m pytest tests/test_video_mix_dashboard_api.py
+python -m ruff check app video_mix tests
+```
+
+### Validation Results
+
+- frontend node tests passed
+- dashboard API tests passed
+- `ruff` passed
+- confirmed by code path that bulk requests now send only visible selected candidate ids
+- confirmed by regression helper coverage that in-progress note drafts survive re-render sources that previously rebuilt the textarea from persisted state
