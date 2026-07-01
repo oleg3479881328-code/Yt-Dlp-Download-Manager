@@ -19,20 +19,4 @@ jobs:
       - name: Lint touched safety code
         run: python -m ruff check app/path_safety.py app/worker.py native_host/ytdlp_host.py tests
       - name: Run safety tests
-        id: pytest
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          python -m pytest tests *> pytest-output.txt
-          $exitCode = $LASTEXITCODE
-          Get-Content pytest-output.txt
-          exit $exitCode
-      - name: Upload pytest output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-output
-          path: pytest-output.txt
-      - name: Fail if pytest failed
-        if: steps.pytest.outcome == 'failure'
-        run: exit 1
+        run: python -m pytest tests
