@@ -263,24 +263,21 @@ class PySceneDetectSegmenter:
         self.scenedetect_path = scenedetect_path
 
     def is_available(self) -> bool:
-        result = subprocess.run(
-            [self.scenedetect_path, "--help"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                [self.scenedetect_path, "--help"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return False
         return result.returncode == 0
 
     def plan(self, asset: Asset, output_dir: Path) -> list[Clip]:
         if not self.is_available():
             return []
         return []
-
-
-def ensure_take_marker_segmenter(segmenters: list[Segmenter]) -> list[Segmenter]:
-    if any(segmenter.name == SegmenterName.TAKE_MARKER for segmenter in segmenters):
-        return segmenters
-    return [TakeMarkerSegmenter(), *segmenters]
 
 
 def plan_asset_segments(asset: Asset, output_dir: Path, segmenters: list[Segmenter]) -> list[Clip]:
@@ -295,7 +292,7 @@ def plan_asset_segments(asset: Asset, output_dir: Path, segmenters: list[Segment
 
 
 def plan_segments_for_assets(assets: list[Asset], output_dir: Path, segmenters: list[Segmenter] | None = None) -> list[Clip]:
-    chosen_segmenters = ensure_take_marker_segmenter(list(segmenters)) if segmenters is not None else [TakeMarkerSegmenter(), FixedIntervalSegmenter()]
+    chosen_segmenters = list(segmenters) if segmenters is not None else [TakeMarkerSegmenter(), FixedIntervalSegmenter()]
     clips: list[Clip] = []
     for asset in assets:
         clips.extend(plan_asset_segments(asset, output_dir, chosen_segmenters))
