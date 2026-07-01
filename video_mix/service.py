@@ -35,6 +35,30 @@ QUICK_MIX_SOURCE_ASSET_ID = "quick_mix_source_asset_id"
 QUICK_MIX_TAKE_INDEX = "quick_mix_take_index"
 QUICK_MIX_TAKE_MARKER = "quick_mix_take_marker"
 
+OUTPUT_ORIENTATION_PRESETS = {
+    "vertical": (1080, 1920),
+    "horizontal": (1920, 1080),
+}
+
+
+def normalize_output_orientation(value: str | None = None) -> str:
+    normalized = (value or "vertical").strip().lower()
+    if normalized not in OUTPUT_ORIENTATION_PRESETS:
+        allowed = ", ".join(sorted(OUTPUT_ORIENTATION_PRESETS))
+        raise ValueError(f"Unsupported output_orientation: {value}. Supported values: {allowed}")
+    return normalized
+
+
+def output_dimensions(output_orientation: str | None = None) -> tuple[int, int]:
+    return OUTPUT_ORIENTATION_PRESETS[normalize_output_orientation(output_orientation)]
+
+
+def _scale_crop_filter(output_width: int, output_height: int) -> str:
+    return (
+        f"scale={output_width}:{output_height}:force_original_aspect_ratio=increase,"
+        f"crop={output_width}:{output_height},fps=30"
+    )
+
 
 def resolve_source_dir(raw_source_dir: str) -> Path:
     source_dir = Path(raw_source_dir).expanduser().resolve()
@@ -203,6 +227,8 @@ def _build_video_segment_command(
     start_ms: int,
     duration_ms: int,
     ffmpeg_path: str,
+    output_width: int = 1080,
+    output_height: int = 1920,
 ) -> list[str]:
     return [
         ffmpeg_path,
@@ -214,7 +240,7 @@ def _build_video_segment_command(
         "-t",
         f"{duration_ms / 1000:.3f}",
         "-vf",
-        "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
+        _scale_crop_filter(output_width, output_height),
         "-an",
         "-c:v",
         "libx264",
@@ -234,6 +260,8 @@ def _build_photo_segment_command(
     *,
     duration_ms: int,
     ffmpeg_path: str,
+    output_width: int = 1080,
+    output_height: int = 1920,
 ) -> list[str]:
     return [
         ffmpeg_path,
@@ -245,7 +273,7 @@ def _build_photo_segment_command(
         "-t",
         f"{duration_ms / 1000:.3f}",
         "-vf",
-        "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
+        _scale_crop_filter(output_width, output_height),
         "-an",
         "-c:v",
         "libx264",
@@ -266,10 +294,19 @@ def _render_quick_mix_segment(
     start_ms: int,
     duration_ms: int,
     ffmpeg_path: str,
+    output_width: int = 1080,
+    output_height: int = 1920,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if asset.media_type == MediaType.PHOTO:
-        command = _build_photo_segment_command(asset, output_path, duration_ms=duration_ms, ffmpeg_path=ffmpeg_path)
+        command = _build_photo_segment_command(
+            asset,
+            output_path,
+            duration_ms=duration_ms,
+            ffmpeg_path=ffmpeg_path,
+            output_width=output_width,
+            output_height=output_height,
+        )
     else:
         command = _build_video_segment_command(
             asset,
@@ -277,6 +314,8 @@ def _render_quick_mix_segment(
             start_ms=start_ms,
             duration_ms=duration_ms,
             ffmpeg_path=ffmpeg_path,
+            output_width=output_width,
+            output_height=output_height,
         )
     subprocess.run(command, check=True)
 
@@ -321,6 +360,9 @@ def _prepare_quick_mix_workdir(
     output_count: int,
     quick_mix_source_count: int,
     detected_take_count: int,
+    output_orientation: str,
+    output_width: int,
+    output_height: int,
 ) -> None:
     save_project(work_dir, project)
     save_assets(work_dir, assets)
@@ -337,6 +379,9 @@ def _prepare_quick_mix_workdir(
             "generated_count": len(output_paths),
             "quick_mix_source_count": quick_mix_source_count,
             "detected_take_count": detected_take_count,
+            "output_orientation": output_orientation,
+            "output_width": output_width,
+            "output_height": output_height,
             "output_paths": [str(path.relative_to(work_dir)).replace("\\", "/") for path in output_paths],
         },
     )
@@ -352,8 +397,11 @@ def quick_mix_source_materials(
     work_dir: str | None = None,
     ffmpeg_path: str = "ffmpeg",
     ffprobe_path: str = "ffprobe",
+    output_orientation: str = "vertical",
 ) -> dict:
     target_duration_ms, normalized_output_count = _validate_quick_mix_inputs(duration_seconds, output_count)
+    normalized_output_orientation = normalize_output_orientation(output_orientation)
+    output_width, output_height = output_dimensions(normalized_output_orientation)
     _ensure_ffmpeg_available(ffmpeg_path)
 
     source_dir = resolve_source_dir(raw_source_dir)
@@ -413,6 +461,8 @@ def quick_mix_source_materials(
                 start_ms=start_ms,
                 duration_ms=segment_ms,
                 ffmpeg_path=ffmpeg_path,
+                output_width=output_width,
+                output_height=output_height,
             )
             segment_paths.append(segment_path)
             remaining_ms -= segment_ms
@@ -431,6 +481,9 @@ def quick_mix_source_materials(
         output_count=normalized_output_count,
         quick_mix_source_count=len(usable_assets),
         detected_take_count=detected_take_count,
+        output_orientation=normalized_output_orientation,
+        output_width=output_width,
+        output_height=output_height,
     )
 
     return {
@@ -445,6 +498,9 @@ def quick_mix_source_materials(
         "image_count": sum(asset.media_type == MediaType.PHOTO for asset in source_assets),
         "quick_mix_source_count": len(usable_assets),
         "detected_take_count": detected_take_count,
+        "output_orientation": normalized_output_orientation,
+        "output_width": output_width,
+        "output_height": output_height,
         "photo_support": True,
         "output_paths": [str(path.relative_to(resolved_work_dir)).replace("\\", "/") for path in output_paths],
     }
