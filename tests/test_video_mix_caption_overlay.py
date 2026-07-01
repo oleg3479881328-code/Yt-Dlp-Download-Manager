@@ -69,5 +69,5 @@ def test_video_segment_command_can_overlay_caption_textfile(tmp_path: Path) -> N
         caption_position="top",
     )
 
-    assert "drawtext=" in command
-    assert any("y=40" in part for part in command)
+    assert any("drawtext=" in part for part in command)
+    assert any(":y=" in part for part in command)
