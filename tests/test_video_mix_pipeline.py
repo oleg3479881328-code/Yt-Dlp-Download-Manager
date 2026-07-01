@@ -284,11 +284,15 @@ def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, m
         ffmpeg_path: str,
         output_width: int = 1080,
         output_height: int = 1920,
+        caption_text_path: Path | None = None,
+        caption_position: str = "bottom",
     ) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(f"{asset.media_type}:{start_ms}:{duration_ms}".encode())
         rendered_segments.append(output_path)
         rendered_dimensions.append((output_width, output_height))
+        assert caption_text_path is None
+        assert caption_position == "bottom"
 
     def fake_render_output(segment_paths: list[Path], output_path: Path, ffmpeg_path: str) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -316,6 +320,8 @@ def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, m
     assert result["output_orientation"] == "horizontal"
     assert result["output_width"] == 1920
     assert result["output_height"] == 1080
+    assert result["captions_enabled"] is False
+    assert result["caption_position"] == "bottom"
     assert result["output_paths"] == ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"]
     assert len(rendered_segments) >= 2
     assert len(rendered_outputs) == 2
