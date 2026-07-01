@@ -7,13 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=video-mix-stage18-quick-mix">
+  <link rel="stylesheet" href="/static/styles.css?v=video-mix-stage19-orientation">
 </head>
 <body>
   <div class="video-mix-shell">
     <section class="video-mix-hero">
       <div>
-        <p class="eyebrow">VIDEO MIX / Stage 1.8</p>
+        <p class="eyebrow">VIDEO MIX / Stage 1.9</p>
         <h1 id="vm-hero-title">Локальный дашборд для Quick Mix, ревью и экспорта</h1>
         <p id="vm-hero-copy" class="hero-copy">Выберите исходные материалы, запустите Быстрый микс для прямой генерации MP4 или загрузите готовый VIDEO MIX work_dir для обычного ревью, approve/reject и экспорта.</p>
       </div>
@@ -70,6 +70,13 @@
         <label class="field">
           <span id="vm-quickmix-count-label">Сколько роликов</span>
           <input id="vm-quickmix-count-input" type="number" min="1" step="1" value="2">
+        </label>
+        <label class="field">
+          <span id="vm-quickmix-orientation-label">Формат видео</span>
+          <select id="vm-quickmix-orientation-input">
+            <option value="vertical">Вертикальное 9:16 — 1080×1920</option>
+            <option value="horizontal">Горизонтальное 16:9 — 1920×1080</option>
+          </select>
         </label>
         <div class="actions-row">
           <button id="vm-quickmix-btn" class="accent-btn" type="button">Сгенерировать ролики</button>
@@ -182,6 +189,22 @@
       </main>
     </section>
   </div>
-  <script type="module" src="/static/video-mix-dashboard.js?v=video-mix-stage18-quick-mix"></script>
+  <script>
+    (() => {
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (input, init = {}) => {
+        const url = typeof input === "string" ? input : input?.url || "";
+        if (url.includes("/api/video-mix/quick-mix") && init?.body) {
+          try {
+            const orientation = document.getElementById("vm-quickmix-orientation-input")?.value || "vertical";
+            const payload = JSON.parse(init.body);
+            init = { ...init, body: JSON.stringify({ ...payload, output_orientation: orientation }) };
+          } catch {}
+        }
+        return originalFetch(input, init);
+      };
+    })();
+  </script>
+  <script type="module" src="/static/video-mix-dashboard.js?v=video-mix-stage19-orientation"></script>
 </body>
 </html>
