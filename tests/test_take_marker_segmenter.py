@@ -5,11 +5,10 @@ from video_mix.core.segmenters import (
     FixedIntervalSegmenter,
     TakeMarkerSegmenter,
     build_take_marker_clips,
-    ensure_take_marker_segmenter,
     group_marker_sample_times,
     plan_segments_for_assets,
 )
-from video_mix.service import _build_quick_mix_usable_assets
+from video_mix.service import _build_quick_mix_usable_assets, _build_segmenters
 
 
 def make_video_asset(path: Path, *, duration_ms: int = 11_000) -> Asset:
@@ -52,7 +51,7 @@ def test_build_take_marker_clips_splits_video_into_takes(tmp_path: Path) -> None
     assert all(clip.metadata["take_marker"] == "VM_TAKE_BREAK_V1" for clip in clips)
 
 
-def test_take_marker_segmenter_precedes_fixed_interval_fallback(tmp_path: Path, monkeypatch) -> None:
+def test_take_marker_segmenter_precedes_fixed_interval_when_configured(tmp_path: Path, monkeypatch) -> None:
     asset = make_video_asset(tmp_path / "scene_with_marker.mp4", duration_ms=8000)
     take_marker = TakeMarkerSegmenter(marker_trim_padding_ms=0)
     monkeypatch.setattr(take_marker, "_detect_marker_intervals", lambda asset: [(3000, 3400)])
@@ -68,8 +67,8 @@ def test_take_marker_segmenter_precedes_fixed_interval_fallback(tmp_path: Path, 
     assert all("segmenter_fallback" not in clip.metadata for clip in clips)
 
 
-def test_take_marker_segmenter_is_added_before_explicit_fallbacks() -> None:
-    segmenters = ensure_take_marker_segmenter([FixedIntervalSegmenter(clip_ms=2000)])
+def test_service_build_segmenters_prefers_take_marker_before_fixed_interval() -> None:
+    segmenters = _build_segmenters(clip_ms=2000, max_clips_per_asset=3, ffmpeg_path="ffmpeg")
 
     assert segmenters[0].name == SegmenterName.TAKE_MARKER
     assert segmenters[1].name == SegmenterName.FIXED_INTERVAL
