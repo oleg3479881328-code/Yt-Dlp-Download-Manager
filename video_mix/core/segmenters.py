@@ -292,7 +292,7 @@ def plan_asset_segments(asset: Asset, output_dir: Path, segmenters: list[Segment
 
 
 def plan_segments_for_assets(assets: list[Asset], output_dir: Path, segmenters: list[Segmenter] | None = None) -> list[Clip]:
-    chosen_segmenters = list(segmenters) if segmenters is not None else [TakeMarkerSegmenter(), FixedIntervalSegmenter()]
+    chosen_segmenters = list(segmenters) if segmenters is not None else [FixedIntervalSegmenter()]
     clips: list[Clip] = []
     for asset in assets:
         clips.extend(plan_asset_segments(asset, output_dir, chosen_segmenters))
