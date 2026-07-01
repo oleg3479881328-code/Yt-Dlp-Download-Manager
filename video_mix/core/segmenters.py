@@ -274,6 +274,12 @@ class PySceneDetectSegmenter:
         return []
 
 
+def ensure_take_marker_segmenter(segmenters: list[Segmenter]) -> list[Segmenter]:
+    if any(segmenter.name == SegmenterName.TAKE_MARKER for segmenter in segmenters):
+        return segmenters
+    return [TakeMarkerSegmenter(), *segmenters]
+
+
 def plan_asset_segments(asset: Asset, output_dir: Path, segmenters: list[Segmenter]) -> list[Clip]:
     for segmenter in segmenters:
         clips = segmenter.plan(asset, output_dir / segmenter.name.value / asset.asset_id)
@@ -286,7 +292,7 @@ def plan_asset_segments(asset: Asset, output_dir: Path, segmenters: list[Segment
 
 
 def plan_segments_for_assets(assets: list[Asset], output_dir: Path, segmenters: list[Segmenter] | None = None) -> list[Clip]:
-    chosen_segmenters = segmenters or [TakeMarkerSegmenter(), FixedIntervalSegmenter()]
+    chosen_segmenters = ensure_take_marker_segmenter(list(segmenters)) if segmenters is not None else [TakeMarkerSegmenter(), FixedIntervalSegmenter()]
     clips: list[Clip] = []
     for asset in assets:
         clips.extend(plan_asset_segments(asset, output_dir, chosen_segmenters))
@@ -327,6 +333,6 @@ def build_ffmpeg_cut_command(clip: Clip, ffmpeg_path: str = "ffmpeg") -> list[st
 
 def extract_clip(clip: Clip, ffmpeg_path: str = "ffmpeg") -> list[str]:
     command = build_ffmpeg_cut_command(clip, ffmpeg_path=ffmpeg_path)
-    clip.working_path.parent.mkdir(parents=True, exist_ok=True)
+    clip.working_path.parent.mkdir(parents=True)
     subprocess.run(command, check=True)
     return command
