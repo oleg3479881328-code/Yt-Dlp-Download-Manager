@@ -9,6 +9,7 @@ from video_mix.core.segmenters import (
     group_marker_sample_times,
     plan_segments_for_assets,
 )
+from video_mix.service import _build_quick_mix_usable_assets
 
 
 def make_video_asset(path: Path, *, duration_ms: int = 11_000) -> Asset:
@@ -72,3 +73,32 @@ def test_take_marker_segmenter_is_added_before_explicit_fallbacks() -> None:
 
     assert segmenters[0].name == SegmenterName.TAKE_MARKER
     assert segmenters[1].name == SegmenterName.FIXED_INTERVAL
+
+
+def test_quick_mix_expands_marker_takes_into_usable_sources(tmp_path: Path, monkeypatch) -> None:
+    asset = make_video_asset(tmp_path / "quick_mix_scene_with_takes.mp4", duration_ms=8000)
+
+    class FakeTakeMarkerSegmenter:
+        def __init__(self, *, ffmpeg_path: str = "ffmpeg") -> None:
+            self.ffmpeg_path = ffmpeg_path
+
+        def plan(self, asset: Asset, output_dir: Path):
+            return build_take_marker_clips(
+                asset,
+                output_dir,
+                [(3000, 3400)],
+                marker_trim_padding_ms=0,
+            )
+
+    monkeypatch.setattr("video_mix.service.TakeMarkerSegmenter", FakeTakeMarkerSegmenter)
+
+    usable_assets, detected_take_count = _build_quick_mix_usable_assets(
+        [asset],
+        tmp_path / "work",
+        ffmpeg_path="ffmpeg",
+    )
+
+    assert detected_take_count == 2
+    assert [usable_asset.duration_ms for usable_asset in usable_assets] == [3000, 4600]
+    assert [usable_asset.metadata["quick_mix_source_start_ms"] for usable_asset in usable_assets] == [0, 3400]
+    assert [usable_asset.metadata["quick_mix_take_index"] for usable_asset in usable_assets] == [1, 2]
