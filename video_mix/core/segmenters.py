@@ -25,7 +25,7 @@ def parse_hex_rgb(hex_color: str) -> tuple[int, int, int]:
     return (int(normalized[0:2], 16), int(normalized[2:4], 16), int(normalized[4:6], 16))
 
 
-def rgb_distance(left: tuple[int, int, int], right: tuple[int, int, int]) -> int:
+def rgb_distance(left: tuple[int, ...], right: tuple[int, int, int]) -> int:
     return sum(abs(left[index] - right[index]) for index in range(3))
 
 
@@ -94,7 +94,10 @@ def detect_take_marker_intervals(
         "rgb24",
         "-",
     ]
-    result = subprocess.run(command, capture_output=True, check=False)
+    try:
+        result = subprocess.run(command, capture_output=True, check=False)
+    except FileNotFoundError:
+        return []
     if result.returncode != 0:
         return []
 
@@ -212,7 +215,7 @@ class TakeMarkerSegmenter:
 
         return build_take_marker_clips(
             asset,
-            output_dir / self.name.value / asset.asset_id,
+            output_dir,
             marker_intervals,
             marker_hex_color=self.marker_hex_color,
             marker_trim_padding_ms=self.marker_trim_padding_ms,
@@ -333,6 +336,6 @@ def build_ffmpeg_cut_command(clip: Clip, ffmpeg_path: str = "ffmpeg") -> list[st
 
 def extract_clip(clip: Clip, ffmpeg_path: str = "ffmpeg") -> list[str]:
     command = build_ffmpeg_cut_command(clip, ffmpeg_path=ffmpeg_path)
-    clip.working_path.parent.mkdir(parents=True)
+    clip.working_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(command, check=True)
     return command
