@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from video_mix.core.asset_scan import detect_media_type, stable_id
 from video_mix.core.models import Asset, CandidateStatus, Clip, MediaType, Orientation, Project, SegmenterName
 from video_mix.core.review import (
@@ -9,7 +11,12 @@ from video_mix.core.review import (
     write_review_html,
 )
 from video_mix.core.storage import build_asset, build_candidate, build_clip, to_jsonable
-from video_mix.service import quick_mix_source_materials, resolve_work_dir
+from video_mix.service import (
+    _build_video_segment_command,
+    output_dimensions,
+    quick_mix_source_materials,
+    resolve_work_dir,
+)
 
 
 def test_detect_media_type_video() -> None:
@@ -213,6 +220,36 @@ def test_resolve_work_dir_preserves_relative_cli_semantics(tmp_path: Path) -> No
     assert resolved == (cwd / "video_mix_validation" / "work").resolve()
 
 
+def test_output_dimensions_support_vertical_and_horizontal() -> None:
+    assert output_dimensions("vertical") == (1080, 1920)
+    assert output_dimensions("horizontal") == (1920, 1080)
+
+    with pytest.raises(ValueError, match="Unsupported output_orientation"):
+        output_dimensions("square")
+
+
+def test_video_segment_command_uses_horizontal_output_dimensions(tmp_path: Path) -> None:
+    asset = Asset(
+        asset_id="asset_1",
+        project_id="project_1",
+        path=tmp_path / "clip.mp4",
+        media_type=MediaType.VIDEO,
+        duration_ms=4000,
+    )
+
+    command = _build_video_segment_command(
+        asset,
+        tmp_path / "segment.mp4",
+        start_ms=0,
+        duration_ms=3000,
+        ffmpeg_path="ffmpeg",
+        output_width=1920,
+        output_height=1080,
+    )
+
+    assert "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=30" in command
+
+
 def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, monkeypatch) -> None:
     source_dir = tmp_path / "source"
     source_dir.mkdir()
@@ -236,11 +273,22 @@ def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, m
 
     rendered_segments: list[Path] = []
     rendered_outputs: list[Path] = []
+    rendered_dimensions: list[tuple[int, int]] = []
 
-    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+    def fake_render_segment(
+        asset: Asset,
+        output_path: Path,
+        *,
+        start_ms: int,
+        duration_ms: int,
+        ffmpeg_path: str,
+        output_width: int = 1080,
+        output_height: int = 1920,
+    ) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(f"{asset.media_type}:{start_ms}:{duration_ms}".encode())
         rendered_segments.append(output_path)
+        rendered_dimensions.append((output_width, output_height))
 
     def fake_render_output(segment_paths: list[Path], output_path: Path, ffmpeg_path: str) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -258,12 +306,17 @@ def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, m
         output_count=2,
         project_name="Quick Mix Validation",
         work_dir=str(tmp_path / "work"),
+        output_orientation="horizontal",
     )
 
     assert result["generated_count"] == 2
     assert result["video_count"] == 1
     assert result["image_count"] == 1
     assert result["photo_support"] is True
+    assert result["output_orientation"] == "horizontal"
+    assert result["output_width"] == 1920
+    assert result["output_height"] == 1080
     assert result["output_paths"] == ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"]
     assert len(rendered_segments) >= 2
     assert len(rendered_outputs) == 2
+    assert set(rendered_dimensions) == {(1920, 1080)}
