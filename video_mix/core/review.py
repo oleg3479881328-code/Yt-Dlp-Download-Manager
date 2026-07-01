@@ -171,8 +171,12 @@ def write_review_html(
     work_dir: Path,
     *,
     ffmpeg_path: str = "ffmpeg",
+    regenerate_thumbnails: bool = True,
 ) -> tuple[Path, int, dict[str, str]]:
-    thumbnail_lookup, thumbnail_warnings = generate_thumbnails(clips, work_dir, ffmpeg_path=ffmpeg_path)
+    if regenerate_thumbnails:
+        thumbnail_lookup, thumbnail_warnings = generate_thumbnails(clips, work_dir, ffmpeg_path=ffmpeg_path)
+    else:
+        thumbnail_lookup, thumbnail_warnings = collect_existing_thumbnails(clips, work_dir)
     html = build_review_html(project, candidates, clips, assets, work_dir, thumbnail_lookup, thumbnail_warnings)
     report_path = work_dir / "reports" / "review.html"
     report_path.parent.mkdir(parents=True, exist_ok=True)
