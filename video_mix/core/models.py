@@ -34,6 +34,7 @@ class TrackType(StrEnum):
 
 
 class SegmenterName(StrEnum):
+    TAKE_MARKER = "take_marker"
     FIXED_INTERVAL = "fixed_interval"
     PYSCENEDETECT = "pyscenedetect"
 

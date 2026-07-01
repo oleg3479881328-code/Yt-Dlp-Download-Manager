@@ -11,7 +11,12 @@ from .core.media_probe import probe_assets
 from .core.models import Asset, MediaType, Project
 from .core.review import write_review_html
 from .core.scoring import score_assets, score_clips
-from .core.segmenters import FixedIntervalSegmenter, PySceneDetectSegmenter, plan_segments_for_assets
+from .core.segmenters import (
+    FixedIntervalSegmenter,
+    PySceneDetectSegmenter,
+    TakeMarkerSegmenter,
+    plan_segments_for_assets,
+)
 from .core.storage import (
     build_summary,
     save_assets,
@@ -23,6 +28,12 @@ from .core.storage import (
 )
 from .core.tagging import apply_filename_tags
 from .packs.wedding import get_wedding_templates
+
+
+QUICK_MIX_SOURCE_START_MS = "quick_mix_source_start_ms"
+QUICK_MIX_SOURCE_ASSET_ID = "quick_mix_source_asset_id"
+QUICK_MIX_TAKE_INDEX = "quick_mix_take_index"
+QUICK_MIX_TAKE_MARKER = "quick_mix_take_marker"
 
 
 def resolve_source_dir(raw_source_dir: str) -> Path:
@@ -101,11 +112,13 @@ def _build_segmenters(
     max_clips_per_asset: int = 12,
     prefer_pyscenedetect: bool = False,
     scenedetect_path: str = "scenedetect",
+    ffmpeg_path: str = "ffmpeg",
 ):
+    take_marker = TakeMarkerSegmenter(ffmpeg_path=ffmpeg_path)
     fixed = FixedIntervalSegmenter(clip_ms=clip_ms, max_clips_per_asset=max_clips_per_asset)
     if prefer_pyscenedetect:
-        return [PySceneDetectSegmenter(scenedetect_path), fixed]
-    return [fixed]
+        return [take_marker, PySceneDetectSegmenter(scenedetect_path), fixed]
+    return [take_marker, fixed]
 
 
 def _ensure_ffmpeg_available(ffmpeg_path: str) -> None:
@@ -131,6 +144,56 @@ def _preferred_segment_ms(asset: Asset, remaining_ms: int) -> int:
     if not asset.duration_ms:
         return min(remaining_ms, 2000)
     return min(remaining_ms, min(3000, asset.duration_ms))
+
+
+def _quick_mix_source_start_ms(asset: Asset) -> int:
+    raw_value = asset.metadata.get(QUICK_MIX_SOURCE_START_MS, 0)
+    return int(raw_value) if raw_value is not None else 0
+
+
+def _clone_asset_for_quick_mix_take(asset: Asset, take_clip) -> Asset:
+    metadata = dict(asset.metadata)
+    metadata.update(
+        {
+            QUICK_MIX_SOURCE_ASSET_ID: asset.asset_id,
+            QUICK_MIX_SOURCE_START_MS: take_clip.source_start_ms,
+            QUICK_MIX_TAKE_INDEX: take_clip.metadata.get("take_index"),
+            QUICK_MIX_TAKE_MARKER: take_clip.metadata.get("take_marker"),
+        }
+    )
+    return Asset(
+        asset_id=f"{asset.asset_id}_{take_clip.clip_id}",
+        project_id=asset.project_id,
+        path=asset.path,
+        media_type=asset.media_type,
+        duration_ms=take_clip.duration_ms,
+        width=asset.width,
+        height=asset.height,
+        fps=asset.fps,
+        orientation=asset.orientation,
+        has_audio=asset.has_audio,
+        probe_status=asset.probe_status,
+        quality_score=asset.quality_score,
+        metadata=metadata,
+    )
+
+
+def _build_quick_mix_usable_assets(assets: list[Asset], work_dir: Path, *, ffmpeg_path: str) -> tuple[list[Asset], int]:
+    usable_assets: list[Asset] = []
+    detected_take_count = 0
+    take_segmenter = TakeMarkerSegmenter(ffmpeg_path=ffmpeg_path)
+
+    for asset in assets:
+        if asset.media_type == MediaType.VIDEO and asset.duration_ms:
+            take_clips = take_segmenter.plan(asset, work_dir / "quick_mix_takes")
+            if take_clips:
+                detected_take_count += len(take_clips)
+                usable_assets.extend(_clone_asset_for_quick_mix_take(asset, take_clip) for take_clip in take_clips)
+                continue
+        if asset.media_type in {MediaType.VIDEO, MediaType.PHOTO}:
+            usable_assets.append(asset)
+
+    return usable_assets, detected_take_count
 
 
 def _build_video_segment_command(
@@ -256,6 +319,8 @@ def _prepare_quick_mix_workdir(
     output_paths: list[Path],
     duration_seconds: float,
     output_count: int,
+    quick_mix_source_count: int,
+    detected_take_count: int,
 ) -> None:
     save_project(work_dir, project)
     save_assets(work_dir, assets)
@@ -270,6 +335,8 @@ def _prepare_quick_mix_workdir(
             "duration_seconds": duration_seconds,
             "output_count": output_count,
             "generated_count": len(output_paths),
+            "quick_mix_source_count": quick_mix_source_count,
+            "detected_take_count": detected_take_count,
             "output_paths": [str(path.relative_to(work_dir)).replace("\\", "/") for path in output_paths],
         },
     )
@@ -297,7 +364,12 @@ def quick_mix_source_materials(
     if not assets:
         raise ValueError("No supported media files were found in the selected source folder.")
 
-    usable_assets = [asset for asset in assets if asset.media_type in {MediaType.VIDEO, MediaType.PHOTO}]
+    source_assets = [asset for asset in assets if asset.media_type in {MediaType.VIDEO, MediaType.PHOTO}]
+    usable_assets, detected_take_count = _build_quick_mix_usable_assets(
+        source_assets,
+        resolved_work_dir,
+        ffmpeg_path=ffmpeg_path,
+    )
     if not usable_assets:
         raise ValueError("No usable video or photo files were found in the selected source folder.")
 
@@ -326,7 +398,8 @@ def quick_mix_source_materials(
                 segment_ms = min(preferred_ms, asset.duration_ms)
                 max_start = max(0, asset.duration_ms - segment_ms)
                 cursor = video_offsets.get(asset.asset_id, 0)
-                start_ms = min(cursor, max_start)
+                relative_start_ms = min(cursor, max_start)
+                start_ms = _quick_mix_source_start_ms(asset) + relative_start_ms
                 next_cursor = cursor + segment_ms
                 video_offsets[asset.asset_id] = 0 if next_cursor >= max_start and max_start > 0 else next_cursor
             else:
@@ -356,6 +429,8 @@ def quick_mix_source_materials(
         output_paths=output_paths,
         duration_seconds=duration_seconds,
         output_count=normalized_output_count,
+        quick_mix_source_count=len(usable_assets),
+        detected_take_count=detected_take_count,
     )
 
     return {
@@ -366,8 +441,10 @@ def quick_mix_source_materials(
         "duration_seconds": duration_seconds,
         "output_count": normalized_output_count,
         "generated_count": len(output_paths),
-        "video_count": sum(asset.media_type == MediaType.VIDEO for asset in usable_assets),
-        "image_count": sum(asset.media_type == MediaType.PHOTO for asset in usable_assets),
+        "video_count": sum(asset.media_type == MediaType.VIDEO for asset in source_assets),
+        "image_count": sum(asset.media_type == MediaType.PHOTO for asset in source_assets),
+        "quick_mix_source_count": len(usable_assets),
+        "detected_take_count": detected_take_count,
         "photo_support": True,
         "output_paths": [str(path.relative_to(resolved_work_dir)).replace("\\", "/") for path in output_paths],
     }
@@ -403,6 +480,7 @@ def plan_source_materials(
             max_clips_per_asset=max_clips_per_asset,
             prefer_pyscenedetect=prefer_pyscenedetect,
             scenedetect_path=scenedetect_path,
+            ffmpeg_path=ffmpeg_path,
         ),
     )
     clips = apply_filename_tags(clips)
