@@ -39,6 +39,7 @@ OUTPUT_ORIENTATION_PRESETS = {
     "vertical": (1080, 1920),
     "horizontal": (1920, 1080),
 }
+CAPTION_POSITION_PRESETS = {"top", "center", "bottom"}
 
 
 def normalize_output_orientation(value: str | None = None) -> str:
@@ -53,11 +54,98 @@ def output_dimensions(output_orientation: str | None = None) -> tuple[int, int]:
     return OUTPUT_ORIENTATION_PRESETS[normalize_output_orientation(output_orientation)]
 
 
+def normalize_caption_text(value: str | None = None) -> str:
+    return (value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def normalize_caption_position(value: str | None = None) -> str:
+    normalized = (value or "bottom").strip().lower()
+    if normalized not in CAPTION_POSITION_PRESETS:
+        allowed = ", ".join(sorted(CAPTION_POSITION_PRESETS))
+        raise ValueError(f"Unsupported caption_position: {value}. Supported values: {allowed}")
+    return normalized
+
+
 def _scale_crop_filter(output_width: int, output_height: int) -> str:
     return (
         f"scale={output_width}:{output_height}:force_original_aspect_ratio=increase,"
         f"crop={output_width}:{output_height},fps=30"
     )
+
+
+def _escape_filter_value(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace(":", "\\:")
+        .replace("'", "\\'")
+        .replace(",", "\\,")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+    )
+
+
+def _caption_y_expression(position: str, output_height: int, margin: int) -> str:
+    normalized = normalize_caption_position(position)
+    if normalized == "top":
+        return str(margin)
+    if normalized == "center":
+        return "(h-text_h)/2"
+    return f"h-text_h-{margin}"
+
+
+def _caption_drawtext_filter(
+    caption_text_path: Path,
+    *,
+    output_height: int,
+    caption_position: str = "bottom",
+) -> str:
+    font_size = max(32, round(output_height * 0.045))
+    box_border = max(12, round(font_size * 0.35))
+    margin = max(40, round(output_height * 0.08))
+    textfile = _escape_filter_value(caption_text_path.as_posix())
+    y_expression = _caption_y_expression(caption_position, output_height, margin)
+    return (
+        "drawtext="
+        f"textfile='{textfile}':"
+        "fontcolor=white:"
+        f"fontsize={font_size}:"
+        "line_spacing=10:"
+        "box=1:"
+        "boxcolor=black@0.58:"
+        f"boxborderw={box_border}:"
+        "x=(w-text_w)/2:"
+        f"y={y_expression}"
+    )
+
+
+def _video_filter(
+    output_width: int,
+    output_height: int,
+    *,
+    caption_text_path: Path | None = None,
+    caption_position: str = "bottom",
+) -> str:
+    filters = [_scale_crop_filter(output_width, output_height)]
+    if caption_text_path is not None:
+        filters.append(
+            _caption_drawtext_filter(
+                caption_text_path,
+                output_height=output_height,
+                caption_position=caption_position,
+            )
+        )
+    return ",".join(filters)
+
+
+def _write_caption_text_file(work_dir: Path, caption_text: str | None) -> Path | None:
+    normalized_text = normalize_caption_text(caption_text)
+    if not normalized_text:
+        return None
+    caption_dir = work_dir / "quick_mix_captions"
+    caption_dir.mkdir(parents=True, exist_ok=True)
+    caption_path = caption_dir / "caption.txt"
+    caption_path.write_text(normalized_text, encoding="utf-8")
+    return caption_path
 
 
 def resolve_source_dir(raw_source_dir: str) -> Path:
@@ -229,6 +317,8 @@ def _build_video_segment_command(
     ffmpeg_path: str,
     output_width: int = 1080,
     output_height: int = 1920,
+    caption_text_path: Path | None = None,
+    caption_position: str = "bottom",
 ) -> list[str]:
     return [
         ffmpeg_path,
@@ -240,7 +330,12 @@ def _build_video_segment_command(
         "-t",
         f"{duration_ms / 1000:.3f}",
         "-vf",
-        _scale_crop_filter(output_width, output_height),
+        _video_filter(
+            output_width,
+            output_height,
+            caption_text_path=caption_text_path,
+            caption_position=caption_position,
+        ),
         "-an",
         "-c:v",
         "libx264",
@@ -262,6 +357,8 @@ def _build_photo_segment_command(
     ffmpeg_path: str,
     output_width: int = 1080,
     output_height: int = 1920,
+    caption_text_path: Path | None = None,
+    caption_position: str = "bottom",
 ) -> list[str]:
     return [
         ffmpeg_path,
@@ -273,7 +370,12 @@ def _build_photo_segment_command(
         "-t",
         f"{duration_ms / 1000:.3f}",
         "-vf",
-        _scale_crop_filter(output_width, output_height),
+        _video_filter(
+            output_width,
+            output_height,
+            caption_text_path=caption_text_path,
+            caption_position=caption_position,
+        ),
         "-an",
         "-c:v",
         "libx264",
@@ -296,6 +398,8 @@ def _render_quick_mix_segment(
     ffmpeg_path: str,
     output_width: int = 1080,
     output_height: int = 1920,
+    caption_text_path: Path | None = None,
+    caption_position: str = "bottom",
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if asset.media_type == MediaType.PHOTO:
@@ -306,6 +410,8 @@ def _render_quick_mix_segment(
             ffmpeg_path=ffmpeg_path,
             output_width=output_width,
             output_height=output_height,
+            caption_text_path=caption_text_path,
+            caption_position=caption_position,
         )
     else:
         command = _build_video_segment_command(
@@ -316,6 +422,8 @@ def _render_quick_mix_segment(
             ffmpeg_path=ffmpeg_path,
             output_width=output_width,
             output_height=output_height,
+            caption_text_path=caption_text_path,
+            caption_position=caption_position,
         )
     subprocess.run(command, check=True)
 
@@ -363,6 +471,8 @@ def _prepare_quick_mix_workdir(
     output_orientation: str,
     output_width: int,
     output_height: int,
+    captions_enabled: bool,
+    caption_position: str,
 ) -> None:
     save_project(work_dir, project)
     save_assets(work_dir, assets)
@@ -382,6 +492,8 @@ def _prepare_quick_mix_workdir(
             "output_orientation": output_orientation,
             "output_width": output_width,
             "output_height": output_height,
+            "captions_enabled": captions_enabled,
+            "caption_position": caption_position,
             "output_paths": [str(path.relative_to(work_dir)).replace("\\", "/") for path in output_paths],
         },
     )
@@ -398,15 +510,20 @@ def quick_mix_source_materials(
     ffmpeg_path: str = "ffmpeg",
     ffprobe_path: str = "ffprobe",
     output_orientation: str = "vertical",
+    caption_text: str = "",
+    caption_position: str = "bottom",
 ) -> dict:
     target_duration_ms, normalized_output_count = _validate_quick_mix_inputs(duration_seconds, output_count)
     normalized_output_orientation = normalize_output_orientation(output_orientation)
+    normalized_caption_text = normalize_caption_text(caption_text)
+    normalized_caption_position = normalize_caption_position(caption_position)
     output_width, output_height = output_dimensions(normalized_output_orientation)
     _ensure_ffmpeg_available(ffmpeg_path)
 
     source_dir = resolve_source_dir(raw_source_dir)
     project = Project(stable_id("project", str(source_dir)), project_name or source_dir.name, source_dir, pack)
     resolved_work_dir = resolve_work_dir(source_dir, work_dir)
+    caption_text_path = _write_caption_text_file(resolved_work_dir, normalized_caption_text)
 
     assets = score_assets(probe_assets(scan_project_assets(project), ffprobe_path=ffprobe_path))
     if not assets:
@@ -463,6 +580,8 @@ def quick_mix_source_materials(
                 ffmpeg_path=ffmpeg_path,
                 output_width=output_width,
                 output_height=output_height,
+                caption_text_path=caption_text_path,
+                caption_position=normalized_caption_position,
             )
             segment_paths.append(segment_path)
             remaining_ms -= segment_ms
@@ -472,6 +591,7 @@ def quick_mix_source_materials(
         _render_quick_mix_output(segment_paths, output_path, ffmpeg_path)
         output_paths.append(output_path)
 
+    captions_enabled = caption_text_path is not None
     _prepare_quick_mix_workdir(
         resolved_work_dir,
         project=project,
@@ -484,6 +604,8 @@ def quick_mix_source_materials(
         output_orientation=normalized_output_orientation,
         output_width=output_width,
         output_height=output_height,
+        captions_enabled=captions_enabled,
+        caption_position=normalized_caption_position,
     )
 
     return {
@@ -501,6 +623,8 @@ def quick_mix_source_materials(
         "output_orientation": normalized_output_orientation,
         "output_width": output_width,
         "output_height": output_height,
+        "captions_enabled": captions_enabled,
+        "caption_position": normalized_caption_position,
         "photo_support": True,
         "output_paths": [str(path.relative_to(resolved_work_dir)).replace("\\", "/") for path in output_paths],
     }

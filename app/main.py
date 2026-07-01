@@ -123,6 +123,8 @@ class VideoMixQuickMixRequest(BaseModel):
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
     output_orientation: str = "vertical"
+    caption_text: str = ""
+    caption_position: str = "bottom"
 
 
 @asynccontextmanager
@@ -422,6 +424,8 @@ async def quick_mix_video_mix_source(payload: VideoMixQuickMixRequest) -> dict[s
             ffmpeg_path=payload.ffmpeg,
             ffprobe_path=payload.ffprobe,
             output_orientation=payload.output_orientation,
+            caption_text=payload.caption_text,
+            caption_position=payload.caption_position,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -521,16 +525,16 @@ async def state_socket(websocket: WebSocket) -> None:
     await websocket.accept()
     history_status = "all"
     selected_job_id = None
+    await websocket.send_json(build_state_payload(history_status, selected_job_id))
     try:
         while True:
-            message = await websocket.receive_text()
             try:
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
                 payload = json.loads(message)
-            except json.JSONDecodeError:
-                payload = {}
-            history_status = payload.get("history_status", history_status)
-            selected_job_id = payload.get("selected_job_id", selected_job_id)
+                history_status = payload.get("history_filter", history_status)
+                selected_job_id = payload.get("selected_job_id", selected_job_id)
+            except TimeoutError:
+                pass
             await websocket.send_json(build_state_payload(history_status, selected_job_id))
-            await asyncio.sleep(0.1)
     except WebSocketDisconnect:
         return

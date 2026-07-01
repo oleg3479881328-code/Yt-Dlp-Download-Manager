@@ -7,13 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=video-mix-stage19-orientation">
+  <link rel="stylesheet" href="/static/styles.css?v=video-mix-stage20-captions">
 </head>
 <body>
   <div class="video-mix-shell">
     <section class="video-mix-hero">
       <div>
-        <p class="eyebrow">VIDEO MIX / Stage 1.9</p>
+        <p class="eyebrow">VIDEO MIX / Stage 2.0</p>
         <h1 id="vm-hero-title">Локальный дашборд для Quick Mix, ревью и экспорта</h1>
         <p id="vm-hero-copy" class="hero-copy">Выберите исходные материалы, запустите Быстрый микс для прямой генерации MP4 или загрузите готовый VIDEO MIX work_dir для обычного ревью, approve/reject и экспорта.</p>
       </div>
@@ -76,6 +76,18 @@
           <select id="vm-quickmix-orientation-input">
             <option value="vertical">Вертикальное 9:16 — 1080×1920</option>
             <option value="horizontal">Горизонтальное 16:9 — 1920×1080</option>
+          </select>
+        </label>
+        <label class="field">
+          <span id="vm-quickmix-caption-label">Титр поверх видео</span>
+          <textarea id="vm-quickmix-caption-input" rows="3" placeholder="Например: Самые красивые моменты свадьбы"></textarea>
+        </label>
+        <label class="field">
+          <span id="vm-quickmix-caption-position-label">Позиция титра</span>
+          <select id="vm-quickmix-caption-position-input">
+            <option value="bottom">Внизу</option>
+            <option value="center">По центру</option>
+            <option value="top">Вверху</option>
           </select>
         </label>
         <div class="actions-row">
@@ -197,14 +209,24 @@
         if (url.includes("/api/video-mix/quick-mix") && init?.body) {
           try {
             const orientation = document.getElementById("vm-quickmix-orientation-input")?.value || "vertical";
+            const captionText = document.getElementById("vm-quickmix-caption-input")?.value || "";
+            const captionPosition = document.getElementById("vm-quickmix-caption-position-input")?.value || "bottom";
             const payload = JSON.parse(init.body);
-            init = { ...init, body: JSON.stringify({ ...payload, output_orientation: orientation }) };
+            init = {
+              ...init,
+              body: JSON.stringify({
+                ...payload,
+                output_orientation: orientation,
+                caption_text: captionText,
+                caption_position: captionPosition,
+              }),
+            };
           } catch {}
         }
         return originalFetch(input, init);
       };
     })();
   </script>
-  <script type="module" src="/static/video-mix-dashboard.js?v=video-mix-stage19-orientation"></script>
+  <script type="module" src="/static/video-mix-dashboard.js?v=video-mix-stage20-captions"></script>
 </body>
 </html>
