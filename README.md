@@ -14,6 +14,20 @@ Single-user local toolkit for `yt-dlp` with:
 
 ## Run
 
+Recommended for the merged AI Reels Workbench on Windows:
+
+```powershell
+.\start-workbench.ps1
+```
+
+Or double-click:
+
+```text
+start-workbench.bat
+```
+
+See [docs/LOCAL_WORKBENCH_RUN.md](./docs/LOCAL_WORKBENCH_RUN.md) for the local launcher flow and troubleshooting.
+
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
