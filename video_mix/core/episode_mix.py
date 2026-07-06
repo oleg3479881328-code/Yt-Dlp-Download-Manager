@@ -14,6 +14,10 @@ class TakeMediaType(StrEnum):
     EXTRACTED_AUDIO = "extracted_audio"
     TITLE_CARD = "title_card"
 
+    @property
+    def is_audio(self) -> bool:
+        return self in {TakeMediaType.AUDIO, TakeMediaType.EXTRACTED_AUDIO}
+
 
 @dataclass(slots=True)
 class EpisodeTake:
@@ -105,7 +109,7 @@ class ReelRecipe:
         recipe metric, not a final render-duration guarantee.
         """
 
-        return sum(item.duration_ms for item in self.items if item.media_type != TakeMediaType.AUDIO)
+        return sum(item.duration_ms for item in self.items if not item.media_type.is_audio)
 
 
 @dataclass(slots=True)
