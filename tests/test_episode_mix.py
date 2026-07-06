@@ -9,14 +9,15 @@ from video_mix.core.episode_mix import (
 
 
 def _take(take_id: str, media_item_id: str | None = None, **overrides) -> EpisodeTake:
-    return EpisodeTake(
-        take_id=take_id,
-        label=take_id,
-        media_item_id=media_item_id or take_id,
-        source_start_ms=0,
-        source_end_ms=3_000,
-        **overrides,
-    )
+    payload = {
+        "take_id": take_id,
+        "label": take_id,
+        "media_item_id": media_item_id or take_id,
+        "source_start_ms": 0,
+        "source_end_ms": 3_000,
+    }
+    payload.update(overrides)
+    return EpisodeTake(**payload)
 
 
 def test_build_mix_plan_is_deterministic_with_seed() -> None:
