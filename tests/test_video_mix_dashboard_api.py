@@ -140,6 +140,8 @@ def test_video_mix_dashboard_reads_candidate_cards(tmp_path: Path) -> None:
     assert payload["candidates"][0]["source_filenames"] == ["rings_detail.mp4"]
     assert payload["project_materials"]["counts"]["unassigned"] == 1
     assert payload["project_materials"]["episodes"][0]["episode_id"] == "episode_001"
+    assert payload["project_materials"]["timeline"]["rows"][0]["episode_id"] == "episode_001"
+    assert payload["project_materials"]["timeline"]["has_blocks"] is False
 
 
 def test_video_mix_dashboard_approve_updates_candidate_status(tmp_path: Path, monkeypatch) -> None:
@@ -457,6 +459,8 @@ def test_video_mix_project_materials_reuse_marks_asset_as_reused(tmp_path: Path)
     payload = response.json()["dashboard"]["project_materials"]
     assert payload["counts"]["reused"] == 1
     assert len(payload["assets"][0]["assignments"]) == 2
+    assert payload["timeline"]["has_blocks"] is True
+    assert payload["timeline"]["rows"][1]["blocks"][0]["file_name"] == "rings_detail.mp4"
 
 
 def test_video_mix_project_materials_unassign_returns_asset_to_unassigned_when_last_take_removed(tmp_path: Path) -> None:

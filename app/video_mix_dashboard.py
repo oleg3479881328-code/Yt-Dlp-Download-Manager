@@ -307,6 +307,7 @@ def build_project_materials_payload(raw_work_dir: str) -> dict[str, Any]:
         )
 
     episodes = []
+    timeline_rows = []
     for episode in state["episodes"]:
         takes = []
         for take in episode["takes"]:
@@ -323,6 +324,24 @@ def build_project_materials_payload(raw_work_dir: str) -> dict[str, Any]:
                     "duration_ms": asset.duration_ms,
                 }
             )
+        timeline_rows.append(
+            {
+                "episode_id": episode["episode_id"],
+                "label": episode["label"],
+                "position": episode["position"],
+                "blocks": [
+                    {
+                        "take_id": take["take_id"],
+                        "asset_id": take["asset_id"],
+                        "mode": take["mode"],
+                        "file_name": take["file_name"],
+                        "media_type": take["media_type"],
+                        "duration_ms": take["duration_ms"],
+                    }
+                    for take in takes
+                ],
+            }
+        )
         episodes.append(
             {
                 "episode_id": episode["episode_id"],
@@ -334,6 +353,10 @@ def build_project_materials_payload(raw_work_dir: str) -> dict[str, Any]:
 
     return {
         "episodes": episodes,
+        "timeline": {
+            "rows": timeline_rows,
+            "has_blocks": any(row["blocks"] for row in timeline_rows),
+        },
         "assets": asset_cards,
         "counts": {
             "all": len(asset_cards),

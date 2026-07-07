@@ -115,6 +115,12 @@ const TRANSLATIONS = {
     materials_assignment_locations: "Назначено в",
     materials_reuse_hint: "Для повторного использования сначала выберите Episode.",
     materials_add_episode_done: "Episode добавлен",
+    timeline_title: "Timeline",
+    timeline_help: "Горизонтальные дорожки будущего монтажа, собранные из Episode/Take назначений.",
+    timeline_empty: "Назначьте хотя бы один Take, чтобы появился видимый timeline.",
+    timeline_row_empty: "В этой дорожке пока нет Take blocks.",
+    timeline_block_assigned: "Assigned",
+    timeline_block_reused: "Reused",
     load_state_materials_assigning: "Назначаю material в Episode...",
     load_state_materials_assigned: "Material назначен",
     load_state_materials_reusing: "Добавляю reuse material...",
@@ -317,6 +323,12 @@ const TRANSLATIONS = {
     materials_assignment_locations: "Assigned to",
     materials_reuse_hint: "Select an Episode first before reuse.",
     materials_add_episode_done: "Episode added",
+    timeline_title: "Timeline",
+    timeline_help: "Horizontal editing tracks built from the current Episode/Take assignments.",
+    timeline_empty: "Assign at least one Take to make the visible timeline appear.",
+    timeline_row_empty: "This track has no Take blocks yet.",
+    timeline_block_assigned: "Assigned",
+    timeline_block_reused: "Reused",
     load_state_materials_assigning: "Assigning material to Episode...",
     load_state_materials_assigned: "Material assigned",
     load_state_materials_reusing: "Reusing material...",
@@ -602,6 +614,8 @@ function applyStaticTranslations() {
     ["#vm-materials-stage-help", "materials_stage_help"],
     ["#vm-add-episode-btn", "materials_add_episode"],
     ["#vm-open-project-materials-inline-btn", "materials_open_modal"],
+    ["#vm-timeline-title", "timeline_title"],
+    ["#vm-timeline-help", "timeline_help"],
     ["#vm-project-materials-title", "materials_stage_title"],
     ["#vm-project-materials-help", "materials_modal_help"],
     ["#vm-close-project-materials-btn", "close_button"],
@@ -821,6 +835,47 @@ function renderMaterialEpisodes() {
   target.querySelectorAll(".video-mix-take-remove-btn").forEach((button) => {
     button.addEventListener("click", async () => {
       await unassignProjectMaterialTake(button.dataset.episodeId || "", button.dataset.takeId || "");
+    });
+  });
+}
+
+function renderMaterialTimeline() {
+  const target = qs("#vm-material-timeline");
+  if (!target) return;
+  const materials = projectMaterials();
+  const rows = materials.timeline?.rows || [];
+  const selectedEpisodeId = ensureSelectedMaterialEpisode();
+  if (!rows.length || !materials.timeline?.has_blocks) {
+    target.innerHTML = `<div class="empty">${escapeHtml(t("timeline_empty"))}</div>`;
+    return;
+  }
+  target.innerHTML = rows.map((row) => {
+    const blocks = (row.blocks || []).length
+      ? row.blocks.map((block) => `
+        <button class="video-mix-timeline-block${row.episode_id === selectedEpisodeId ? " is-selected" : ""}" type="button" data-timeline-episode-id="${escapeAttr(row.episode_id)}">
+          <strong>${escapeHtml(block.file_name)}</strong>
+          <span>${escapeHtml(block.media_type)} · ${escapeHtml(formatDurationMs(block.duration_ms || 0))}</span>
+          <span class="video-mix-timeline-block-mode">${escapeHtml(t(`timeline_block_${block.mode}`))}</span>
+        </button>
+      `).join("")
+      : `<div class="video-mix-timeline-row-empty">${escapeHtml(t("timeline_row_empty"))}</div>`;
+    return `
+      <div class="video-mix-timeline-row${row.episode_id === selectedEpisodeId ? " is-selected" : ""}">
+        <div class="video-mix-timeline-row-label">
+          <strong>${escapeHtml(row.label)}</strong>
+          <span class="muted">${escapeHtml(row.episode_id)}</span>
+        </div>
+        <div class="video-mix-timeline-track">
+          ${blocks}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  target.querySelectorAll("[data-timeline-episode-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedMaterialEpisodeId = button.dataset.timelineEpisodeId || "";
+      renderAll();
     });
   });
 }
@@ -1206,6 +1261,7 @@ function renderAll() {
   renderSourceScanSummary();
   renderQuickMixSummary();
   renderMaterialEpisodes();
+  renderMaterialTimeline();
   renderProjectMaterialsModal();
   renderProjectMeta();
   renderPipeline();
