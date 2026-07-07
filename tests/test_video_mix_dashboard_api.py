@@ -476,3 +476,48 @@ def test_video_mix_project_materials_unassign_returns_asset_to_unassigned_when_l
     payload = response.json()["dashboard"]["project_materials"]
     assert payload["counts"]["unassigned"] == 1
     assert payload["episodes"][0]["takes"] == []
+
+
+def test_video_mix_project_materials_reuse_unassign_cycle_keeps_unique_take_ids(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_001", "reuse": False},
+    )
+    client.post(
+        "/api/video-mix/project-materials/episodes",
+        json={"work_dir": str(work_dir)},
+    )
+
+    reuse_response = client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_002", "reuse": True},
+    )
+    payload = reuse_response.json()["dashboard"]["project_materials"]
+    second_take_id = payload["episodes"][1]["takes"][0]["take_id"]
+
+    response = client.post(
+        "/api/video-mix/project-materials/unassign",
+        json={"work_dir": str(work_dir), "episode_id": "episode_001", "take_id": payload["episodes"][0]["takes"][0]["take_id"]},
+    )
+    assert response.status_code == 200
+
+    third_assign_response = client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_001", "reuse": True},
+    )
+    assert third_assign_response.status_code == 200
+    payload = third_assign_response.json()["dashboard"]["project_materials"]
+    third_take_id = payload["episodes"][0]["takes"][0]["take_id"]
+
+    assert second_take_id != third_take_id
+
+    response = client.post(
+        "/api/video-mix/project-materials/unassign",
+        json={"work_dir": str(work_dir), "episode_id": "episode_002", "take_id": second_take_id},
+    )
+    assert response.status_code == 200
+    payload = response.json()["dashboard"]["project_materials"]
+    remaining_take_ids = [take["take_id"] for episode in payload["episodes"] for take in episode["takes"]]
+    assert second_take_id not in remaining_take_ids
+    assert third_take_id in remaining_take_ids

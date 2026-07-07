@@ -185,6 +185,7 @@ def _normalize_project_materials_state(raw_state: dict[str, Any] | None, asset_i
     state = raw_state or {}
     changed = False
     episodes = []
+    max_take_sequence = 0
     for index, raw_episode in enumerate(state.get("episodes", []), start=1):
         if not isinstance(raw_episode, dict):
             changed = True
@@ -198,9 +199,15 @@ def _normalize_project_materials_state(raw_state: dict[str, Any] | None, asset_i
             if not asset_id or asset_id not in asset_ids:
                 changed = True
                 continue
+            take_id = str(raw_take.get("take_id", "")).strip() or f"{asset_id}_take_{len(takes) + 1:03d}"
+            if take_id != str(raw_take.get("take_id", "")).strip():
+                changed = True
+            suffix = take_id.rsplit("_take_", 1)
+            if len(suffix) == 2 and suffix[1].isdigit():
+                max_take_sequence = max(max_take_sequence, int(suffix[1]))
             takes.append(
                 {
-                    "take_id": str(raw_take.get("take_id", "")).strip() or f"{asset_id}_take_{len(takes) + 1:03d}",
+                    "take_id": take_id,
                     "asset_id": asset_id,
                     "mode": "reused" if str(raw_take.get("mode", "assigned")) == "reused" else "assigned",
                 }
@@ -217,11 +224,16 @@ def _normalize_project_materials_state(raw_state: dict[str, Any] | None, asset_i
     if not episodes:
         episodes = [_default_material_episode(1)]
         changed = True
+    raw_next_take_sequence = int(state.get("next_take_sequence") or 0)
+    next_take_sequence = max(raw_next_take_sequence, max_take_sequence + 1, 1)
     normalized = {
         "version": PROJECT_MATERIALS_STATE_VERSION,
+        "next_take_sequence": next_take_sequence,
         "episodes": episodes,
     }
     if state.get("version") != PROJECT_MATERIALS_STATE_VERSION:
+        changed = True
+    if raw_next_take_sequence != next_take_sequence:
         changed = True
     return normalized, changed
 
@@ -348,8 +360,10 @@ def add_project_materials_episode(raw_work_dir: str, label: str = "") -> dict[st
     return build_dashboard_payload(str(work_dir))
 
 
-def _next_project_material_take_id(episode: dict[str, Any], asset_id: str) -> str:
-    return f"{asset_id}_take_{len(episode.get('takes', [])) + 1:03d}"
+def _next_project_material_take_id(state: dict[str, Any], asset_id: str) -> str:
+    next_take_sequence = int(state.get("next_take_sequence") or 1)
+    state["next_take_sequence"] = next_take_sequence + 1
+    return f"{asset_id}_take_{next_take_sequence:03d}"
 
 
 def assign_project_material(raw_work_dir: str, asset_id: str, episode_id: str, reuse: bool = False) -> dict[str, Any]:
@@ -368,7 +382,7 @@ def assign_project_material(raw_work_dir: str, asset_id: str, episode_id: str, r
         )
     episode["takes"].append(
         {
-            "take_id": _next_project_material_take_id(episode, asset_id),
+            "take_id": _next_project_material_take_id(state, asset_id),
             "asset_id": asset_id,
             "mode": "reused" if existing_assignments else "assigned",
         }
