@@ -20,15 +20,19 @@ from .path_safety import MissingPathError, UnsafePathError, resolve_existing_out
 from .segment_utils import SegmentValidationError, normalize_segment_payload
 from .storage import Storage
 from .video_mix_dashboard import (
-    build_dashboard_payload as build_video_mix_dashboard_payload,
-)
-from .video_mix_dashboard import (
+    add_project_materials_episode,
+    assign_project_material,
+    build_project_materials_payload,
     bulk_update_candidate_status,
     export_approved_candidates,
     open_dashboard_target,
     pick_dashboard_work_dir,
     pick_source_materials_dir,
     resolve_relative_work_path,
+    unassign_project_material,
+)
+from .video_mix_dashboard import (
+    build_dashboard_payload as build_video_mix_dashboard_payload,
 )
 from .video_mix_dashboard import (
     update_candidate_status as update_video_mix_candidate_status,
@@ -122,6 +126,24 @@ class VideoMixQuickMixRequest(BaseModel):
     work_dir: str = ""
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
+
+
+class VideoMixProjectMaterialsEpisodeRequest(BaseModel):
+    work_dir: str
+    label: str = ""
+
+
+class VideoMixProjectMaterialAssignRequest(BaseModel):
+    work_dir: str
+    asset_id: str
+    episode_id: str
+    reuse: bool = False
+
+
+class VideoMixProjectMaterialUnassignRequest(BaseModel):
+    work_dir: str
+    episode_id: str
+    take_id: str
 
 
 @asynccontextmanager
@@ -432,6 +454,29 @@ async def quick_mix_video_mix_source(payload: VideoMixQuickMixRequest) -> dict[s
         **result,
         "dashboard": build_video_mix_dashboard_payload(result["work_dir"]),
     }
+
+
+@app.get("/api/video-mix/project-materials")
+async def video_mix_project_materials(work_dir: str) -> dict[str, Any]:
+    return build_project_materials_payload(work_dir)
+
+
+@app.post("/api/video-mix/project-materials/episodes")
+async def create_video_mix_project_materials_episode(payload: VideoMixProjectMaterialsEpisodeRequest) -> dict[str, Any]:
+    dashboard = add_project_materials_episode(payload.work_dir, payload.label)
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/project-materials/assign")
+async def assign_video_mix_project_material(payload: VideoMixProjectMaterialAssignRequest) -> dict[str, Any]:
+    dashboard = assign_project_material(payload.work_dir, payload.asset_id, payload.episode_id, reuse=payload.reuse)
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/project-materials/unassign")
+async def unassign_video_mix_project_material(payload: VideoMixProjectMaterialUnassignRequest) -> dict[str, Any]:
+    dashboard = unassign_project_material(payload.work_dir, payload.episode_id, payload.take_id)
+    return {"ok": True, "dashboard": dashboard}
 
 
 @app.get("/api/video-mix/file")

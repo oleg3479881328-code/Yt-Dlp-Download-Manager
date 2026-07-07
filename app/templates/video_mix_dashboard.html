@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=video-mix-stage18-quick-mix">
+  <link rel="stylesheet" href="/static/styles.css?v=video-mix-stage22-project-materials">
 </head>
 <body>
   <div class="video-mix-shell">
@@ -52,6 +52,7 @@
           <button id="vm-source-browse-btn" class="ghost-btn" type="button">Выбрать материалы</button>
           <button id="vm-source-scan-btn" class="ghost-btn" type="button">Сканировать</button>
           <button id="vm-source-plan-btn" class="accent-btn" type="button">Создать / обновить проект</button>
+          <button id="vm-open-project-materials-btn" class="ghost-btn" type="button">Project Materials</button>
         </div>
         <div id="vm-source-scan-summary" class="video-mix-source-summary">
           <div class="empty">Скан материалов ещё не запускался.</div>
@@ -119,6 +120,34 @@
       </aside>
 
       <main class="video-mix-main">
+        <div class="card video-mix-materials-stage-card">
+          <div class="card-header">
+            <div>
+              <h2 id="vm-materials-stage-title">Project Materials</h2>
+              <p id="vm-materials-stage-help" class="muted">Один master asset в проекте, несколько Take-ссылок по назначению или reuse.</p>
+            </div>
+            <div class="actions-row video-mix-inline-actions">
+              <button id="vm-add-episode-btn" class="ghost-btn" type="button">Добавить Episode</button>
+              <button id="vm-open-project-materials-inline-btn" class="accent-btn" type="button">Открыть Project Materials</button>
+            </div>
+          </div>
+          <div id="vm-material-episodes" class="video-mix-episode-board">
+            <div class="empty">Загрузите work_dir, чтобы назначать материалы по Episode.</div>
+          </div>
+        </div>
+
+        <div class="card video-mix-timeline-card">
+          <div class="card-header">
+            <div>
+              <h2 id="vm-timeline-title">Timeline</h2>
+              <p id="vm-timeline-help" class="muted">Первый видимый монтажный таймлайн: Episode rows и Take blocks из текущих назначений.</p>
+            </div>
+          </div>
+          <div id="vm-material-timeline" class="video-mix-timeline-surface">
+            <div class="empty">Таймлайн появится после назначения Takes в Episodes.</div>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header">
             <div>
@@ -182,6 +211,45 @@
       </main>
     </section>
   </div>
-  <script type="module" src="/static/video-mix-dashboard.js?v=video-mix-stage18-quick-mix"></script>
+  <dialog id="vm-project-materials-modal" class="video-mix-modal">
+    <div class="video-mix-modal-card video-mix-project-materials-modal-card">
+      <div class="card-header">
+        <div>
+          <h2 id="vm-project-materials-title">Project Materials</h2>
+          <p id="vm-project-materials-help" class="muted">Все master assets проекта. По умолчанию drag = assign, повтор = только через explicit reuse.</p>
+        </div>
+        <button id="vm-close-project-materials-btn" class="ghost-btn" type="button">Закрыть</button>
+      </div>
+      <div class="video-mix-project-materials-toolbar">
+        <label class="field">
+          <span id="vm-project-materials-filter-status-label">Статус</span>
+          <select id="vm-project-materials-filter-status">
+            <option value="all">Все</option>
+            <option value="unassigned">Unassigned</option>
+            <option value="assigned">Assigned</option>
+            <option value="reused">Reused</option>
+          </select>
+        </label>
+        <label class="field">
+          <span id="vm-project-materials-filter-type-label">Тип</span>
+          <select id="vm-project-materials-filter-type">
+            <option value="all">Все</option>
+            <option value="video">Video</option>
+            <option value="photo">Photo</option>
+            <option value="audio">Audio</option>
+          </select>
+        </label>
+        <label class="field video-mix-search-field">
+          <span id="vm-project-materials-search-label">Поиск</span>
+          <input id="vm-project-materials-search" type="text" placeholder="filename">
+        </label>
+      </div>
+      <div id="vm-project-materials-counts" class="video-mix-project-materials-counts"></div>
+      <div id="vm-project-materials-grid" class="video-mix-project-materials-grid">
+        <div class="empty">Загрузите work_dir, чтобы увидеть материалы проекта.</div>
+      </div>
+    </div>
+  </dialog>
+  <script type="module" src="/static/video-mix-dashboard.js?v=video-mix-stage22-project-materials"></script>
 </body>
 </html>

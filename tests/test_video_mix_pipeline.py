@@ -6,6 +6,7 @@ from video_mix.core.review import (
     build_review_html,
     build_thumbnail_command,
     collect_existing_thumbnails,
+    generate_thumbnails,
     write_review_html,
 )
 from video_mix.core.storage import build_asset, build_candidate, build_clip, to_jsonable
@@ -171,6 +172,23 @@ def test_build_thumbnail_command_uses_clip_midpoint(tmp_path: Path) -> None:
     )
     command = build_thumbnail_command(clip, tmp_path / "thumb.jpg")
     assert command[:5] == ["ffmpeg", "-y", "-ss", "4.000", "-i"]
+
+
+def test_generate_thumbnails_returns_warning_when_ffmpeg_missing(tmp_path: Path) -> None:
+    clip = Clip(
+        clip_id="clip_1",
+        project_id="project_1",
+        asset_id="asset_1",
+        source_path=tmp_path / "demo.mp4",
+        source_start_ms=2000,
+        source_end_ms=6000,
+        segmenter=SegmenterName.FIXED_INTERVAL,
+    )
+
+    thumbnails, warnings = generate_thumbnails([clip], tmp_path, ffmpeg_path="ffmpeg-does-not-exist")
+
+    assert thumbnails == {}
+    assert warnings == {"clip_1": "ffmpeg-does-not-exist not found"}
 
 
 def test_collect_existing_thumbnails_uses_local_files(tmp_path: Path) -> None:

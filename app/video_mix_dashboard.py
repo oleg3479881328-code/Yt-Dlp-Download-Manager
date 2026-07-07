@@ -21,6 +21,7 @@ from video_mix.core.storage import (
     save_candidates,
     save_summary,
     work_file,
+    write_json,
 )
 
 ALLOWED_FILE_PREFIXES = (
@@ -28,6 +29,7 @@ ALLOWED_FILE_PREFIXES = (
     "reports/thumbnails/",
     "exports/",
 )
+PROJECT_MATERIALS_STATE_VERSION = 1
 
 
 def resolve_work_dir(raw_work_dir: str) -> Path:
@@ -166,6 +168,264 @@ def _status_totals(candidates: list[CandidateReel]) -> dict[str, int]:
     return counts
 
 
+def _project_materials_state_path(work_dir: Path) -> Path:
+    return work_file(work_dir, "project_materials_state.json")
+
+
+def _default_material_episode(position: int) -> dict[str, Any]:
+    return {
+        "episode_id": f"episode_{position:03d}",
+        "label": f"Episode {position}",
+        "position": position,
+        "takes": [],
+    }
+
+
+def _normalize_project_materials_state(raw_state: dict[str, Any] | None, asset_ids: set[str]) -> tuple[dict[str, Any], bool]:
+    state = raw_state or {}
+    changed = False
+    episodes = []
+    max_take_sequence = 0
+    for index, raw_episode in enumerate(state.get("episodes", []), start=1):
+        if not isinstance(raw_episode, dict):
+            changed = True
+            continue
+        takes = []
+        for raw_take in raw_episode.get("takes", []):
+            if not isinstance(raw_take, dict):
+                changed = True
+                continue
+            asset_id = str(raw_take.get("asset_id", "")).strip()
+            if not asset_id or asset_id not in asset_ids:
+                changed = True
+                continue
+            take_id = str(raw_take.get("take_id", "")).strip() or f"{asset_id}_take_{len(takes) + 1:03d}"
+            if take_id != str(raw_take.get("take_id", "")).strip():
+                changed = True
+            suffix = take_id.rsplit("_take_", 1)
+            if len(suffix) == 2 and suffix[1].isdigit():
+                max_take_sequence = max(max_take_sequence, int(suffix[1]))
+            takes.append(
+                {
+                    "take_id": take_id,
+                    "asset_id": asset_id,
+                    "mode": "reused" if str(raw_take.get("mode", "assigned")) == "reused" else "assigned",
+                }
+            )
+        episodes.append(
+            {
+                "episode_id": str(raw_episode.get("episode_id", "")).strip() or f"episode_{index:03d}",
+                "label": str(raw_episode.get("label", "")).strip() or f"Episode {index}",
+                "position": int(raw_episode.get("position") or index),
+                "takes": takes,
+            }
+        )
+    episodes.sort(key=lambda episode: episode["position"])
+    if not episodes:
+        episodes = [_default_material_episode(1)]
+        changed = True
+    raw_next_take_sequence = int(state.get("next_take_sequence") or 0)
+    next_take_sequence = max(raw_next_take_sequence, max_take_sequence + 1, 1)
+    normalized = {
+        "version": PROJECT_MATERIALS_STATE_VERSION,
+        "next_take_sequence": next_take_sequence,
+        "episodes": episodes,
+    }
+    if state.get("version") != PROJECT_MATERIALS_STATE_VERSION:
+        changed = True
+    if raw_next_take_sequence != next_take_sequence:
+        changed = True
+    return normalized, changed
+
+
+def _load_project_materials_state(work_dir: Path) -> tuple[dict[str, Any], list[Asset]]:
+    assets = load_assets(work_dir)
+    asset_ids = {asset.asset_id for asset in assets}
+    state_path = _project_materials_state_path(work_dir)
+    raw_state = read_json(state_path) if state_path.exists() else None
+    state, changed = _normalize_project_materials_state(raw_state, asset_ids)
+    if changed or not state_path.exists():
+        write_json(state_path, state)
+    return state, assets
+
+
+def _save_project_materials_state(work_dir: Path, state: dict[str, Any]) -> None:
+    write_json(_project_materials_state_path(work_dir), state)
+
+
+def _find_material_episode(state: dict[str, Any], episode_id: str) -> dict[str, Any]:
+    for episode in state["episodes"]:
+        if episode["episode_id"] == episode_id:
+            return episode
+    raise HTTPException(status_code=404, detail=f"Project materials episode not found: {episode_id}")
+
+
+def _asset_assignment_rows(state: dict[str, Any], assets: list[Asset]) -> dict[str, list[dict[str, Any]]]:
+    asset_lookup = {asset.asset_id: asset for asset in assets}
+    assignments_by_asset: dict[str, list[dict[str, Any]]] = {asset.asset_id: [] for asset in assets}
+    for episode in state["episodes"]:
+        for take in episode.get("takes", []):
+            asset = asset_lookup.get(take["asset_id"])
+            if asset is None:
+                continue
+            assignments_by_asset.setdefault(asset.asset_id, []).append(
+                {
+                    "episode_id": episode["episode_id"],
+                    "episode_label": episode["label"],
+                    "take_id": take["take_id"],
+                    "mode": take["mode"],
+                }
+            )
+    return assignments_by_asset
+
+
+def build_project_materials_payload(raw_work_dir: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, assets = _load_project_materials_state(work_dir)
+    assignments_by_asset = _asset_assignment_rows(state, assets)
+    asset_lookup = {asset.asset_id: asset for asset in assets}
+
+    asset_cards = []
+    for asset in sorted(assets, key=lambda item: item.path.name.lower()):
+        assignments = assignments_by_asset.get(asset.asset_id, [])
+        assignment_state = "unassigned"
+        if len(assignments) == 1:
+            assignment_state = "assigned"
+        elif len(assignments) > 1:
+            assignment_state = "reused"
+        asset_cards.append(
+            {
+                "asset_id": asset.asset_id,
+                "file_name": asset.path.name,
+                "source_path": str(asset.path),
+                "media_type": asset.media_type.value,
+                "duration_ms": asset.duration_ms,
+                "has_audio": asset.has_audio,
+                "assignment_state": assignment_state,
+                "assignments": assignments,
+            }
+        )
+
+    episodes = []
+    timeline_rows = []
+    for episode in state["episodes"]:
+        takes = []
+        for take in episode["takes"]:
+            asset = asset_lookup.get(take["asset_id"])
+            if asset is None:
+                continue
+            takes.append(
+                {
+                    "take_id": take["take_id"],
+                    "asset_id": take["asset_id"],
+                    "mode": take["mode"],
+                    "file_name": asset.path.name,
+                    "media_type": asset.media_type.value,
+                    "duration_ms": asset.duration_ms,
+                }
+            )
+        timeline_rows.append(
+            {
+                "episode_id": episode["episode_id"],
+                "label": episode["label"],
+                "position": episode["position"],
+                "blocks": [
+                    {
+                        "take_id": take["take_id"],
+                        "asset_id": take["asset_id"],
+                        "mode": take["mode"],
+                        "file_name": take["file_name"],
+                        "media_type": take["media_type"],
+                        "duration_ms": take["duration_ms"],
+                    }
+                    for take in takes
+                ],
+            }
+        )
+        episodes.append(
+            {
+                "episode_id": episode["episode_id"],
+                "label": episode["label"],
+                "position": episode["position"],
+                "takes": takes,
+            }
+        )
+
+    return {
+        "episodes": episodes,
+        "timeline": {
+            "rows": timeline_rows,
+            "has_blocks": any(row["blocks"] for row in timeline_rows),
+        },
+        "assets": asset_cards,
+        "counts": {
+            "all": len(asset_cards),
+            "unassigned": sum(asset["assignment_state"] == "unassigned" for asset in asset_cards),
+            "assigned": sum(asset["assignment_state"] == "assigned" for asset in asset_cards),
+            "reused": sum(asset["assignment_state"] == "reused" for asset in asset_cards),
+        },
+    }
+
+
+def add_project_materials_episode(raw_work_dir: str, label: str = "") -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, _assets = _load_project_materials_state(work_dir)
+    next_position = max((int(episode["position"]) for episode in state["episodes"]), default=0) + 1
+    state["episodes"].append(
+        {
+            "episode_id": f"episode_{next_position:03d}",
+            "label": label.strip() or f"Episode {next_position}",
+            "position": next_position,
+            "takes": [],
+        }
+    )
+    _save_project_materials_state(work_dir, state)
+    return build_dashboard_payload(str(work_dir))
+
+
+def _next_project_material_take_id(state: dict[str, Any], asset_id: str) -> str:
+    next_take_sequence = int(state.get("next_take_sequence") or 1)
+    state["next_take_sequence"] = next_take_sequence + 1
+    return f"{asset_id}_take_{next_take_sequence:03d}"
+
+
+def assign_project_material(raw_work_dir: str, asset_id: str, episode_id: str, reuse: bool = False) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, assets = _load_project_materials_state(work_dir)
+    asset_lookup = {asset.asset_id: asset for asset in assets}
+    if asset_id not in asset_lookup:
+        raise HTTPException(status_code=404, detail=f"Project material asset not found: {asset_id}")
+    episode = _find_material_episode(state, episode_id)
+    assignments_by_asset = _asset_assignment_rows(state, assets)
+    existing_assignments = assignments_by_asset.get(asset_id, [])
+    if existing_assignments and not reuse:
+        raise HTTPException(
+            status_code=409,
+            detail="Asset is already assigned. Use explicit reuse to place the same source again.",
+        )
+    episode["takes"].append(
+        {
+            "take_id": _next_project_material_take_id(state, asset_id),
+            "asset_id": asset_id,
+            "mode": "reused" if existing_assignments else "assigned",
+        }
+    )
+    _save_project_materials_state(work_dir, state)
+    return build_dashboard_payload(str(work_dir))
+
+
+def unassign_project_material(raw_work_dir: str, episode_id: str, take_id: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, _assets = _load_project_materials_state(work_dir)
+    episode = _find_material_episode(state, episode_id)
+    before = len(episode["takes"])
+    episode["takes"] = [take for take in episode["takes"] if take["take_id"] != take_id]
+    if len(episode["takes"]) == before:
+        raise HTTPException(status_code=404, detail=f"Project material take not found: {take_id}")
+    _save_project_materials_state(work_dir, state)
+    return build_dashboard_payload(str(work_dir))
+
+
 def _build_candidate_card(work_dir: Path, candidate: CandidateReel, clip_lookup: dict[str, Clip], asset_lookup: dict[str, Asset]) -> dict[str, Any]:
     source_filenames: list[str] = []
     source_clips: list[dict[str, Any]] = []
@@ -228,6 +488,7 @@ def build_dashboard_payload(raw_work_dir: str) -> dict[str, Any]:
             "root_path": str(project.root_path),
         },
         "work_dir": str(work_dir),
+        "project_materials": build_project_materials_payload(str(work_dir)),
         "summary": {
             **summary,
             "status_totals": _status_totals(candidates),
