@@ -138,6 +138,8 @@ def test_video_mix_dashboard_reads_candidate_cards(tmp_path: Path) -> None:
     assert payload["candidates"][0]["candidate_id"] == "cand_1"
     assert payload["candidates"][0]["thumbnail_path"] == "reports/thumbnails/clip_1.jpg"
     assert payload["candidates"][0]["source_filenames"] == ["rings_detail.mp4"]
+    assert payload["project_materials"]["counts"]["unassigned"] == 1
+    assert payload["project_materials"]["episodes"][0]["episode_id"] == "episode_001"
 
 
 def test_video_mix_dashboard_approve_updates_candidate_status(tmp_path: Path, monkeypatch) -> None:
@@ -398,3 +400,79 @@ def test_video_mix_dashboard_quick_mix_returns_output_paths_and_dashboard(tmp_pa
     assert payload["photo_support"] is True
     assert payload["output_paths"] == ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"]
     assert payload["dashboard"]["summary"]["candidate_count"] == 1
+
+
+def test_video_mix_project_materials_assigns_unassigned_asset_to_episode(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+
+    response = client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_001", "reuse": False},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["dashboard"]["project_materials"]
+    assert payload["counts"]["unassigned"] == 0
+    assert payload["counts"]["assigned"] == 1
+    assert payload["episodes"][0]["takes"][0]["asset_id"] == "asset_1"
+
+
+def test_video_mix_project_materials_requires_explicit_reuse_for_second_assignment(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_001", "reuse": False},
+    )
+    client.post(
+        "/api/video-mix/project-materials/episodes",
+        json={"work_dir": str(work_dir)},
+    )
+
+    response = client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_002", "reuse": False},
+    )
+
+    assert response.status_code == 409
+    assert "explicit reuse" in response.json()["detail"]
+
+
+def test_video_mix_project_materials_reuse_marks_asset_as_reused(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_001", "reuse": False},
+    )
+    client.post(
+        "/api/video-mix/project-materials/episodes",
+        json={"work_dir": str(work_dir)},
+    )
+
+    response = client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_002", "reuse": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["dashboard"]["project_materials"]
+    assert payload["counts"]["reused"] == 1
+    assert len(payload["assets"][0]["assignments"]) == 2
+
+
+def test_video_mix_project_materials_unassign_returns_asset_to_unassigned_when_last_take_removed(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    assign_response = client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_001", "reuse": False},
+    )
+    take_id = assign_response.json()["dashboard"]["project_materials"]["episodes"][0]["takes"][0]["take_id"]
+
+    response = client.post(
+        "/api/video-mix/project-materials/unassign",
+        json={"work_dir": str(work_dir), "episode_id": "episode_001", "take_id": take_id},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["dashboard"]["project_materials"]
+    assert payload["counts"]["unassigned"] == 1
+    assert payload["episodes"][0]["takes"] == []

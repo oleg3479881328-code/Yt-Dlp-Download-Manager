@@ -15,6 +15,12 @@ const state = {
     search: "",
     sort: "score_desc",
   },
+  projectMaterialsFilters: {
+    status: "all",
+    mediaType: "all",
+    search: "",
+  },
+  selectedMaterialEpisodeId: "",
 };
 
 const STATUS_ORDER = {
@@ -39,6 +45,7 @@ const TRANSLATIONS = {
     source_browse: "Выбрать материалы",
     source_scan: "Сканировать",
     source_plan: "Создать / обновить проект",
+    source_open_materials: "Project Materials",
     source_scan_empty: "Скан материалов ещё не запускался.",
     source_scan_result_title: "Результат сканирования",
     source_scan_total_files: "Всего файлов",
@@ -73,6 +80,7 @@ const TRANSLATIONS = {
     browse_workdir: "Выбрать папку",
     load_dashboard: "Загрузить дашборд",
     copy_url: "Копировать URL",
+    close_button: "Закрыть",
     project_meta_empty: "Загрузите work_dir, чтобы увидеть метаданные проекта и сводные счётчики.",
     pipeline_title: "Пайплайн",
     pipeline_help: "Путь от ассетов до экспорта в одном локальном процессе.",
@@ -80,6 +88,42 @@ const TRANSLATIONS = {
     actions_help: "Используется только текущее поведение VIDEO MIX.",
     export_approved: "Экспортировать одобренных кандидатов",
     refresh_dashboard: "Обновить дашборд",
+    materials_stage_title: "Project Materials",
+    materials_stage_help: "Логическое назначение master asset -> Episode -> Take без перемещения файлов на диске.",
+    materials_open_modal: "Открыть Project Materials",
+    materials_add_episode: "Добавить Episode",
+    materials_modal_help: "Drag unassigned asset в Episode. Повтор того же asset — только через explicit reuse.",
+    materials_filter_status: "Статус",
+    materials_filter_type: "Тип",
+    materials_search: "Поиск",
+    materials_search_placeholder: "имя файла",
+    materials_count_all: "Всего",
+    materials_count_unassigned: "Unassigned",
+    materials_count_assigned: "Assigned",
+    materials_count_reused: "Reused",
+    materials_asset_unassigned: "Unassigned",
+    materials_asset_assigned: "Assigned",
+    materials_asset_reused: "Reused",
+    materials_assign_here: "Assign сюда",
+    materials_reuse_here: "Use again",
+    materials_episode_selected: "Активный Episode",
+    materials_episode_drop: "Перетащите сюда material card",
+    materials_episode_empty: "В этом Episode пока нет Takes.",
+    materials_take_remove: "Убрать",
+    materials_no_assets: "Нет материалов под текущие фильтры.",
+    materials_no_episodes: "Episodes появятся после загрузки work_dir.",
+    materials_assignment_locations: "Назначено в",
+    materials_reuse_hint: "Для повторного использования сначала выберите Episode.",
+    materials_add_episode_done: "Episode добавлен",
+    load_state_materials_assigning: "Назначаю material в Episode...",
+    load_state_materials_assigned: "Material назначен",
+    load_state_materials_reusing: "Добавляю reuse material...",
+    load_state_materials_reused: "Material повторно использован",
+    load_state_materials_unassigning: "Убираю Take...",
+    load_state_materials_unassigned: "Take убран",
+    load_state_materials_episode_needed: "Сначала выберите Episode",
+    load_state_materials_modal_opened: "Project Materials открыт",
+    request_asset_reuse: "Материал уже назначен. Используйте explicit reuse.",
     candidates_title: "Карточки кандидатов",
     candidates_help: "Миниатюра, score, template, предупреждения, исходные файлы и быстрые действия.",
     filter_status_label: "Статус",
@@ -203,6 +247,7 @@ const TRANSLATIONS = {
     source_browse: "Browse materials",
     source_scan: "Scan",
     source_plan: "Create / update project",
+    source_open_materials: "Project Materials",
     source_scan_empty: "Materials scan has not been run yet.",
     source_scan_result_title: "Scan result",
     source_scan_total_files: "Total files",
@@ -237,6 +282,7 @@ const TRANSLATIONS = {
     browse_workdir: "Browse folder",
     load_dashboard: "Load dashboard",
     copy_url: "Copy URL",
+    close_button: "Close",
     project_meta_empty: "Load a work_dir to see project metadata and summary counts.",
     pipeline_title: "Pipeline",
     pipeline_help: "Path from assets to export in one local flow.",
@@ -244,6 +290,42 @@ const TRANSLATIONS = {
     actions_help: "Use existing VIDEO MIX behavior only.",
     export_approved: "Export approved candidates",
     refresh_dashboard: "Refresh dashboard",
+    materials_stage_title: "Project Materials",
+    materials_stage_help: "Logical master asset -> Episode -> Take assignment without moving files on disk.",
+    materials_open_modal: "Open Project Materials",
+    materials_add_episode: "Add Episode",
+    materials_modal_help: "Drag an unassigned asset into an Episode. Reuse the same asset only through explicit reuse.",
+    materials_filter_status: "Status",
+    materials_filter_type: "Type",
+    materials_search: "Search",
+    materials_search_placeholder: "filename",
+    materials_count_all: "All",
+    materials_count_unassigned: "Unassigned",
+    materials_count_assigned: "Assigned",
+    materials_count_reused: "Reused",
+    materials_asset_unassigned: "Unassigned",
+    materials_asset_assigned: "Assigned",
+    materials_asset_reused: "Reused",
+    materials_assign_here: "Assign here",
+    materials_reuse_here: "Use again",
+    materials_episode_selected: "Active Episode",
+    materials_episode_drop: "Drop a material card here",
+    materials_episode_empty: "This Episode has no Takes yet.",
+    materials_take_remove: "Remove",
+    materials_no_assets: "No project materials match the current filters.",
+    materials_no_episodes: "Episodes will appear after loading a work_dir.",
+    materials_assignment_locations: "Assigned to",
+    materials_reuse_hint: "Select an Episode first before reuse.",
+    materials_add_episode_done: "Episode added",
+    load_state_materials_assigning: "Assigning material to Episode...",
+    load_state_materials_assigned: "Material assigned",
+    load_state_materials_reusing: "Reusing material...",
+    load_state_materials_reused: "Material reused",
+    load_state_materials_unassigning: "Removing Take...",
+    load_state_materials_unassigned: "Take removed",
+    load_state_materials_episode_needed: "Select an Episode first",
+    load_state_materials_modal_opened: "Project Materials opened",
+    request_asset_reuse: "This asset is already assigned. Use explicit reuse.",
     candidates_title: "Candidate cards",
     candidates_help: "Thumbnail, score, template, warnings, source files, and direct actions.",
     filter_status_label: "Status",
@@ -504,6 +586,7 @@ function applyStaticTranslations() {
     ["#vm-source-browse-btn", "source_browse"],
     ["#vm-source-scan-btn", "source_scan"],
     ["#vm-source-plan-btn", "source_plan"],
+    ["#vm-open-project-materials-btn", "source_open_materials"],
     ["#vm-quickmix-btn", "quickmix_button"],
     ["#vm-workdir-label", "workdir_label"],
     ["#vm-browse-workdir-btn", "browse_workdir"],
@@ -515,6 +598,16 @@ function applyStaticTranslations() {
     ["#vm-actions-help", "actions_help"],
     ["#vm-export-btn", "export_approved"],
     ["#vm-refresh-btn", "refresh_dashboard"],
+    ["#vm-materials-stage-title", "materials_stage_title"],
+    ["#vm-materials-stage-help", "materials_stage_help"],
+    ["#vm-add-episode-btn", "materials_add_episode"],
+    ["#vm-open-project-materials-inline-btn", "materials_open_modal"],
+    ["#vm-project-materials-title", "materials_stage_title"],
+    ["#vm-project-materials-help", "materials_modal_help"],
+    ["#vm-close-project-materials-btn", "close_button"],
+    ["#vm-project-materials-filter-status-label", "materials_filter_status"],
+    ["#vm-project-materials-filter-type-label", "materials_filter_type"],
+    ["#vm-project-materials-search-label", "materials_search"],
     ["#vm-candidates-title", "candidates_title"],
     ["#vm-candidates-help", "candidates_help"],
     ["#vm-filter-status-label", "filter_status_label"],
@@ -570,6 +663,10 @@ function applyStaticTranslations() {
   if (sourceWorkDirInput) {
     sourceWorkDirInput.placeholder = "C:\\path\\to\\source_materials\\_video_mix_work";
   }
+  const projectMaterialsSearch = qs("#vm-project-materials-search");
+  if (projectMaterialsSearch) {
+    projectMaterialsSearch.placeholder = t("materials_search_placeholder");
+  }
 
   const localeButtons = [
     ["#vm-lang-ru", "ru"],
@@ -622,6 +719,165 @@ function renderSourceScanSummary() {
       ${moreLine}
     </div>
   `;
+}
+
+function projectMaterials() {
+  return state.dashboard?.project_materials || { episodes: [], assets: [], counts: { all: 0, unassigned: 0, assigned: 0, reused: 0 } };
+}
+
+function ensureSelectedMaterialEpisode() {
+  const episodes = projectMaterials().episodes || [];
+  if (!episodes.length) {
+    state.selectedMaterialEpisodeId = "";
+    return "";
+  }
+  if (!episodes.some((episode) => episode.episode_id === state.selectedMaterialEpisodeId)) {
+    state.selectedMaterialEpisodeId = episodes[0].episode_id;
+  }
+  return state.selectedMaterialEpisodeId;
+}
+
+function filteredProjectMaterialsAssets() {
+  const materials = projectMaterials();
+  return (materials.assets || []).filter((asset) => {
+    if (state.projectMaterialsFilters.status !== "all" && asset.assignment_state !== state.projectMaterialsFilters.status) {
+      return false;
+    }
+    if (state.projectMaterialsFilters.mediaType !== "all" && asset.media_type !== state.projectMaterialsFilters.mediaType) {
+      return false;
+    }
+    if (state.projectMaterialsFilters.search) {
+      const haystack = `${asset.file_name} ${asset.source_path}`.toLowerCase();
+      if (!haystack.includes(state.projectMaterialsFilters.search)) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+function renderMaterialEpisodes() {
+  const target = qs("#vm-material-episodes");
+  if (!target) return;
+  const materials = projectMaterials();
+  const episodes = materials.episodes || [];
+  const selectedEpisodeId = ensureSelectedMaterialEpisode();
+  if (!episodes.length) {
+    target.innerHTML = `<div class="empty">${escapeHtml(t("materials_no_episodes"))}</div>`;
+    return;
+  }
+  target.innerHTML = episodes.map((episode) => {
+    const takes = (episode.takes || []).length
+      ? episode.takes.map((take) => `
+        <div class="video-mix-take-chip">
+          <div>
+            <strong>${escapeHtml(take.file_name)}</strong>
+            <div class="muted">${escapeHtml(t(`materials_asset_${take.mode}`))} · ${escapeHtml(take.media_type)} · ${escapeHtml(formatDurationMs(take.duration_ms || 0))}</div>
+          </div>
+          <button class="ghost-btn video-mix-take-remove-btn" type="button" data-episode-id="${escapeAttr(episode.episode_id)}" data-take-id="${escapeAttr(take.take_id)}">${escapeHtml(t("materials_take_remove"))}</button>
+        </div>
+      `).join("")
+      : `<div class="empty compact">${escapeHtml(t("materials_episode_empty"))}</div>`;
+    return `
+      <article class="video-mix-episode-card${episode.episode_id === selectedEpisodeId ? " is-selected" : ""}" data-episode-id="${escapeAttr(episode.episode_id)}">
+        <div class="video-mix-episode-header">
+          <div>
+            <h3>${escapeHtml(episode.label)}</h3>
+            <div class="muted">${escapeHtml(episode.episode_id)}</div>
+          </div>
+          <span class="status-chip ${episode.episode_id === selectedEpisodeId ? "status-active" : "status-idle"}">${escapeHtml(episode.episode_id === selectedEpisodeId ? t("materials_episode_selected") : `${(episode.takes || []).length} takes`)}</span>
+        </div>
+        <div class="video-mix-episode-drop-zone" data-episode-drop="${escapeAttr(episode.episode_id)}">${escapeHtml(t("materials_episode_drop"))}</div>
+        <div class="video-mix-episode-takes">${takes}</div>
+      </article>
+    `;
+  }).join("");
+
+  target.querySelectorAll("[data-episode-id]").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button")) return;
+      state.selectedMaterialEpisodeId = card.dataset.episodeId || "";
+      renderAll();
+    });
+  });
+  target.querySelectorAll("[data-episode-drop]").forEach((zone) => {
+    ["dragenter", "dragover"].forEach((eventName) => {
+      zone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        zone.classList.add("is-dragover");
+      });
+    });
+    ["dragleave", "dragend", "drop"].forEach((eventName) => {
+      zone.addEventListener(eventName, () => zone.classList.remove("is-dragover"));
+    });
+    zone.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      const raw = event.dataTransfer?.getData("application/json") || "";
+      if (!raw) return;
+      const payload = JSON.parse(raw);
+      await assignProjectMaterialToEpisode(payload.asset_id, zone.dataset.episodeDrop || "", Boolean(payload.reuse));
+    });
+  });
+  target.querySelectorAll(".video-mix-take-remove-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await unassignProjectMaterialTake(button.dataset.episodeId || "", button.dataset.takeId || "");
+    });
+  });
+}
+
+function renderProjectMaterialsModal() {
+  const countsTarget = qs("#vm-project-materials-counts");
+  const gridTarget = qs("#vm-project-materials-grid");
+  if (!countsTarget || !gridTarget) return;
+  const materials = projectMaterials();
+  const assets = filteredProjectMaterialsAssets();
+  const selectedEpisodeId = ensureSelectedMaterialEpisode();
+  countsTarget.innerHTML = `
+    <span class="status-chip status-idle">${escapeHtml(t("materials_count_all"))}: ${escapeHtml(materials.counts?.all || 0)}</span>
+    <span class="status-chip status-idle">${escapeHtml(t("materials_count_unassigned"))}: ${escapeHtml(materials.counts?.unassigned || 0)}</span>
+    <span class="status-chip status-idle">${escapeHtml(t("materials_count_assigned"))}: ${escapeHtml(materials.counts?.assigned || 0)}</span>
+    <span class="status-chip status-idle">${escapeHtml(t("materials_count_reused"))}: ${escapeHtml(materials.counts?.reused || 0)}</span>
+  `;
+  if (!assets.length) {
+    gridTarget.innerHTML = `<div class="empty">${escapeHtml(t("materials_no_assets"))}</div>`;
+    return;
+  }
+  gridTarget.innerHTML = assets.map((asset) => {
+    const assignments = (asset.assignments || []).map((assignment) => assignment.episode_label).join(", ");
+    const isUnassigned = asset.assignment_state === "unassigned";
+    return `
+      <article class="video-mix-material-card" draggable="${isUnassigned ? "true" : "false"}" data-asset-id="${escapeAttr(asset.asset_id)}">
+        <div class="video-mix-material-thumb">${escapeHtml(String(asset.media_type || "file").slice(0, 1).toUpperCase())}</div>
+        <div class="video-mix-material-body">
+          <strong>${escapeHtml(asset.file_name)}</strong>
+          <div class="muted">${escapeHtml(asset.media_type)} · ${escapeHtml(formatDurationMs(asset.duration_ms || 0))}</div>
+          <div class="status-chip status-idle">${escapeHtml(t(`materials_asset_${asset.assignment_state}`))}</div>
+          ${assignments ? `<div class="muted">${escapeHtml(t("materials_assignment_locations"))}: ${escapeHtml(assignments)}</div>` : ""}
+        </div>
+        <div class="video-mix-material-actions">
+          <button class="ghost-btn video-mix-material-assign-btn" type="button" data-asset-id="${escapeAttr(asset.asset_id)}" ${selectedEpisodeId ? "" : "disabled"}>${escapeHtml(t("materials_assign_here"))}</button>
+          <button class="ghost-btn video-mix-material-reuse-btn" type="button" data-asset-id="${escapeAttr(asset.asset_id)}" ${selectedEpisodeId ? "" : "disabled"}>${escapeHtml(t("materials_reuse_here"))}</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+  gridTarget.querySelectorAll(".video-mix-material-card[draggable='true']").forEach((card) => {
+    card.addEventListener("dragstart", (event) => {
+      const payload = { asset_id: card.dataset.assetId, reuse: false };
+      event.dataTransfer?.setData("application/json", JSON.stringify(payload));
+      event.dataTransfer.effectAllowed = "move";
+    });
+  });
+  gridTarget.querySelectorAll(".video-mix-material-assign-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await assignProjectMaterialToEpisode(button.dataset.assetId || "", ensureSelectedMaterialEpisode(), false);
+    });
+  });
+  gridTarget.querySelectorAll(".video-mix-material-reuse-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await assignProjectMaterialToEpisode(button.dataset.assetId || "", ensureSelectedMaterialEpisode(), true);
+    });
+  });
 }
 
 function renderQuickMixSummary() {
@@ -949,6 +1205,8 @@ function renderAll() {
   syncSelectionToVisible();
   renderSourceScanSummary();
   renderQuickMixSummary();
+  renderMaterialEpisodes();
+  renderProjectMaterialsModal();
   renderProjectMeta();
   renderPipeline();
   renderCandidates();
@@ -1302,6 +1560,92 @@ function copyCurrentUrl() {
   setLocalizedLoadState("url_copied", "status-completed");
 }
 
+function openProjectMaterialsModal() {
+  if (!state.workDir || !state.dashboard) {
+    setLocalizedLoadState("load_state_enter_workdir", "status-failed");
+    return;
+  }
+  ensureSelectedMaterialEpisode();
+  qs("#vm-project-materials-modal")?.showModal();
+  setLocalizedLoadState("load_state_materials_modal_opened", "status-completed");
+}
+
+function closeProjectMaterialsModal() {
+  qs("#vm-project-materials-modal")?.close();
+}
+
+async function createProjectMaterialsEpisode() {
+  if (!state.workDir) {
+    setLocalizedLoadState("load_state_enter_workdir", "status-failed");
+    return;
+  }
+  try {
+    const payload = await fetchJson("/api/video-mix/project-materials/episodes", {
+      method: "POST",
+      body: JSON.stringify({ work_dir: state.workDir }),
+    });
+    applyDashboardPayload(payload.dashboard);
+    ensureSelectedMaterialEpisode();
+    setLocalizedLoadState("materials_add_episode_done", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function assignProjectMaterialToEpisode(assetId, episodeId, reuse = false) {
+  if (!state.workDir) {
+    setLocalizedLoadState("load_state_enter_workdir", "status-failed");
+    return;
+  }
+  if (!episodeId) {
+    setLocalizedLoadState("load_state_materials_episode_needed", "status-failed");
+    return;
+  }
+  setLocalizedLoadState(reuse ? "load_state_materials_reusing" : "load_state_materials_assigning", "status-downloading");
+  try {
+    const payload = await fetchJson("/api/video-mix/project-materials/assign", {
+      method: "POST",
+      body: JSON.stringify({
+        work_dir: state.workDir,
+        asset_id: assetId,
+        episode_id: episodeId,
+        reuse,
+      }),
+    });
+    applyDashboardPayload(payload.dashboard);
+    state.selectedMaterialEpisodeId = episodeId;
+    setLocalizedLoadState(reuse ? "load_state_materials_reused" : "load_state_materials_assigned", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function unassignProjectMaterialTake(episodeId, takeId) {
+  if (!state.workDir) {
+    setLocalizedLoadState("load_state_enter_workdir", "status-failed");
+    return;
+  }
+  setLocalizedLoadState("load_state_materials_unassigning", "status-downloading");
+  try {
+    const payload = await fetchJson("/api/video-mix/project-materials/unassign", {
+      method: "POST",
+      body: JSON.stringify({
+        work_dir: state.workDir,
+        episode_id: episodeId,
+        take_id: takeId,
+      }),
+    });
+    applyDashboardPayload(payload.dashboard);
+    state.selectedMaterialEpisodeId = episodeId;
+    setLocalizedLoadState("load_state_materials_unassigned", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
 function bindFilterControls() {
   qs("#vm-filter-status").onchange = (event) => {
     state.filters.status = event.target.value;
@@ -1319,6 +1663,18 @@ function bindFilterControls() {
     state.filters.search = String(event.target.value || "").trim().toLowerCase();
     renderAll();
   };
+  qs("#vm-project-materials-filter-status").onchange = (event) => {
+    state.projectMaterialsFilters.status = event.target.value;
+    renderProjectMaterialsModal();
+  };
+  qs("#vm-project-materials-filter-type").onchange = (event) => {
+    state.projectMaterialsFilters.mediaType = event.target.value;
+    renderProjectMaterialsModal();
+  };
+  qs("#vm-project-materials-search").oninput = (event) => {
+    state.projectMaterialsFilters.search = String(event.target.value || "").trim().toLowerCase();
+    renderProjectMaterialsModal();
+  };
 }
 
 function bindActions() {
@@ -1327,6 +1683,7 @@ function bindActions() {
   qs("#vm-source-browse-btn").onclick = () => browseSourceDir();
   qs("#vm-source-scan-btn").onclick = () => scanSourceMaterials();
   qs("#vm-source-plan-btn").onclick = () => planSourceMaterials();
+  qs("#vm-open-project-materials-btn").onclick = () => openProjectMaterialsModal();
   qs("#vm-quickmix-btn").onclick = () => quickMixSourceMaterials();
   qs("#vm-browse-workdir-btn").onclick = () => browseWorkDir();
   qs("#vm-load-btn").onclick = () => loadDashboard();
@@ -1335,6 +1692,9 @@ function bindActions() {
   qs("#vm-open-review").onclick = () => openTarget("review");
   qs("#vm-open-exports").onclick = () => openTarget("exports");
   qs("#vm-open-workdir").onclick = () => openTarget("work_dir");
+  qs("#vm-add-episode-btn").onclick = () => createProjectMaterialsEpisode();
+  qs("#vm-open-project-materials-inline-btn").onclick = () => openProjectMaterialsModal();
+  qs("#vm-close-project-materials-btn").onclick = () => closeProjectMaterialsModal();
   qs("#vm-copy-url-btn").onclick = () => copyCurrentUrl();
   qs("#vm-select-visible").onclick = () => selectVisibleCandidates();
   qs("#vm-clear-selection").onclick = () => clearSelection();
