@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from .quick_mix_diversity_models import DiversityPlan, DiversityPolicy, PairMetrics
 
