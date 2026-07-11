@@ -5,6 +5,8 @@ from video_mix.core.quick_mix_diversity import DiversityPolicy
 from video_mix.core.quick_mix_diversity_adapter import (
     build_episode_group_diversity_plan,
     diversity_batch_manifest,
+    render_segments_for_plan,
+    selected_take_manifest_for_plan,
 )
 
 
@@ -118,3 +120,30 @@ def test_manifest_contains_complete_diversity_evidence() -> None:
     assert len(manifest["outputs"]) == 10
     assert all(output["body_visual_signature"] for output in manifest["outputs"])
     assert all(output["segments"] for output in manifest["outputs"])
+
+
+def test_adapter_builds_existing_service_render_and_take_manifests() -> None:
+    result = build_episode_group_diversity_plan(
+        episode_groups(),
+        target_duration_ms=8000,
+        output_count=1,
+        seed=43,
+        policy=DiversityPolicy(
+            exact_enumeration_limit=100,
+            max_candidate_pool=100,
+            minimum_candidates_per_output=8,
+        ),
+    )
+    plan = result.batch.plans[0]
+    render_segments = render_segments_for_plan(plan, result)
+    take_manifest = selected_take_manifest_for_plan(plan, result)
+
+    assert len(render_segments) == len(plan.segments)
+    assert len(take_manifest) == len(plan.segments)
+    assert all(item["segment_kind"] == "body" for item in render_segments)
+    assert [item["take_id"] for item in take_manifest] == [
+        segment.source_id for segment in plan.segments
+    ]
+    assert [item["render_start_ms"] for item in take_manifest] == [
+        segment.source_start_ms for segment in plan.segments
+    ]
