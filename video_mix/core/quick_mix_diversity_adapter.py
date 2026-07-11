@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from .quick_mix_diversity import (
     DiversityBatch,
@@ -134,7 +135,10 @@ def diversity_batch_manifest(
                         1.0,
                     )
                 ),
-                "segments": [asdict(segment) for segment in plan.segments],
+                "segments": [
+                    {"segment_kind": "body", **asdict(segment)}
+                    for segment in plan.segments
+                ],
             }
             for plan in batch.plans
         ],
