@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +73,7 @@ def record_generation(
     entries = payload["generations"]
     entry = {
         "generation_id": paths.generation_id,
-        "created_at": (created_at or datetime.now(timezone.utc)).isoformat(),
+        "created_at": (created_at or datetime.now(UTC)).isoformat(),
         "root_path": paths.relative(paths.root_dir, resolved_work_dir),
         "plan_path": paths.relative(paths.plan_path, resolved_work_dir),
         "report_path": paths.relative(paths.report_path, resolved_work_dir),
@@ -108,10 +108,10 @@ def load_generation_index(work_dir: Path) -> dict[str, list[dict[str, Any]]]:
 
 
 def _timestamp_generation_id(now: datetime | None) -> str:
-    moment = now or datetime.now(timezone.utc)
+    moment = now or datetime.now(UTC)
     if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=timezone.utc)
-    moment = moment.astimezone(timezone.utc)
+        moment = moment.replace(tzinfo=UTC)
+    moment = moment.astimezone(UTC)
     return f"quick_mix_{moment.strftime('%Y%m%dT%H%M%S%fZ')}"
 
 
