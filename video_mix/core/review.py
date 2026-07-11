@@ -115,7 +115,11 @@ def generate_thumbnails(clips: list[Clip], work_dir: Path, ffmpeg_path: str = "f
     for clip in clips:
         output_path = thumbnails_dir / f"{clip.clip_id}.jpg"
         command = build_thumbnail_command(clip, output_path, ffmpeg_path=ffmpeg_path)
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+        except FileNotFoundError:
+            thumbnail_warnings[clip.clip_id] = f"{ffmpeg_path} not found"
+            continue
         if result.returncode == 0 and output_path.exists():
             thumbnail_lookup[clip.clip_id] = f"thumbnails/{output_path.name}"
         else:

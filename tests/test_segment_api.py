@@ -8,7 +8,7 @@ client = TestClient(app)
 
 
 def test_create_segment_job_stores_segment_metadata(monkeypatch) -> None:
-    def fake_analyze(url: str) -> dict[str, object]:
+    def fake_analyze(url: str, auth=None) -> dict[str, object]:
         return {
             "url": url,
             "title": "Demo video",
@@ -75,7 +75,7 @@ def test_create_segment_job_rejects_invalid_range(monkeypatch) -> None:
 def test_create_segment_job_rejects_playlist_scope(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.main.analyze_url",
-        lambda url: {
+        lambda url, auth=None: {
             "url": url,
             "title": "Demo playlist",
             "type": "playlist",
