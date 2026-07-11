@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from video_mix.core.quick_mix_generation import (
     allocate_generation_paths,
@@ -26,7 +26,7 @@ def test_generation_paths_do_not_overwrite_existing_generation(tmp_path) -> None
 
 
 def test_generation_index_is_append_only(tmp_path) -> None:
-    created_at = datetime(2026, 7, 11, tzinfo=timezone.utc)
+    created_at = datetime(2026, 7, 11, tzinfo=UTC)
     first = allocate_generation_paths(tmp_path, generation_id="generation_a")
     first_output = first.exports_dir / "quick_mix_001.mp4"
     first_output.write_bytes(b"a")
