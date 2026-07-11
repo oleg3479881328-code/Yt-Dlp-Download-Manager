@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from video_mix.core.asset_scan import SKIP_DIR_NAMES, detect_media_type, scan_project_assets
 from video_mix.core.export_plan import export_candidate
 from video_mix.core.models import Asset, CandidateReel, CandidateStatus, Clip, Project
 from video_mix.core.review import write_review_html
@@ -18,16 +19,20 @@ from video_mix.core.storage import (
     load_clips,
     load_project,
     read_json,
+    save_assets,
     save_candidates,
     save_summary,
     work_file,
+    write_json,
 )
+from video_mix.service import scan_source_materials
 
 ALLOWED_FILE_PREFIXES = (
     "reports/review.html",
     "reports/thumbnails/",
     "exports/",
 )
+PROJECT_MATERIALS_STATE_VERSION = 2
 
 
 def resolve_work_dir(raw_work_dir: str) -> Path:
@@ -96,6 +101,48 @@ if ($result -eq $true) {
     return completed.stdout.strip()
 
 
+def _show_windows_file_picker(initial_dir: str = "", title: str = "Select file") -> str:
+    pwsh_path = shutil.which("pwsh")
+    if not pwsh_path:
+        raise HTTPException(
+            status_code=500,
+            detail="PowerShell 7 (pwsh) is required for the modern Windows file picker but was not found.",
+        )
+
+    script = """
+Add-Type -AssemblyName PresentationFramework
+$dialog = New-Object Microsoft.Win32.OpenFileDialog
+$dialog.Multiselect = $false
+$dialog.Title = $args[1]
+if ($args[0] -and (Test-Path -LiteralPath $args[0])) {
+    $resolved = Resolve-Path -LiteralPath $args[0]
+    if ((Get-Item -LiteralPath $resolved).PSIsContainer) {
+        $dialog.InitialDirectory = $resolved.Path
+    } else {
+        $dialog.InitialDirectory = Split-Path -Parent $resolved.Path
+        $dialog.FileName = Split-Path -Leaf $resolved.Path
+    }
+}
+$result = $dialog.ShowDialog()
+if ($result -eq $true) {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    Write-Output $dialog.FileName
+}
+""".strip()
+    completed = subprocess.run(
+        [pwsh_path, "-NoProfile", "-STA", "-Command", script, initial_dir, title],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+        check=False,
+    )
+    if completed.returncode not in {0, 1}:
+        stderr = completed.stderr.strip() or completed.stdout.strip() or "File picker failed"
+        raise HTTPException(status_code=500, detail=stderr)
+    return completed.stdout.strip()
+
+
 def pick_dashboard_work_dir(initial_dir: str = "") -> dict[str, Any]:
     normalized_initial_dir = _normalize_initial_dir(initial_dir)
     selected_path = _show_windows_folder_picker(normalized_initial_dir, "Select VIDEO MIX work_dir")
@@ -116,6 +163,19 @@ def pick_source_materials_dir(initial_dir: str = "") -> dict[str, Any]:
     if not source_dir.is_dir():
         raise HTTPException(status_code=400, detail=f"Source folder is not a directory: {source_dir}")
     return {"ok": True, "canceled": False, "source_dir": str(source_dir)}
+
+
+def pick_source_media_file(initial_dir: str = "", title: str = "Select media file") -> dict[str, Any]:
+    normalized_initial_dir = _normalize_initial_dir(initial_dir)
+    selected_path = _show_windows_file_picker(normalized_initial_dir, title)
+    if not selected_path:
+        return {"ok": False, "canceled": True, "file_path": ""}
+    file_path = Path(selected_path).expanduser().resolve()
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Selected file does not exist: {file_path}")
+    if not file_path.is_file():
+        raise HTTPException(status_code=400, detail=f"Selected path is not a file: {file_path}")
+    return {"ok": True, "canceled": False, "file_path": str(file_path)}
 
 
 def resolve_relative_work_path(raw_work_dir: str, relative_path: str) -> Path:
@@ -144,6 +204,20 @@ def _load_summary(work_dir: Path, project: Project, assets: list[Asset], clips: 
     return summary
 
 
+def _load_quick_mix_summary(work_dir: Path) -> dict[str, Any] | None:
+    quick_mix_path = work_dir / "reports" / "quick_mix.json"
+    if not quick_mix_path.exists():
+        return None
+    return read_json(quick_mix_path)
+
+
+def _load_zip_import_summary(work_dir: Path) -> dict[str, Any] | None:
+    zip_import_path = work_dir / "reports" / "zip_import.json"
+    if not zip_import_path.exists():
+        return None
+    return read_json(zip_import_path)
+
+
 def _thumbnail_relative_path(work_dir: Path, clip_id: str) -> str | None:
     thumbnail_path = work_dir / "reports" / "thumbnails" / f"{clip_id}.jpg"
     if thumbnail_path.exists():
@@ -164,6 +238,374 @@ def _status_totals(candidates: list[CandidateReel]) -> dict[str, int]:
     for candidate in candidates:
         counts[candidate.status.value] = counts.get(candidate.status.value, 0) + 1
     return counts
+
+
+def _project_materials_state_path(work_dir: Path) -> Path:
+    return work_file(work_dir, "project_materials_state.json")
+
+
+def _default_material_episode(position: int) -> dict[str, Any]:
+    return {
+        "episode_id": f"episode_{position:03d}",
+        "label": f"Episode {position}",
+        "position": position,
+        "takes": [],
+    }
+
+
+def _default_take_source_end_ms(asset: Asset) -> int:
+    return max(int(asset.duration_ms or 0), 1000)
+
+
+def _resequence_episode_takes(episode: dict[str, Any]) -> None:
+    for index, take in enumerate(episode.get("takes", []), start=1):
+        take["order"] = index
+
+
+def _normalize_take_trim(asset: Asset, source_start_ms: int | None, source_end_ms: int | None) -> tuple[int, int]:
+    max_end_ms = _default_take_source_end_ms(asset)
+    start_ms = max(0, int(source_start_ms or 0))
+    end_ms = int(source_end_ms or max_end_ms)
+    if end_ms > max_end_ms:
+        end_ms = max_end_ms
+    if start_ms >= end_ms:
+        start_ms = 0
+        end_ms = max_end_ms
+    return start_ms, end_ms
+
+
+def _normalize_project_materials_state(raw_state: dict[str, Any] | None, asset_ids: set[str]) -> tuple[dict[str, Any], bool]:
+    state = raw_state or {}
+    changed = False
+    episodes = []
+    max_take_sequence = 0
+    for index, raw_episode in enumerate(state.get("episodes", []), start=1):
+        if not isinstance(raw_episode, dict):
+            changed = True
+            continue
+        takes = []
+        episode_takes = raw_episode.get("takes", [])
+        if not isinstance(episode_takes, list):
+            changed = True
+            episode_takes = []
+        for take_index, raw_take in enumerate(episode_takes, start=1):
+            if not isinstance(raw_take, dict):
+                changed = True
+                continue
+            asset_id = str(raw_take.get("asset_id", "")).strip()
+            if not asset_id or asset_id not in asset_ids:
+                changed = True
+                continue
+            take_id = str(raw_take.get("take_id", "")).strip() or f"{asset_id}_take_{len(takes) + 1:03d}"
+            if take_id != str(raw_take.get("take_id", "")).strip():
+                changed = True
+            suffix = take_id.rsplit("_take_", 1)
+            if len(suffix) == 2 and suffix[1].isdigit():
+                max_take_sequence = max(max_take_sequence, int(suffix[1]))
+            order = int(raw_take.get("order") or take_index)
+            source_start_ms = int(raw_take.get("source_start_ms") or 0)
+            source_end_ms = int(raw_take.get("source_end_ms") or 0)
+            takes.append(
+                {
+                    "take_id": take_id,
+                    "asset_id": asset_id,
+                    "mode": "reused" if str(raw_take.get("mode", "assigned")) == "reused" else "assigned",
+                    "order": order,
+                    "source_start_ms": source_start_ms,
+                    "source_end_ms": source_end_ms,
+                }
+            )
+        takes.sort(key=lambda item: (int(item.get("order") or 0), item["take_id"]))
+        for resequenced_order, take in enumerate(takes, start=1):
+            if int(take.get("order") or 0) != resequenced_order:
+                changed = True
+            take["order"] = resequenced_order
+        episodes.append(
+            {
+                "episode_id": str(raw_episode.get("episode_id", "")).strip() or f"episode_{index:03d}",
+                "label": str(raw_episode.get("label", "")).strip() or f"Episode {index}",
+                "position": int(raw_episode.get("position") or index),
+                "takes": takes,
+            }
+        )
+    episodes.sort(key=lambda episode: episode["position"])
+    if not episodes:
+        episodes = [_default_material_episode(1)]
+        changed = True
+    raw_next_take_sequence = int(state.get("next_take_sequence") or 0)
+    next_take_sequence = max(raw_next_take_sequence, max_take_sequence + 1, 1)
+    normalized = {
+        "version": PROJECT_MATERIALS_STATE_VERSION,
+        "next_take_sequence": next_take_sequence,
+        "episodes": episodes,
+    }
+    if state.get("version") != PROJECT_MATERIALS_STATE_VERSION:
+        changed = True
+    if raw_next_take_sequence != next_take_sequence:
+        changed = True
+    return normalized, changed
+
+
+def _load_project_materials_state(work_dir: Path) -> tuple[dict[str, Any], list[Asset]]:
+    assets = load_assets(work_dir)
+    asset_ids = {asset.asset_id for asset in assets}
+    state_path = _project_materials_state_path(work_dir)
+    raw_state = read_json(state_path) if state_path.exists() else None
+    state, changed = _normalize_project_materials_state(raw_state, asset_ids)
+    assets_by_id = {asset.asset_id: asset for asset in assets}
+    for episode in state["episodes"]:
+        for take in episode.get("takes", []):
+            asset = assets_by_id.get(take["asset_id"])
+            if asset is None:
+                continue
+            start_ms, end_ms = _normalize_take_trim(asset, take.get("source_start_ms"), take.get("source_end_ms"))
+            if start_ms != int(take.get("source_start_ms") or 0) or end_ms != int(take.get("source_end_ms") or 0):
+                changed = True
+            take["source_start_ms"] = start_ms
+            take["source_end_ms"] = end_ms
+    if changed or not state_path.exists():
+        write_json(state_path, state)
+    return state, assets
+
+
+def _save_project_materials_state(work_dir: Path, state: dict[str, Any]) -> None:
+    write_json(_project_materials_state_path(work_dir), state)
+
+
+def _find_material_episode(state: dict[str, Any], episode_id: str) -> dict[str, Any]:
+    for episode in state["episodes"]:
+        if episode["episode_id"] == episode_id:
+            return episode
+    raise HTTPException(status_code=404, detail=f"Project materials episode not found: {episode_id}")
+
+
+def _asset_assignment_rows(state: dict[str, Any], assets: list[Asset]) -> dict[str, list[dict[str, Any]]]:
+    asset_lookup = {asset.asset_id: asset for asset in assets}
+    assignments_by_asset: dict[str, list[dict[str, Any]]] = {asset.asset_id: [] for asset in assets}
+    for episode in state["episodes"]:
+        for take in episode.get("takes", []):
+            asset = asset_lookup.get(take["asset_id"])
+            if asset is None:
+                continue
+            assignments_by_asset.setdefault(asset.asset_id, []).append(
+                {
+                    "episode_id": episode["episode_id"],
+                    "episode_label": episode["label"],
+                    "take_id": take["take_id"],
+                    "mode": take["mode"],
+                }
+            )
+    return assignments_by_asset
+
+
+def build_project_materials_payload(raw_work_dir: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, assets = _load_project_materials_state(work_dir)
+    assignments_by_asset = _asset_assignment_rows(state, assets)
+    asset_lookup = {asset.asset_id: asset for asset in assets}
+
+    asset_cards = []
+    for asset in sorted(assets, key=lambda item: item.path.name.lower()):
+        assignments = assignments_by_asset.get(asset.asset_id, [])
+        assignment_state = "unassigned"
+        if len(assignments) == 1:
+            assignment_state = "assigned"
+        elif len(assignments) > 1:
+            assignment_state = "reused"
+        asset_cards.append(
+            {
+                "asset_id": asset.asset_id,
+                "file_name": asset.path.name,
+                "source_path": str(asset.path),
+                "media_type": asset.media_type.value,
+                "duration_ms": asset.duration_ms,
+                "has_audio": asset.has_audio,
+                "assignment_state": assignment_state,
+                "assignments": assignments,
+            }
+        )
+
+    episodes = []
+    timeline_rows = []
+    for episode in state["episodes"]:
+        takes = []
+        for take in episode["takes"]:
+            asset = asset_lookup.get(take["asset_id"])
+            if asset is None:
+                continue
+            trimmed_duration_ms = max(0, int(take["source_end_ms"]) - int(take["source_start_ms"]))
+            takes.append(
+                {
+                    "take_id": take["take_id"],
+                    "asset_id": take["asset_id"],
+                    "mode": take["mode"],
+                    "order": int(take["order"]),
+                    "file_name": asset.path.name,
+                    "source_path": str(asset.path),
+                    "media_type": asset.media_type.value,
+                    "asset_duration_ms": asset.duration_ms,
+                    "duration_ms": trimmed_duration_ms,
+                    "source_start_ms": int(take["source_start_ms"]),
+                    "source_end_ms": int(take["source_end_ms"]),
+                }
+            )
+        takes.sort(key=lambda item: (int(item["order"]), item["take_id"]))
+        timeline_rows.append(
+            {
+                "episode_id": episode["episode_id"],
+                "label": episode["label"],
+                "position": episode["position"],
+                "blocks": [
+                    {
+                        "take_id": take["take_id"],
+                        "asset_id": take["asset_id"],
+                        "mode": take["mode"],
+                        "order": int(take["order"]),
+                        "file_name": take["file_name"],
+                        "source_path": take["source_path"],
+                        "media_type": take["media_type"],
+                        "duration_ms": take["duration_ms"],
+                        "source_start_ms": int(take["source_start_ms"]),
+                        "source_end_ms": int(take["source_end_ms"]),
+                    }
+                    for take in takes
+                ],
+            }
+        )
+        episodes.append(
+            {
+                "episode_id": episode["episode_id"],
+                "label": episode["label"],
+                "position": episode["position"],
+                "takes": takes,
+            }
+        )
+
+    return {
+        "episodes": episodes,
+        "timeline": {
+            "rows": timeline_rows,
+            "has_blocks": any(row["blocks"] for row in timeline_rows),
+        },
+        "assets": asset_cards,
+        "counts": {
+            "all": len(asset_cards),
+            "unassigned": sum(asset["assignment_state"] == "unassigned" for asset in asset_cards),
+            "assigned": sum(asset["assignment_state"] == "assigned" for asset in asset_cards),
+            "reused": sum(asset["assignment_state"] == "reused" for asset in asset_cards),
+        },
+    }
+
+
+def add_project_materials_episode(raw_work_dir: str, label: str = "") -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, _assets = _load_project_materials_state(work_dir)
+    next_position = max((int(episode["position"]) for episode in state["episodes"]), default=0) + 1
+    state["episodes"].append(
+        {
+            "episode_id": f"episode_{next_position:03d}",
+            "label": label.strip() or f"Episode {next_position}",
+            "position": next_position,
+            "takes": [],
+        }
+    )
+    _save_project_materials_state(work_dir, state)
+    return build_dashboard_payload(str(work_dir))
+
+
+def _next_project_material_take_id(state: dict[str, Any], asset_id: str) -> str:
+    next_take_sequence = int(state.get("next_take_sequence") or 1)
+    state["next_take_sequence"] = next_take_sequence + 1
+    return f"{asset_id}_take_{next_take_sequence:03d}"
+
+
+def assign_project_material(raw_work_dir: str, asset_id: str, episode_id: str, reuse: bool = False) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, assets = _load_project_materials_state(work_dir)
+    asset_lookup = {asset.asset_id: asset for asset in assets}
+    if asset_id not in asset_lookup:
+        raise HTTPException(status_code=404, detail=f"Project material asset not found: {asset_id}")
+    episode = _find_material_episode(state, episode_id)
+    assignments_by_asset = _asset_assignment_rows(state, assets)
+    existing_assignments = assignments_by_asset.get(asset_id, [])
+    if existing_assignments and not reuse:
+        raise HTTPException(
+            status_code=409,
+            detail="Asset is already assigned. Use explicit reuse to place the same source again.",
+        )
+    episode["takes"].append(
+        {
+            "take_id": _next_project_material_take_id(state, asset_id),
+            "asset_id": asset_id,
+            "mode": "reused" if existing_assignments else "assigned",
+            "order": len(episode["takes"]) + 1,
+            "source_start_ms": 0,
+            "source_end_ms": _default_take_source_end_ms(asset_lookup[asset_id]),
+        }
+    )
+    _save_project_materials_state(work_dir, state)
+    return build_dashboard_payload(str(work_dir))
+
+
+def unassign_project_material(raw_work_dir: str, episode_id: str, take_id: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, _assets = _load_project_materials_state(work_dir)
+    episode = _find_material_episode(state, episode_id)
+    before = len(episode["takes"])
+    episode["takes"] = [take for take in episode["takes"] if take["take_id"] != take_id]
+    if len(episode["takes"]) == before:
+        raise HTTPException(status_code=404, detail=f"Project material take not found: {take_id}")
+    _resequence_episode_takes(episode)
+    _save_project_materials_state(work_dir, state)
+    return build_dashboard_payload(str(work_dir))
+
+
+def update_project_material_take(
+    raw_work_dir: str,
+    episode_id: str,
+    take_id: str,
+    source_start_ms: int,
+    source_end_ms: int,
+) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, assets = _load_project_materials_state(work_dir)
+    asset_lookup = {asset.asset_id: asset for asset in assets}
+    episode = _find_material_episode(state, episode_id)
+    take = next((item for item in episode["takes"] if item["take_id"] == take_id), None)
+    if take is None:
+        raise HTTPException(status_code=404, detail=f"Project material take not found: {take_id}")
+    asset = asset_lookup.get(take["asset_id"])
+    if asset is None:
+        raise HTTPException(status_code=404, detail=f"Project material asset not found for take: {take_id}")
+
+    max_end_ms = _default_take_source_end_ms(asset)
+    start_ms = int(source_start_ms)
+    end_ms = int(source_end_ms)
+    if start_ms < 0:
+        raise HTTPException(status_code=400, detail="Take trim start must be zero or greater.")
+    if end_ms > max_end_ms:
+        raise HTTPException(status_code=400, detail=f"Take trim end exceeds asset duration ({max_end_ms} ms).")
+    if start_ms >= end_ms:
+        raise HTTPException(status_code=400, detail="Take trim must satisfy start < end.")
+
+    take["source_start_ms"] = start_ms
+    take["source_end_ms"] = end_ms
+    _save_project_materials_state(work_dir, state)
+    return build_dashboard_payload(str(work_dir))
+
+
+def reorder_project_material_takes(raw_work_dir: str, episode_id: str, ordered_take_ids: list[str]) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    state, _assets = _load_project_materials_state(work_dir)
+    episode = _find_material_episode(state, episode_id)
+    existing_take_lookup = {take["take_id"]: take for take in episode["takes"]}
+    normalized_take_ids = [str(take_id).strip() for take_id in ordered_take_ids if str(take_id).strip()]
+    if len(normalized_take_ids) != len(episode["takes"]) or set(normalized_take_ids) != set(existing_take_lookup):
+        raise HTTPException(status_code=400, detail="Take reorder payload must contain each Episode take exactly once.")
+    episode["takes"] = [existing_take_lookup[take_id] for take_id in normalized_take_ids]
+    _resequence_episode_takes(episode)
+    _save_project_materials_state(work_dir, state)
+    return build_dashboard_payload(str(work_dir))
 
 
 def _build_candidate_card(work_dir: Path, candidate: CandidateReel, clip_lookup: dict[str, Clip], asset_lookup: dict[str, Asset]) -> dict[str, Any]:
@@ -208,6 +650,182 @@ def _build_candidate_card(work_dir: Path, candidate: CandidateReel, clip_lookup:
     }
 
 
+def _project_source_dir(work_dir: Path) -> Path:
+    project = load_project(work_dir)
+    source_dir = project.root_path.resolve()
+    if not source_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Project source folder does not exist: {source_dir}")
+    if not source_dir.is_dir():
+        raise HTTPException(status_code=400, detail=f"Project source path is not a folder: {source_dir}")
+    return source_dir
+
+
+def _iter_project_files(source_dir: Path) -> list[Path]:
+    files: list[Path] = []
+    for path in sorted(source_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if any(part in SKIP_DIR_NAMES for part in path.relative_to(source_dir).parts):
+            continue
+        files.append(path)
+    return files
+
+
+def _project_file_payload(source_dir: Path, path: Path) -> dict[str, Any]:
+    media_type = detect_media_type(path)
+    return {
+        "name": path.name,
+        "relative_path": str(path.relative_to(source_dir)).replace("\\", "/"),
+        "absolute_path": str(path.resolve()),
+        "size_bytes": path.stat().st_size,
+        "media_type": media_type.value if media_type else "other",
+    }
+
+
+def build_project_files_payload(raw_work_dir: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    source_dir = _project_source_dir(work_dir)
+    files = _iter_project_files(source_dir)
+    return {
+        "source_dir": str(source_dir),
+        "file_count": len(files),
+        "files": [_project_file_payload(source_dir, path) for path in files],
+    }
+
+
+def _unique_destination_path(target_dir: Path, filename: str) -> Path:
+    candidate = target_dir / Path(filename).name
+    if not candidate.exists():
+        return candidate
+    stem = candidate.stem
+    suffix = candidate.suffix
+    index = 2
+    while True:
+        alternate = target_dir / f"{stem} ({index}){suffix}"
+        if not alternate.exists():
+            return alternate
+        index += 1
+
+
+def _unique_project_material_destination(project_root: Path, filename: str) -> Path:
+    candidate = project_root / Path(filename).name
+    if not candidate.exists():
+        return candidate
+    stem = candidate.stem
+    suffix = candidate.suffix
+    index = 2
+    while True:
+        alternate = project_root / f"{stem} ({index}){suffix}"
+        if not alternate.exists():
+            return alternate
+        index += 1
+
+
+def add_project_files(raw_work_dir: str, file_paths: list[str]) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    source_dir = _project_source_dir(work_dir)
+    normalized_paths = [Path(file_path).expanduser().resolve() for file_path in file_paths if str(file_path).strip()]
+    if not normalized_paths:
+        raise HTTPException(status_code=400, detail="No files were provided for project import.")
+
+    added_files: list[str] = []
+    for input_path in normalized_paths:
+        if not input_path.exists():
+            raise HTTPException(status_code=404, detail=f"Selected file does not exist: {input_path}")
+        if not input_path.is_file():
+            raise HTTPException(status_code=400, detail=f"Selected path is not a file: {input_path}")
+        destination = _unique_destination_path(source_dir, input_path.name)
+        shutil.copy2(input_path, destination)
+        added_files.append(str(destination.relative_to(source_dir)).replace("\\", "/"))
+
+    return {
+        "ok": True,
+        "added_files": added_files,
+        "project_files": build_project_files_payload(str(work_dir)),
+        "source_scan": scan_source_materials(str(source_dir)),
+    }
+
+
+def remove_project_file(raw_work_dir: str, relative_path: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    source_dir = _project_source_dir(work_dir)
+    normalized_relative = relative_path.replace("\\", "/").lstrip("/")
+    if not normalized_relative:
+        raise HTTPException(status_code=400, detail="Project file path is empty.")
+    target = (source_dir / normalized_relative).resolve()
+    if source_dir not in target.parents:
+        raise HTTPException(status_code=403, detail="Requested project file escapes the source folder.")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"Project file does not exist: {normalized_relative}")
+    if not target.is_file():
+        raise HTTPException(status_code=400, detail=f"Project path is not a file: {normalized_relative}")
+    target.unlink()
+
+    parent = target.parent
+    while parent != source_dir and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+
+    return {
+        "ok": True,
+        "removed_file": normalized_relative,
+        "project_files": build_project_files_payload(str(work_dir)),
+        "source_scan": scan_source_materials(str(source_dir)),
+    }
+
+
+def add_external_project_materials(raw_work_dir: str, episode_id: str, file_paths: list[str]) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    if not file_paths:
+        raise HTTPException(status_code=400, detail="No files were provided.")
+
+    project = load_project(work_dir)
+    project_root = project.root_path.expanduser().resolve()
+    if not project_root.exists() or not project_root.is_dir():
+        raise HTTPException(status_code=404, detail=f"Project source folder does not exist: {project_root}")
+
+    written_paths: list[Path] = []
+    for raw_path in file_paths:
+        input_path = Path(str(raw_path or "").strip()).expanduser().resolve()
+        if not input_path.exists() or not input_path.is_file():
+            raise HTTPException(status_code=404, detail=f"Dragged file was not found: {input_path}")
+        destination = _unique_project_material_destination(project_root, input_path.name)
+        shutil.copy2(input_path, destination)
+        written_paths.append(destination)
+
+    assets = scan_project_assets(project)
+    save_assets(work_dir, assets)
+    clips = load_clips(work_dir)
+    candidates = load_candidates(work_dir)
+    save_summary(work_dir, build_summary(project, assets, clips, candidates))
+
+    state, _ = _load_project_materials_state(work_dir)
+    _find_material_episode(state, episode_id)
+    asset_lookup = {str(asset.path.resolve()): asset for asset in assets}
+    assignments_by_asset = _asset_assignment_rows(state, assets)
+    for path in written_paths:
+        asset = asset_lookup.get(str(path.resolve()))
+        if asset is None:
+            continue
+        episode = _find_material_episode(state, episode_id)
+        existing_assignments = assignments_by_asset.get(asset.asset_id, [])
+        episode["takes"].append(
+            {
+                "take_id": _next_project_material_take_id(state, asset.asset_id),
+                "asset_id": asset.asset_id,
+                "mode": "reused" if existing_assignments else "assigned",
+                "order": len(episode["takes"]) + 1,
+                "source_start_ms": 0,
+                "source_end_ms": _default_take_source_end_ms(asset),
+            }
+        )
+        assignments_by_asset.setdefault(asset.asset_id, []).append(
+            {"episode_id": episode["episode_id"], "episode_label": episode["label"], "take_id": episode["takes"][-1]["take_id"]}
+        )
+    _save_project_materials_state(work_dir, state)
+    return build_dashboard_payload(str(work_dir))
+
+
 def build_dashboard_payload(raw_work_dir: str) -> dict[str, Any]:
     work_dir = resolve_work_dir(raw_work_dir)
     project = load_project(work_dir)
@@ -215,6 +833,8 @@ def build_dashboard_payload(raw_work_dir: str) -> dict[str, Any]:
     clips = load_clips(work_dir)
     candidates = load_candidates(work_dir)
     summary = _load_summary(work_dir, project, assets, clips, candidates)
+    quick_mix = _load_quick_mix_summary(work_dir)
+    zip_import = _load_zip_import_summary(work_dir)
     clip_lookup = {clip.clip_id: clip for clip in clips}
     asset_lookup = {asset.asset_id: asset for asset in assets}
     review_path = work_dir / "reports" / "review.html"
@@ -228,6 +848,7 @@ def build_dashboard_payload(raw_work_dir: str) -> dict[str, Any]:
             "root_path": str(project.root_path),
         },
         "work_dir": str(work_dir),
+        "project_materials": build_project_materials_payload(str(work_dir)),
         "summary": {
             **summary,
             "status_totals": _status_totals(candidates),
@@ -263,6 +884,9 @@ def build_dashboard_payload(raw_work_dir: str) -> dict[str, Any]:
             "exports_dir": str(exports_dir),
             "exports_exist": exports_dir.exists(),
         },
+        "quick_mix": quick_mix,
+        "zip_import": zip_import,
+        "project_files": build_project_files_payload(str(work_dir)),
         "candidates": [
             _build_candidate_card(work_dir, candidate, clip_lookup, asset_lookup)
             for candidate in candidates

@@ -14,6 +14,10 @@ DEFAULT_SETTINGS = {
     "quality": "best",
     "retry_enabled": True,
     "retry_count": 2,
+    "auth_mode": "none",
+    "cookies_browser": "chrome",
+    "cookies_browser_profile": "",
+    "cookies_file": "",
 }
 
 

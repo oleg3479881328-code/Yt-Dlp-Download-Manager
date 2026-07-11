@@ -32,6 +32,14 @@ def _parse_fps(value: str | None) -> float | None:
         return None
 
 
+def _decode_subprocess_stdout(stdout: str | bytes | None) -> str:
+    if stdout is None:
+        return ""
+    if isinstance(stdout, bytes):
+        return stdout.decode("utf-8", errors="replace")
+    return stdout
+
+
 def probe_asset(asset: Asset, ffprobe_path: str = "ffprobe") -> Asset:
     if asset.media_type == MediaType.PHOTO:
         asset.probe_status = "skipped_photo"
@@ -49,8 +57,8 @@ def probe_asset(asset: Asset, ffprobe_path: str = "ffprobe") -> Asset:
     ]
 
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-        payload = json.loads(result.stdout)
+        result = subprocess.run(command, capture_output=True, check=True)
+        payload = json.loads(_decode_subprocess_stdout(result.stdout))
     except Exception as exc:  # noqa: BLE001
         asset.probe_status = "failed"
         asset.metadata["probe_error"] = str(exc)

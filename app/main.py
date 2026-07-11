@@ -3,32 +3,53 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import tempfile
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from posixpath import normpath
+from typing import Annotated, Any
+from urllib.parse import unquote
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from video_mix.core.asset_scan import detect_media_type
 from video_mix.core.models import CandidateStatus
-from video_mix.service import plan_source_materials, quick_mix_source_materials, scan_source_materials
+from video_mix.core.zip_intake import import_video_mix_zip, stage_upload_file
+from video_mix.service import (
+    estimate_quick_mix_capacity,
+    plan_source_materials,
+    quick_mix_source_materials,
+    scan_source_materials,
+)
 
 from .path_safety import MissingPathError, UnsafePathError, resolve_existing_output_path
 from .segment_utils import SegmentValidationError, normalize_segment_payload
 from .storage import Storage
 from .video_mix_dashboard import (
-    build_dashboard_payload as build_video_mix_dashboard_payload,
-)
-from .video_mix_dashboard import (
+    add_external_project_materials,
+    add_project_files,
+    add_project_materials_episode,
+    assign_project_material,
+    build_project_files_payload,
+    build_project_materials_payload,
     bulk_update_candidate_status,
     export_approved_candidates,
     open_dashboard_target,
     pick_dashboard_work_dir,
     pick_source_materials_dir,
+    pick_source_media_file,
+    remove_project_file,
+    reorder_project_material_takes,
     resolve_relative_work_path,
+    unassign_project_material,
+    update_project_material_take,
+)
+from .video_mix_dashboard import (
+    build_dashboard_payload as build_video_mix_dashboard_payload,
 )
 from .video_mix_dashboard import (
     update_candidate_status as update_video_mix_candidate_status,
@@ -64,6 +85,10 @@ class SettingsRequest(BaseModel):
     quality: str
     retry_enabled: bool
     retry_count: int
+    auth_mode: str = "none"
+    cookies_browser: str = "chrome"
+    cookies_browser_profile: str = ""
+    cookies_file: str = ""
 
 
 class VideoMixCandidateRequest(BaseModel):
@@ -95,6 +120,19 @@ class VideoMixPickSourceRequest(BaseModel):
     initial_dir: str = ""
 
 
+class VideoMixPickFileRequest(BaseModel):
+    initial_dir: str = ""
+    title: str = "Select file"
+
+
+class VideoMixOpenLocalFileRequest(BaseModel):
+    file_path: str
+
+
+class VideoMixOpenLocalPathRequest(BaseModel):
+    path: str
+
+
 class VideoMixSourceScanRequest(BaseModel):
     source_dir: str
 
@@ -113,15 +151,97 @@ class VideoMixSourcePlanRequest(BaseModel):
     max_candidates: int = 10
 
 
+class VideoMixZipImportPathRequest(BaseModel):
+    zip_path: str
+    project_name: str = ""
+    work_dir: str = ""
+    ffprobe: str = "ffprobe"
+    ffmpeg: str = "ffmpeg"
+
+
 class VideoMixQuickMixRequest(BaseModel):
     source_dir: str
     duration_seconds: float = Field(gt=0)
     output_count: int = Field(gt=0)
+    episode_duration_min_seconds: float = Field(default=1.5, gt=0)
+    episode_duration_max_seconds: float = Field(default=2.0, gt=0)
     project_name: str = ""
     pack: str = "wedding"
     work_dir: str = ""
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
+    music_path: str = ""
+    music_paths: list[str] = Field(default_factory=list)
+    use_music_duration: bool = False
+    opening_media_path: str = ""
+    opening_media_paths: list[str] = Field(default_factory=list)
+    closing_media_path: str = ""
+    closing_media_paths: list[str] = Field(default_factory=list)
+    use_closing_duration: bool = False
+
+
+class VideoMixQuickMixEstimateRequest(BaseModel):
+    source_dir: str
+    duration_seconds: float = Field(gt=0)
+    episode_duration_min_seconds: float = Field(default=1.5, gt=0)
+    episode_duration_max_seconds: float = Field(default=2.0, gt=0)
+    ffprobe: str = "ffprobe"
+    music_path: str = ""
+    music_paths: list[str] = Field(default_factory=list)
+    use_music_duration: bool = False
+    opening_media_path: str = ""
+    opening_media_paths: list[str] = Field(default_factory=list)
+    closing_media_path: str = ""
+    closing_media_paths: list[str] = Field(default_factory=list)
+    use_closing_duration: bool = False
+
+
+class VideoMixProjectFilesRequest(BaseModel):
+    work_dir: str
+    file_paths: list[str] = Field(default_factory=list)
+
+
+class VideoMixProjectFileRemoveRequest(BaseModel):
+    work_dir: str
+    relative_path: str
+
+
+class VideoMixProjectMaterialsEpisodeRequest(BaseModel):
+    work_dir: str
+    label: str = ""
+
+
+class VideoMixProjectMaterialAssignRequest(BaseModel):
+    work_dir: str
+    asset_id: str
+    episode_id: str
+    reuse: bool = False
+
+
+class VideoMixProjectMaterialUnassignRequest(BaseModel):
+    work_dir: str
+    episode_id: str
+    take_id: str
+
+
+class VideoMixProjectMaterialExternalDropRequest(BaseModel):
+    work_dir: str
+    episode_id: str
+    file_paths: list[str] = Field(default_factory=list)
+
+
+class VideoMixProjectMaterialTakeUpdateRequest(BaseModel):
+    work_dir: str
+    episode_id: str
+    take_id: str
+    source_start_ms: int = Field(ge=0)
+    source_end_ms: int = Field(gt=0)
+
+
+class VideoMixProjectMaterialTakeReorderRequest(BaseModel):
+    work_dir: str
+    episode_id: str
+    ordered_take_ids: list[str] = Field(default_factory=list)
 
 
 @asynccontextmanager
@@ -132,6 +252,19 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="yt-dlp Download Manager", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
+
+SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
+
+
+def resolve_local_preview_media_path(raw_path: str) -> Path:
+    candidate = Path(raw_path).expanduser().resolve()
+    if not candidate.exists():
+        raise HTTPException(status_code=404, detail=f"Selected media does not exist: {candidate}")
+    if not candidate.is_file():
+        raise HTTPException(status_code=400, detail=f"Selected media path is not a file: {candidate}")
+    if detect_media_type(candidate) is None and candidate.suffix.lower() not in SUPPORTED_AUDIO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Selected media type is not supported for preview: {candidate}")
+    return candidate
 
 
 def build_state_payload(history_status: str = "all", selected_job_id: str | None = None) -> dict[str, Any]:
@@ -167,7 +300,7 @@ async def video_mix_dashboard_page() -> HTMLResponse:
 @app.post("/api/analyze")
 async def analyze(payload: AnalyzeRequest) -> dict[str, Any]:
     try:
-        return {"ok": True, "analysis": analyze_url(payload.url)}
+        return {"ok": True, "analysis": analyze_url(payload.url, auth=storage.get_settings())}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -194,7 +327,7 @@ async def create_job(payload: QueueRequest) -> dict[str, Any]:
         segment = segment_range.to_metadata()
 
     try:
-        analysis = analyze_url(payload.url)
+        analysis = analyze_url(payload.url, auth=storage.get_settings())
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if segment and analysis["type"] != "single":
@@ -323,6 +456,68 @@ async def video_mix_dashboard(work_dir: str) -> dict[str, Any]:
     return build_video_mix_dashboard_payload(work_dir)
 
 
+@app.get("/api/video-mix/project-files")
+async def video_mix_project_files(work_dir: str) -> dict[str, Any]:
+    return build_project_files_payload(work_dir)
+
+
+@app.post("/api/video-mix/project-files/add")
+async def video_mix_add_project_files(payload: VideoMixProjectFilesRequest) -> dict[str, Any]:
+    return add_project_files(payload.work_dir, payload.file_paths)
+
+
+@app.post("/api/video-mix/project-files/remove")
+async def video_mix_remove_project_file(payload: VideoMixProjectFileRemoveRequest) -> dict[str, Any]:
+    return remove_project_file(payload.work_dir, payload.relative_path)
+
+
+@app.get("/api/video-mix/project-materials")
+async def video_mix_project_materials(work_dir: str) -> dict[str, Any]:
+    return build_project_materials_payload(work_dir)
+
+
+@app.post("/api/video-mix/project-materials/episodes")
+async def create_video_mix_project_materials_episode(payload: VideoMixProjectMaterialsEpisodeRequest) -> dict[str, Any]:
+    dashboard = add_project_materials_episode(payload.work_dir, payload.label)
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/project-materials/assign")
+async def assign_video_mix_project_material(payload: VideoMixProjectMaterialAssignRequest) -> dict[str, Any]:
+    dashboard = assign_project_material(payload.work_dir, payload.asset_id, payload.episode_id, reuse=payload.reuse)
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/project-materials/unassign")
+async def unassign_video_mix_project_material(payload: VideoMixProjectMaterialUnassignRequest) -> dict[str, Any]:
+    dashboard = unassign_project_material(payload.work_dir, payload.episode_id, payload.take_id)
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/project-materials/external-drop")
+async def drop_and_assign_video_mix_project_materials(payload: VideoMixProjectMaterialExternalDropRequest) -> dict[str, Any]:
+    dashboard = add_external_project_materials(payload.work_dir, payload.episode_id, payload.file_paths)
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/project-materials/takes/update")
+async def update_video_mix_project_material_take(payload: VideoMixProjectMaterialTakeUpdateRequest) -> dict[str, Any]:
+    dashboard = update_project_material_take(
+        payload.work_dir,
+        payload.episode_id,
+        payload.take_id,
+        payload.source_start_ms,
+        payload.source_end_ms,
+    )
+    return {"ok": True, "dashboard": dashboard}
+
+
+@app.post("/api/video-mix/project-materials/takes/reorder")
+async def reorder_video_mix_project_material_takes(payload: VideoMixProjectMaterialTakeReorderRequest) -> dict[str, Any]:
+    dashboard = reorder_project_material_takes(payload.work_dir, payload.episode_id, payload.ordered_take_ids)
+    return {"ok": True, "dashboard": dashboard}
+
+
 @app.post("/api/video-mix/candidates/bulk/approve")
 async def approve_video_mix_candidates_bulk(payload: VideoMixBulkRequest) -> dict[str, Any]:
     dashboard = bulk_update_candidate_status(payload.work_dir, payload.candidate_ids, CandidateStatus.APPROVED, payload.note)
@@ -367,6 +562,75 @@ async def pick_video_mix_source_folder(payload: VideoMixPickSourceRequest) -> di
     return pick_source_materials_dir(payload.initial_dir)
 
 
+@app.post("/api/video-mix/pick-file")
+async def pick_video_mix_file(payload: VideoMixPickFileRequest) -> dict[str, Any]:
+    return pick_source_media_file(payload.initial_dir, title=payload.title)
+
+
+@app.post("/api/video-mix/upload-file")
+async def upload_video_mix_file(request: Request) -> dict[str, Any]:
+    purpose = request.headers.get("x-video-mix-upload-purpose", "generic")
+    raw_filename = request.headers.get("x-video-mix-upload-filename") or "upload.bin"
+    filename = Path(unquote(raw_filename)).name
+    upload_session = request.headers.get("x-video-mix-upload-session", "").strip()
+    relative_path = unquote(request.headers.get("x-video-mix-upload-relative-path", "").strip())
+    suffix = Path(filename).suffix
+    safe_purpose = "".join(char if char.isalnum() or char in {"_", "-"} else "_" for char in purpose) or "generic"
+    upload_root = Path(tempfile.gettempdir()) / "yt_dlp_video_mix_uploads" / safe_purpose
+    upload_root.mkdir(parents=True, exist_ok=True)
+    if upload_session:
+        safe_session = "".join(char if char.isalnum() or char in {"_", "-"} else "_" for char in upload_session) or uuid.uuid4().hex
+        session_root = upload_root / safe_session
+        session_root.mkdir(parents=True, exist_ok=True)
+        normalized_relative = normpath(relative_path.replace("\\", "/")).lstrip("/")
+        if normalized_relative in {".", ""}:
+            normalized_relative = filename
+        if normalized_relative.startswith("../") or normalized_relative == "..":
+            raise HTTPException(status_code=400, detail="Dropped relative path is unsafe")
+        stored_path = (session_root / normalized_relative).resolve()
+        if session_root.resolve() not in stored_path.parents and stored_path != session_root.resolve():
+            raise HTTPException(status_code=400, detail="Dropped relative path escapes the upload session root")
+        stored_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        session_root = None
+        stored_path = upload_root / f"{uuid.uuid4().hex}{suffix}"
+    payload = await request.body()
+    stored_path.write_bytes(payload)
+    result = {
+        "ok": True,
+        "purpose": safe_purpose,
+        "original_filename": filename,
+        "file_path": str(stored_path.resolve()),
+    }
+    if session_root is not None:
+        result["root_dir"] = str(session_root.resolve())
+        result["relative_path"] = normalized_relative
+        result["upload_session"] = safe_session
+    return result
+
+
+@app.get("/api/video-mix/local-media")
+async def video_mix_local_media(file_path: str) -> FileResponse:
+    path = resolve_local_preview_media_path(file_path)
+    return FileResponse(path=path, filename=path.name)
+
+
+@app.post("/api/video-mix/open-local-file")
+async def video_mix_open_local_file(payload: VideoMixOpenLocalFileRequest) -> dict[str, Any]:
+    path = resolve_local_preview_media_path(payload.file_path)
+    os.startfile(str(path))
+    return {"ok": True, "file_path": str(path)}
+
+
+@app.post("/api/video-mix/open-local-path")
+async def video_mix_open_local_path(payload: VideoMixOpenLocalPathRequest) -> dict[str, Any]:
+    path = Path(payload.path).expanduser().resolve()
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Selected path does not exist: {path}")
+    os.startfile(str(path))
+    return {"ok": True, "path": str(path)}
+
+
 @app.post("/api/video-mix/source/scan")
 async def scan_video_mix_source(payload: VideoMixSourceScanRequest) -> dict[str, Any]:
     try:
@@ -408,6 +672,90 @@ async def plan_video_mix_source(payload: VideoMixSourcePlanRequest) -> dict[str,
     }
 
 
+@app.post("/api/video-mix/import-zip")
+async def import_video_mix_zip_archive(
+    file: Annotated[UploadFile, File(...)],
+    project_name: Annotated[str, Form()] = "",
+    work_dir: Annotated[str, Form()] = "",
+    ffprobe: Annotated[str, Form()] = "ffprobe",
+    ffmpeg: Annotated[str, Form()] = "ffmpeg",
+) -> dict[str, Any]:
+    filename = Path(file.filename or "upload.zip").name
+    if Path(filename).suffix.lower() != ".zip":
+        raise HTTPException(status_code=400, detail="Uploaded file must be a ZIP archive.")
+    staged_path = stage_upload_file(filename, await file.read())
+    try:
+        result = import_video_mix_zip(
+            staged_path,
+            project_name=project_name or None,
+            work_dir=work_dir or None,
+            ffprobe_path=ffprobe,
+            ffmpeg_path=ffmpeg,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if staged_path.exists():
+            staged_path.unlink(missing_ok=True)
+    return {
+        "ok": True,
+        **result,
+        "dashboard": build_video_mix_dashboard_payload(result["work_dir"]),
+    }
+
+
+@app.post("/api/video-mix/import-zip-path")
+async def import_video_mix_zip_from_path(payload: VideoMixZipImportPathRequest) -> dict[str, Any]:
+    try:
+        result = import_video_mix_zip(
+            payload.zip_path,
+            project_name=payload.project_name or None,
+            work_dir=payload.work_dir or None,
+            ffprobe_path=payload.ffprobe,
+            ffmpeg_path=payload.ffmpeg,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        **result,
+        "dashboard": build_video_mix_dashboard_payload(result["work_dir"]),
+    }
+
+
+@app.post("/api/video-mix/quick-mix-estimate")
+async def estimate_video_mix_quick_mix(payload: VideoMixQuickMixEstimateRequest) -> dict[str, Any]:
+    try:
+        return {
+            "ok": True,
+            **estimate_quick_mix_capacity(
+                payload.source_dir,
+                duration_seconds=payload.duration_seconds,
+                episode_duration_min_seconds=payload.episode_duration_min_seconds,
+                episode_duration_max_seconds=payload.episode_duration_max_seconds,
+                ffprobe_path=payload.ffprobe,
+                music_path=payload.music_path or None,
+                music_paths=payload.music_paths or None,
+                use_music_duration=payload.use_music_duration,
+                opening_media_path=payload.opening_media_path or None,
+                opening_media_paths=payload.opening_media_paths or None,
+                closing_media_path=payload.closing_media_path or None,
+                closing_media_paths=payload.closing_media_paths or None,
+                use_closing_duration=payload.use_closing_duration,
+            ),
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except NotADirectoryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/video-mix/quick-mix")
 async def quick_mix_video_mix_source(payload: VideoMixQuickMixRequest) -> dict[str, Any]:
     try:
@@ -415,11 +763,21 @@ async def quick_mix_video_mix_source(payload: VideoMixQuickMixRequest) -> dict[s
             payload.source_dir,
             duration_seconds=payload.duration_seconds,
             output_count=payload.output_count,
+            episode_duration_min_seconds=payload.episode_duration_min_seconds,
+            episode_duration_max_seconds=payload.episode_duration_max_seconds,
             project_name=payload.project_name or None,
             pack=payload.pack,
             work_dir=payload.work_dir or None,
             ffmpeg_path=payload.ffmpeg,
             ffprobe_path=payload.ffprobe,
+            music_path=payload.music_path or None,
+            music_paths=payload.music_paths or None,
+            use_music_duration=payload.use_music_duration,
+            opening_media_path=payload.opening_media_path or None,
+            opening_media_paths=payload.opening_media_paths or None,
+            closing_media_path=payload.closing_media_path or None,
+            closing_media_paths=payload.closing_media_paths or None,
+            use_closing_duration=payload.use_closing_duration,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -487,6 +487,11 @@ async function loadSettings() {
     <div class="setting-row"><label for="quality">Quality / format</label><input id="quality" name="quality" value="${escapeAttr(settings.quality)}"></div>
     <div class="setting-row"><label for="retry_enabled">Retry enabled</label><select id="retry_enabled" name="retry_enabled"><option value="true" ${settings.retry_enabled ? "selected" : ""}>Enabled</option><option value="false" ${!settings.retry_enabled ? "selected" : ""}>Disabled</option></select></div>
     <div class="setting-row"><label for="retry_count">Retry count</label><input id="retry_count" name="retry_count" type="number" min="0" value="${escapeAttr(settings.retry_count)}"></div>
+    <div class="setting-row"><label for="auth_mode">Authentication</label><select id="auth_mode" name="auth_mode"><option value="none" ${settings.auth_mode === "none" ? "selected" : ""}>None</option><option value="browser" ${settings.auth_mode === "browser" ? "selected" : ""}>Cookies from browser</option><option value="file" ${settings.auth_mode === "file" ? "selected" : ""}>Cookie file</option></select></div>
+    <div class="setting-row"><label for="cookies_browser">Browser name</label><input id="cookies_browser" name="cookies_browser" value="${escapeAttr(settings.cookies_browser || "chrome")}" placeholder="chrome, edge, firefox, brave"></div>
+    <div class="setting-row"><label for="cookies_browser_profile">Browser profile</label><input id="cookies_browser_profile" name="cookies_browser_profile" value="${escapeAttr(settings.cookies_browser_profile || "")}" placeholder="Default"></div>
+    <div class="setting-row"><label for="cookies_file">Cookie file path</label><input id="cookies_file" name="cookies_file" value="${escapeAttr(settings.cookies_file || "")}" placeholder="C:\\path\\to\\cookies.txt"></div>
+    <div class="muted">Instagram often requires an authenticated session. Use browser cookies or a Netscape cookie file if public access fails.</div>
     <button class="accent-btn" type="submit">Save settings</button>
   `;
 }
@@ -620,6 +625,10 @@ function bindSettingsSubmit() {
         quality: data.quality,
         retry_enabled: data.retry_enabled === "true",
         retry_count: Number(data.retry_count || 0),
+        auth_mode: data.auth_mode || "none",
+        cookies_browser: data.cookies_browser || "chrome",
+        cookies_browser_profile: data.cookies_browser_profile || "",
+        cookies_file: data.cookies_file || "",
       }),
     });
     await loadSettings();

@@ -7,181 +7,404 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=video-mix-stage18-quick-mix">
+  <link rel="stylesheet" href="/static/styles.css?v=video-mix-stage71-fix-duplicate-drop">
 </head>
 <body>
   <div class="video-mix-shell">
     <section class="video-mix-hero">
-      <div>
-        <p class="eyebrow">VIDEO MIX / Stage 1.8</p>
+      <div class="video-mix-hero-title-wrap">
         <h1 id="vm-hero-title">Локальный дашборд для Quick Mix, ревью и экспорта</h1>
-        <p id="vm-hero-copy" class="hero-copy">Выберите исходные материалы, запустите Быстрый микс для прямой генерации MP4 или загрузите готовый VIDEO MIX work_dir для обычного ревью, approve/reject и экспорта.</p>
       </div>
       <div class="video-mix-hero-actions">
         <div class="video-mix-locale-toggle" role="group" aria-label="Language">
           <button id="vm-lang-ru" class="ghost-btn" type="button">RU</button>
           <button id="vm-lang-en" class="ghost-btn" type="button">EN</button>
         </div>
-        <button id="vm-open-review" class="ghost-btn" type="button">Открыть review.html</button>
-        <button id="vm-open-exports" class="ghost-btn" type="button">Открыть exports</button>
-        <button id="vm-open-workdir" class="ghost-btn" type="button">Открыть work_dir</button>
       </div>
     </section>
 
     <section class="video-mix-layout">
       <aside class="video-mix-sidebar card">
-        <div class="card-header">
-          <div>
-            <h2 id="vm-source-title">Материалы</h2>
-            <p id="vm-source-help" class="muted">Сначала выберите папку с исходными видео и создайте или обновите VIDEO MIX проект.</p>
-          </div>
-        </div>
-        <label class="field">
-          <span id="vm-source-dir-label">Папка с материалами</span>
-          <input id="vm-source-dir-input" type="text" placeholder="C:\path\to\source_materials">
-        </label>
-        <label class="field">
-          <span id="vm-source-project-name-label">Имя проекта</span>
-          <input id="vm-source-project-name-input" type="text" placeholder="Wedding Validation">
-        </label>
-        <label class="field">
-          <span id="vm-source-workdir-label">Выходной work_dir</span>
-          <input id="vm-source-workdir-input" type="text" placeholder="C:\path\to\source_materials\_video_mix_work">
-        </label>
-        <div class="actions-row">
-          <button id="vm-source-browse-btn" class="ghost-btn" type="button">Выбрать материалы</button>
-          <button id="vm-source-scan-btn" class="ghost-btn" type="button">Сканировать</button>
-          <button id="vm-source-plan-btn" class="accent-btn" type="button">Создать / обновить проект</button>
-        </div>
-        <div id="vm-source-scan-summary" class="video-mix-source-summary">
-          <div class="empty">Скан материалов ещё не запускался.</div>
-        </div>
+        <div class="video-mix-board">
+          <div class="video-mix-column video-mix-column-primary">
+            <div class="card-header">
+              <div>
+                <h2 id="vm-source-title">Материалы</h2>
+                <p id="vm-source-help" class="muted">Сначала выберите папку с исходными видео и создайте или обновите VIDEO MIX проект.</p>
+              </div>
+            </div>
+            <label class="field video-mix-hidden-path-field">
+              <span id="vm-source-dir-label">Папка с материалами</span>
+              <input id="vm-source-dir-input" type="text" placeholder="C:\path\to\source_materials">
+            </label>
+            <div class="video-mix-source-controls">
+              <div class="video-mix-source-controls-row">
+                <button id="vm-source-browse-btn" class="ghost-btn" type="button">Выбрать материалы</button>
+                <button id="vm-source-zip-browse-btn" class="ghost-btn" type="button">Выбрать ZIP</button>
+              </div>
+              <div class="video-mix-source-controls-row">
+                <div id="vm-source-drop-zone" class="video-mix-drop-zone compact-drop-zone" data-drop-target="source_zip">
+                  Перетащите папку или ZIP сюда
+                </div>
+                <button id="vm-source-open-dir-btn" class="ghost-btn" type="button">Открыть папку</button>
+              </div>
+            </div>
+            <label class="field">
+              <span id="vm-source-project-name-label">Имя проекта</span>
+              <input id="vm-source-project-name-input" type="text" placeholder="Wedding Validation">
+            </label>
+            <label class="field video-mix-hidden-path-field">
+              <span id="vm-source-workdir-label">Выходной work_dir</span>
+              <input id="vm-source-workdir-input" type="text" placeholder="C:\path\to\source_materials\_video_mix_work">
+            </label>
+            <div class="actions-row video-mix-compact-actions">
+              <button id="vm-source-open-workdir-btn" class="ghost-btn" type="button">Открыть work_dir</button>
+              <button id="vm-source-scan-btn" class="ghost-btn" type="button">Сканировать</button>
+              <button id="vm-source-plan-btn" class="accent-btn" type="button">Создать / обновить проект</button>
+              <button id="vm-reset-btn" class="ghost-btn" type="button">Reset</button>
+            </div>
+            <div id="vm-source-scan-summary" class="video-mix-source-summary video-mix-hidden-panel">
+              <div class="empty">Скан материалов ещё не запускался.</div>
+            </div>
 
-        <div class="card-header video-mix-section-header">
-          <div>
-            <h2 id="vm-quickmix-title">Быстрый микс</h2>
-            <p id="vm-quickmix-help" class="muted">Прямая генерация готовых MP4 без обязательного approve/reject.</p>
-          </div>
-        </div>
-        <label class="field">
-          <span id="vm-quickmix-duration-label">Секунд на ролик</span>
-          <input id="vm-quickmix-duration-input" type="number" min="1" step="1" value="10">
-        </label>
-        <label class="field">
-          <span id="vm-quickmix-count-label">Сколько роликов</span>
-          <input id="vm-quickmix-count-input" type="number" min="1" step="1" value="2">
-        </label>
-        <div class="actions-row">
-          <button id="vm-quickmix-btn" class="accent-btn" type="button">Сгенерировать ролики</button>
-        </div>
-        <div id="vm-quickmix-summary" class="video-mix-source-summary">
-          <div class="empty">Quick Mix ещё не запускался.</div>
-        </div>
+            <div id="vm-load-section" class="video-mix-load-section video-mix-advanced-section">
+              <div class="card-header">
+                <div>
+                  <h2 id="vm-load-title">Загрузка work_dir</h2>
+                  <p id="vm-load-help" class="muted">Технический режим. Обычно вручную загружать work_dir не нужно.</p>
+                </div>
+                <span id="vm-load-state" class="status-chip status-queued">Ожидание</span>
+              </div>
+              <label class="field">
+                <span id="vm-workdir-label">VIDEO MIX work_dir</span>
+                <input id="vm-workdir-input" type="text" placeholder="C:\path\to\video_mix_validation\work">
+              </label>
+              <div class="actions-row">
+                <button id="vm-browse-workdir-btn" class="ghost-btn" type="button">Выбрать папку</button>
+                <button id="vm-load-btn" class="accent-btn" type="button">Загрузить дашборд</button>
+                <button id="vm-copy-url-btn" class="ghost-btn" type="button">Копировать URL</button>
+              </div>
+            </div>
 
-        <div class="card-header">
-          <div>
-            <h2 id="vm-load-title">Загрузка work_dir</h2>
-            <p id="vm-load-help" class="muted">Используйте уже созданную рабочую папку VIDEO MIX.</p>
+            <div class="card-header video-mix-section-header">
+              <div>
+                <h2 id="vm-activity-title">Сейчас происходит</h2>
+              </div>
+            </div>
+            <div id="vm-activity-panel" class="video-mix-activity-panel"></div>
+            <div id="vm-project-meta" class="video-mix-project-meta">
+              <div class="empty">Загрузите work_dir, чтобы увидеть метаданные проекта и сводные счётчики.</div>
+            </div>
           </div>
-          <span id="vm-load-state" class="status-chip status-queued">Ожидание</span>
-        </div>
-        <label class="field">
-          <span id="vm-workdir-label">VIDEO MIX work_dir</span>
-          <input id="vm-workdir-input" type="text" placeholder="C:\path\to\video_mix_validation\work">
-        </label>
-        <div class="actions-row">
-          <button id="vm-browse-workdir-btn" class="ghost-btn" type="button">Выбрать папку</button>
-          <button id="vm-load-btn" class="accent-btn" type="button">Загрузить дашборд</button>
-          <button id="vm-copy-url-btn" class="ghost-btn" type="button">Копировать URL</button>
-        </div>
-        <div id="vm-project-meta" class="video-mix-project-meta">
-          <div class="empty">Загрузите work_dir, чтобы увидеть метаданные проекта и сводные счётчики.</div>
-        </div>
-        <div class="video-mix-summary-grid" id="vm-summary-grid"></div>
-        <div class="card-header video-mix-section-header">
-          <div>
-            <h2 id="vm-pipeline-title">Пайплайн</h2>
-            <p id="vm-pipeline-help" class="muted">Путь от ассетов до экспорта в одном локальном процессе.</p>
+
+          <div class="video-mix-column video-mix-column-secondary">
+            <div class="card-header video-mix-section-header">
+              <div>
+                <h2 id="vm-quickmix-title">Быстрый микс</h2>
+                <p id="vm-quickmix-help" class="muted">Прямая генерация готовых MP4 без обязательного approve/reject.</p>
+              </div>
+            </div>
+            <div class="video-mix-quickmix-form">
+          <div class="video-mix-inline-fields">
+            <label class="field video-mix-compact-field">
+              <span id="vm-quickmix-duration-label">Секунд на ролик</span>
+              <input id="vm-quickmix-duration-input" type="number" min="1" step="1" value="10">
+            </label>
+            <label class="field video-mix-compact-field">
+              <span id="vm-quickmix-count-label">Сколько роликов</span>
+              <input id="vm-quickmix-count-input" type="number" min="1" step="1" value="2">
+            </label>
+          </div>
+          <div class="video-mix-inline-range">
+            <span id="vm-quickmix-episode-range-label" class="video-mix-range-title">Эпизоды внутри ролика, сек</span>
+            <div class="video-mix-inline-fields">
+              <label class="field video-mix-compact-field">
+                <span id="vm-quickmix-episode-min-label">От</span>
+                <input id="vm-quickmix-episode-min-input" type="number" min="0.1" step="0.1" value="1.5">
+              </label>
+              <label class="field video-mix-compact-field">
+                <span id="vm-quickmix-episode-max-label">До</span>
+                <input id="vm-quickmix-episode-max-input" type="number" min="0.1" step="0.1" value="2.0">
+              </label>
+            </div>
+          </div>
+          <div id="vm-quickmix-estimate" class="video-mix-inline-hint muted">Оценка появится после выбора материалов</div>
+          <div class="video-mix-picker-block">
+            <label class="field">
+              <span id="vm-quickmix-music-label">Музыкальный трек (опционально)</span>
+              <input id="vm-quickmix-music-input" type="hidden">
+              <input id="vm-quickmix-music-native-input" type="file" accept="audio/*,video/*" multiple hidden>
+              <div id="vm-quickmix-music-drop-surface" class="video-mix-picker-actions video-mix-picker-drop-surface">
+                <button id="vm-quickmix-music-browse-btn" class="ghost-btn" type="button">Выбрать трек</button>
+                <div id="vm-quickmix-music-drop-zone" class="video-mix-drop-zone compact-drop-zone video-mix-inline-drop-hint" data-drop-target="music">Перетащите файл сюда</div>
+              </div>
+              <div class="video-mix-picker-preview-row">
+                <div id="vm-quickmix-music-selected" class="video-mix-selection-pill video-mix-selection-drop-target muted" data-drop-target="music">Файл не выбран</div>
+              </div>
+            </label>
+            <label class="video-mix-toggle">
+              <input id="vm-quickmix-use-music-duration" type="checkbox">
+              <span id="vm-quickmix-use-music-duration-label">Использовать всю длину трека</span>
+            </label>
+          </div>
+          <div class="video-mix-picker-block">
+            <label class="field">
+              <span id="vm-quickmix-opening-label">Начальный кадр / клип (опционально)</span>
+              <input id="vm-quickmix-opening-input" type="hidden">
+              <input id="vm-quickmix-opening-native-input" type="file" accept="image/*,video/*" multiple hidden>
+              <div id="vm-quickmix-opening-drop-surface" class="video-mix-picker-actions video-mix-picker-drop-surface">
+                <button id="vm-quickmix-opening-browse-btn" class="ghost-btn" type="button">Выбрать начало</button>
+                <div id="vm-quickmix-opening-drop-zone" class="video-mix-drop-zone compact-drop-zone video-mix-inline-drop-hint" data-drop-target="opening">Перетащите файл сюда</div>
+              </div>
+              <div class="video-mix-picker-preview-row">
+                <div id="vm-quickmix-opening-selected" class="video-mix-selection-pill video-mix-selection-drop-target muted" data-drop-target="opening">Файл не выбран</div>
+              </div>
+            </label>
+          </div>
+          <div class="video-mix-picker-block">
+            <label class="field">
+              <span id="vm-quickmix-closing-label">Конечный кадр / клип (опционально)</span>
+              <input id="vm-quickmix-closing-input" type="hidden">
+              <input id="vm-quickmix-closing-native-input" type="file" accept="image/*,video/*" multiple hidden>
+              <div id="vm-quickmix-closing-drop-surface" class="video-mix-picker-actions video-mix-picker-drop-surface">
+                <button id="vm-quickmix-closing-browse-btn" class="ghost-btn" type="button">Выбрать финал</button>
+                <div id="vm-quickmix-closing-drop-zone" class="video-mix-drop-zone compact-drop-zone video-mix-inline-drop-hint" data-drop-target="closing">Перетащите файл сюда</div>
+              </div>
+              <div class="video-mix-picker-preview-row">
+                <div id="vm-quickmix-closing-selected" class="video-mix-selection-pill video-mix-selection-drop-target muted" data-drop-target="closing">Файл не выбран</div>
+              </div>
+            </label>
+            <label class="video-mix-toggle">
+              <input id="vm-quickmix-use-closing-duration" type="checkbox">
+              <span id="vm-quickmix-use-closing-duration-label">Использовать всю длину финала</span>
+            </label>
+          </div>
+            </div>
+            <div class="actions-row">
+              <button id="vm-quickmix-btn" class="accent-btn" type="button">Сгенерировать ролики</button>
+              <button id="vm-quickmix-open-exports-btn" class="ghost-btn" type="button">Открыть папку с готовыми роликами</button>
+              <div id="vm-quickmix-timer" class="video-mix-inline-hint">Время: -</div>
+            </div>
+            <div id="vm-quickmix-summary" class="video-mix-source-summary">
+              <div class="empty">Quick Mix ещё не запускался.</div>
+            </div>
+
+            <div class="video-mix-summary-grid" id="vm-summary-grid"></div>
+            <div class="video-mix-action-stack" id="vm-pipeline-modal-action">
+              <button id="vm-open-pipeline-modal-btn" class="ghost-btn full-width" type="button">Показать пайплайн</button>
+              <button id="vm-open-candidates-modal-btn" class="ghost-btn full-width" type="button">Открыть кандидатов</button>
+            </div>
+            <div id="vm-pipeline-section" class="video-mix-pipeline-section">
+            <div class="card-header video-mix-section-header">
+              <div>
+                <h2 id="vm-pipeline-title">Пайплайн</h2>
+                <p id="vm-pipeline-help" class="muted">Путь от ассетов до экспорта в одном локальном процессе.</p>
+              </div>
+            </div>
+            <div id="vm-pipeline" class="pipeline-map"></div>
+            </div>
+            <div class="card-header video-mix-section-header">
+              <div>
+                <h2 id="vm-actions-title">Действия</h2>
+                <p id="vm-actions-help" class="muted">Используется только текущее поведение VIDEO MIX.</p>
+              </div>
+            </div>
+            <div class="video-mix-action-stack">
+              <button id="vm-export-btn" class="accent-btn full-width" type="button">Экспортировать одобренных кандидатов</button>
+              <button id="vm-refresh-btn" class="ghost-btn full-width" type="button">Обновить дашборд</button>
+            </div>
+            <div id="vm-exports-list" class="video-mix-exports-list"></div>
+            <div class="card-header video-mix-section-header">
+              <div>
+                <h2 id="vm-debug-title">Логи</h2>
+                <p id="vm-debug-help" class="muted">Клики, запросы, ответы и ошибки выводятся сюда автоматически.</p>
+              </div>
+            </div>
+            <div class="video-mix-action-stack">
+              <button id="vm-debug-clear-btn" class="ghost-btn full-width" type="button">Очистить логи</button>
+            </div>
+            <div id="vm-debug-log" class="video-mix-debug-log">
+              <div class="muted">Логи появятся после первого действия.</div>
+            </div>
           </div>
         </div>
-        <div id="vm-pipeline" class="pipeline-map"></div>
-        <div class="card-header video-mix-section-header">
-          <div>
-            <h2 id="vm-actions-title">Действия</h2>
-            <p id="vm-actions-help" class="muted">Используется только текущее поведение VIDEO MIX.</p>
-          </div>
-        </div>
-        <div class="video-mix-action-stack">
-          <button id="vm-export-btn" class="accent-btn full-width" type="button">Экспортировать одобренных кандидатов</button>
-          <button id="vm-refresh-btn" class="ghost-btn full-width" type="button">Обновить дашборд</button>
-        </div>
-        <div id="vm-exports-list" class="video-mix-exports-list"></div>
       </aside>
 
       <main class="video-mix-main">
-        <div class="card">
+        <input id="vm-episode-file-native-input" type="file" multiple hidden>
+        <div class="card video-mix-materials-stage-card">
           <div class="card-header">
             <div>
-              <h2 id="vm-candidates-title">Карточки кандидатов</h2>
-              <p id="vm-candidates-help" class="muted">Миниатюра, score, template, предупреждения, исходные файлы и быстрые действия.</p>
+              <h2 id="vm-materials-stage-title">Project Materials</h2>
+              <p id="vm-materials-stage-help" class="muted">Один master asset в проекте, несколько Take-ссылок по назначению или reuse.</p>
             </div>
-            <span id="vm-candidate-count" class="status-chip status-idle">0 кандидатов</span>
-          </div>
-          <div class="video-mix-toolbar">
-            <label class="field">
-              <span id="vm-filter-status-label">Статус</span>
-              <select id="vm-filter-status">
-                <option id="vm-filter-status-all" value="all">Все</option>
-                <option id="vm-filter-status-generated" value="generated">Сгенерированы</option>
-                <option id="vm-filter-status-approved" value="approved">Одобрены</option>
-                <option id="vm-filter-status-rejected" value="rejected">Отклонены</option>
-                <option id="vm-filter-status-exported" value="exported">Экспортированы</option>
-              </select>
-            </label>
-            <label class="field">
-              <span id="vm-filter-warnings-label">Предупреждения</span>
-              <select id="vm-filter-warnings">
-                <option id="vm-filter-warnings-all" value="all">Все</option>
-                <option id="vm-filter-warnings-with" value="with_warnings">С предупреждениями</option>
-                <option id="vm-filter-warnings-without" value="without_warnings">Без предупреждений</option>
-              </select>
-            </label>
-            <label class="field">
-              <span id="vm-sort-label">Сортировка</span>
-              <select id="vm-sort">
-                <option id="vm-sort-score-desc" value="score_desc">Score по убыванию</option>
-                <option id="vm-sort-score-asc" value="score_asc">Score по возрастанию</option>
-                <option id="vm-sort-duration-desc" value="duration_desc">Длительность по убыванию</option>
-                <option id="vm-sort-duration-asc" value="duration_asc">Длительность по возрастанию</option>
-                <option id="vm-sort-status" value="status_asc">По статусу</option>
-                <option id="vm-sort-template" value="template_asc">По template</option>
-                <option id="vm-sort-source" value="source_asc">По имени исходного файла</option>
-              </select>
-            </label>
-            <label class="field video-mix-search-field">
-              <span id="vm-search-label">Поиск</span>
-              <input id="vm-search" type="text" placeholder="template или имя исходного файла">
-            </label>
-          </div>
-          <div class="video-mix-selection-bar">
-            <div class="video-mix-selection-summary">
-              <strong id="vm-selected-count">0 выбрано</strong>
-              <span class="muted" id="vm-visible-count">0 видно</span>
-            </div>
-            <div class="video-mix-selection-actions">
-              <button id="vm-select-visible" class="ghost-btn" type="button">Выбрать видимые</button>
-              <button id="vm-clear-selection" class="ghost-btn" type="button">Сбросить выбор</button>
-              <button id="vm-approve-selected" class="accent-btn" type="button">Одобрить выбранные</button>
-              <button id="vm-reject-selected" class="ghost-btn" type="button">Отклонить выбранные</button>
+            <div class="actions-row video-mix-inline-actions">
+              <button id="vm-add-episode-btn" class="ghost-btn" type="button">Добавить Episode</button>
+              <button id="vm-open-project-materials-inline-btn" class="accent-btn" type="button">Открыть Project Materials</button>
             </div>
           </div>
-          <div id="vm-candidates" class="video-mix-candidate-grid">
-            <div class="empty">work_dir ещё не загружен.</div>
+          <div id="vm-material-episodes" class="video-mix-episode-board">
+            <div class="empty">Загрузите work_dir, чтобы назначать материалы по Episode.</div>
+          </div>
+        </div>
+
+        <div class="card video-mix-timeline-card">
+          <div class="card-header">
+            <div>
+              <h2 id="vm-timeline-title">Timeline</h2>
+              <p id="vm-timeline-help" class="muted">Первый видимый монтажный таймлайн: Episode rows и Take blocks из текущих назначений.</p>
+            </div>
+          </div>
+          <div id="vm-material-timeline" class="video-mix-timeline-surface">
+            <div class="empty">Таймлайн появится после назначения Takes в Episodes.</div>
           </div>
         </div>
       </main>
+
     </section>
   </div>
-  <script type="module" src="/static/video-mix-dashboard.js?v=video-mix-stage18-quick-mix"></script>
+  <dialog id="vm-project-materials-modal" class="video-mix-modal">
+    <div class="video-mix-modal-card video-mix-project-materials-modal-card">
+      <div class="card-header">
+        <div>
+          <h2 id="vm-project-materials-title">Project Materials</h2>
+          <p id="vm-project-materials-help" class="muted">Все master assets проекта. По умолчанию drag = assign, повтор = только через explicit reuse.</p>
+        </div>
+        <button id="vm-close-project-materials-btn" class="ghost-btn" type="button">Закрыть</button>
+      </div>
+      <div class="video-mix-project-materials-toolbar">
+        <label class="field">
+          <span id="vm-project-materials-filter-status-label">Статус</span>
+          <select id="vm-project-materials-filter-status">
+            <option value="all">Все</option>
+            <option value="unassigned">Unassigned</option>
+            <option value="assigned">Assigned</option>
+            <option value="reused">Reused</option>
+          </select>
+        </label>
+        <label class="field">
+          <span id="vm-project-materials-filter-type-label">Тип</span>
+          <select id="vm-project-materials-filter-type">
+            <option value="all">Все</option>
+            <option value="video">Video</option>
+            <option value="photo">Photo</option>
+            <option value="audio">Audio</option>
+          </select>
+        </label>
+        <label class="field video-mix-search-field">
+          <span id="vm-project-materials-search-label">Поиск</span>
+          <input id="vm-project-materials-search" type="text" placeholder="filename">
+        </label>
+      </div>
+      <div id="vm-project-materials-counts" class="video-mix-project-materials-counts"></div>
+      <div id="vm-project-materials-grid" class="video-mix-project-materials-grid">
+        <div class="empty">Загрузите work_dir, чтобы увидеть материалы проекта.</div>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="vm-pipeline-modal" class="video-mix-modal">
+    <div class="video-mix-modal-card">
+      <div class="card-header">
+        <div>
+          <h2 id="vm-pipeline-modal-title">Пайплайн</h2>
+          <p id="vm-pipeline-modal-help" class="muted">Путь от ассетов до экспорта в одном локальном процессе.</p>
+        </div>
+        <button id="vm-close-pipeline-modal-btn" class="ghost-btn" type="button">Закрыть</button>
+      </div>
+      <div id="vm-pipeline-modal-body" class="pipeline-map"></div>
+    </div>
+  </dialog>
+  <dialog id="vm-selected-media-modal" class="video-mix-modal video-mix-selected-modal">
+    <div class="video-mix-modal-card">
+      <div class="card-header">
+        <div>
+          <h2>Превью файла</h2>
+          <p class="muted">Локальная модалка предпросмотра без полноэкранного режима.</p>
+        </div>
+        <button id="vm-close-selected-media-modal-btn" class="ghost-btn" type="button">Закрыть</button>
+      </div>
+      <div id="vm-selected-media-modal-body" class="video-mix-selected-modal-body"></div>
+    </div>
+  </dialog>
+  <dialog id="vm-take-editor-modal" class="video-mix-modal video-mix-take-editor-modal">
+    <div class="video-mix-modal-card video-mix-take-editor-modal-card">
+      <div class="card-header">
+        <div>
+          <h2 id="vm-take-editor-title">Редактор Take</h2>
+          <p id="vm-take-editor-help" class="muted">Подрезка дубля и порядок внутри Episode.</p>
+        </div>
+        <button id="vm-close-take-editor-btn" class="ghost-btn" type="button">Закрыть</button>
+      </div>
+      <div id="vm-take-editor-body" class="video-mix-take-editor-body">
+        <div class="empty">Выберите Take.</div>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="vm-candidates-modal" class="video-mix-modal video-mix-candidates-modal">
+    <div class="video-mix-modal-card video-mix-candidates-modal-card">
+      <div class="card-header">
+        <div>
+          <h2 id="vm-candidates-title">Карточки кандидатов</h2>
+          <p id="vm-candidates-help" class="muted">Миниатюра, score, template, предупреждения, исходные файлы и быстрые действия.</p>
+        </div>
+        <div class="video-mix-candidates-modal-head">
+          <span id="vm-candidate-count" class="status-chip status-idle">0 кандидатов</span>
+          <button id="vm-close-candidates-modal-btn" class="ghost-btn" type="button">Закрыть</button>
+        </div>
+      </div>
+      <div id="vm-candidate-toolbar" class="video-mix-toolbar">
+        <label class="field">
+          <span id="vm-filter-status-label">Статус</span>
+          <select id="vm-filter-status">
+            <option id="vm-filter-status-all" value="all">Все</option>
+            <option id="vm-filter-status-generated" value="generated">Сгенерированы</option>
+            <option id="vm-filter-status-approved" value="approved">Одобрены</option>
+            <option id="vm-filter-status-rejected" value="rejected">Отклонены</option>
+            <option id="vm-filter-status-exported" value="exported">Экспортированы</option>
+          </select>
+        </label>
+        <label class="field">
+          <span id="vm-filter-warnings-label">Предупреждения</span>
+          <select id="vm-filter-warnings">
+            <option id="vm-filter-warnings-all" value="all">Все</option>
+            <option id="vm-filter-warnings-with" value="with_warnings">С предупреждениями</option>
+            <option id="vm-filter-warnings-without" value="without_warnings">Без предупреждений</option>
+          </select>
+        </label>
+        <label class="field">
+          <span id="vm-sort-label">Сортировка</span>
+          <select id="vm-sort">
+            <option id="vm-sort-score-desc" value="score_desc">Score по убыванию</option>
+            <option id="vm-sort-score-asc" value="score_asc">Score по возрастанию</option>
+            <option id="vm-sort-duration-desc" value="duration_desc">Длительность по убыванию</option>
+            <option id="vm-sort-duration-asc" value="duration_asc">Длительность по возрастанию</option>
+            <option id="vm-sort-status" value="status_asc">По статусу</option>
+            <option id="vm-sort-template" value="template_asc">По template</option>
+            <option id="vm-sort-source" value="source_asc">По имени исходного файла</option>
+          </select>
+        </label>
+        <label class="field video-mix-search-field">
+          <span id="vm-search-label">Поиск</span>
+          <input id="vm-search" type="text" placeholder="template или имя исходного файла">
+        </label>
+      </div>
+      <div id="vm-selection-bar" class="video-mix-selection-bar">
+        <div class="video-mix-selection-summary">
+          <strong id="vm-selected-count">0 выбрано</strong>
+          <span class="muted" id="vm-visible-count">0 видно</span>
+        </div>
+        <div class="video-mix-selection-actions">
+          <button id="vm-select-visible" class="ghost-btn" type="button">Выбрать видимые</button>
+          <button id="vm-clear-selection" class="ghost-btn" type="button">Сбросить выбор</button>
+          <button id="vm-approve-selected" class="accent-btn" type="button">Одобрить выбранные</button>
+          <button id="vm-reject-selected" class="ghost-btn" type="button">Отклонить выбранные</button>
+        </div>
+      </div>
+      <div id="vm-candidates" class="video-mix-candidate-grid">
+        <div class="empty">work_dir ещё не загружен.</div>
+      </div>
+    </div>
+  </dialog>
+  <script type="module" src="/static/video-mix-dashboard.js?v=video-mix-stage71-fix-duplicate-drop"></script>
 </body>
 </html>

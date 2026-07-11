@@ -24,6 +24,15 @@ def detect_media_type(path: Path) -> MediaType | None:
     return None
 
 
+def should_skip_project_path(project_root: Path, path: Path) -> bool:
+    try:
+        relative_parts = path.resolve().relative_to(project_root.resolve()).parts
+    except ValueError:
+        relative_parts = path.parts
+    directory_parts = relative_parts[:-1]
+    return any(part in SKIP_DIR_NAMES for part in directory_parts)
+
+
 def scan_project_assets(project: Project) -> list[Asset]:
     if not project.root_path.exists():
         raise FileNotFoundError(f"Project folder does not exist: {project.root_path}")
@@ -32,7 +41,7 @@ def scan_project_assets(project: Project) -> list[Asset]:
     for path in sorted(project.root_path.rglob("*")):
         if not path.is_file():
             continue
-        if any(part in SKIP_DIR_NAMES for part in path.parts):
+        if should_skip_project_path(project.root_path, path):
             continue
         media_type = detect_media_type(path)
         if media_type is None:
