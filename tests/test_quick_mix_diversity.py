@@ -6,12 +6,17 @@ from video_mix.core.quick_mix_diversity import (
     DiversitySegment,
     build_diverse_batch,
     compare_plans,
+    estimate_search_space,
+    group_sources,
     rejection_reason,
 )
 from video_mix.core.quick_mix_planner import QuickMixSource
 
 
-def sources(folder_counts: list[int], media_type: str = "photo") -> list[QuickMixSource]:
+def sources(
+    folder_counts: list[int],
+    media_type: str = "photo",
+) -> list[QuickMixSource]:
     return [
         QuickMixSource(
             source_id=f"{chr(65 + folder_index)}{take_index}",
@@ -51,11 +56,20 @@ def test_rejects_four_identical_positions_and_changed_tail() -> None:
     assert rejection_reason(left, right, DiversityPolicy()) == "single_position_change"
 
 
+def test_rejects_identical_prefix_with_only_one_extra_tail_segment() -> None:
+    left = manual_plan("A1", "B1", "C1", "D1", "E1")
+    right = manual_plan("A1", "B1", "C1", "D1", "E1", "F2")
+    assert rejection_reason(left, right, DiversityPolicy()) == "single_position_change"
+
+
 def test_long_identical_prefix_is_scored_as_more_similar() -> None:
     reference = manual_plan("A1", "B1", "C1", "D1", "E1")
     close = manual_plan("A1", "B1", "C1", "D4", "E5")
     far = manual_plan("C2", "E3", "A4", "B5", "D2")
-    assert compare_plans(reference, far).distance > compare_plans(reference, close).distance
+    assert compare_plans(reference, far).distance > compare_plans(
+        reference,
+        close,
+    ).distance
 
 
 def test_five_by_five_generates_100_separated_plans() -> None:
@@ -81,7 +95,11 @@ def test_five_by_five_generates_100_separated_plans() -> None:
 
 
 def test_supports_four_and_ten_uneven_folders() -> None:
-    policy = DiversityPolicy(exact_enumeration_limit=300, max_candidate_pool=500, minimum_candidates_per_output=8)
+    policy = DiversityPolicy(
+        exact_enumeration_limit=300,
+        max_candidate_pool=500,
+        minimum_candidates_per_output=8,
+    )
     for counts in ([2, 3, 4, 5], [1, 2, 3, 4, 5, 2, 3, 1, 4, 2]):
         result = build_diverse_batch(
             sources(list(counts)),
@@ -94,13 +112,22 @@ def test_supports_four_and_ten_uneven_folders() -> None:
         assert all(plan.planned_duration_ms == 8_000 for plan in result.plans)
 
 
+def test_large_folder_search_space_avoids_permutation_enumeration() -> None:
+    grouped = group_sources(sources([1] * 20))
+    assert estimate_search_space(grouped, 20_000) == 670_442_572_800
+
+
 def test_uses_folder_subset_when_more_folders_than_positions() -> None:
     result = build_diverse_batch(
         sources([2] * 10),
         target_duration_ms=8_000,
         output_count=10,
         seed=41,
-        policy=DiversityPolicy(exact_enumeration_limit=100, max_candidate_pool=400, minimum_candidates_per_output=8),
+        policy=DiversityPolicy(
+            exact_enumeration_limit=100,
+            max_candidate_pool=400,
+            minimum_candidates_per_output=8,
+        ),
     )
     assert all(len(plan.segments) == 4 for plan in result.plans)
     assert all(len(set(plan.folder_signature)) == 4 for plan in result.plans)
@@ -112,7 +139,11 @@ def test_folder_and_take_cycles_exhaust_before_reuse() -> None:
         target_duration_ms=12_000,
         output_count=8,
         seed=59,
-        policy=DiversityPolicy(exact_enumeration_limit=100, max_candidate_pool=400, minimum_candidates_per_output=8),
+        policy=DiversityPolicy(
+            exact_enumeration_limit=100,
+            max_candidate_pool=400,
+            minimum_candidates_per_output=8,
+        ),
     )
     for plan in folder_result.plans:
         assert len(set(plan.folder_signature[:4])) == 4
@@ -139,15 +170,27 @@ def test_exclusions_keep_opening_and_closing_out_of_body() -> None:
         seed=73,
         excluded_source_ids={material[0].source_id},
         excluded_source_groups={material[1].source_group},
-        policy=DiversityPolicy(exact_enumeration_limit=100, max_candidate_pool=300, minimum_candidates_per_output=8),
+        policy=DiversityPolicy(
+            exact_enumeration_limit=100,
+            max_candidate_pool=300,
+            minimum_candidates_per_output=8,
+        ),
     )
-    selected = {segment.source_id for plan in result.plans for segment in plan.segments}
+    selected = {
+        segment.source_id
+        for plan in result.plans
+        for segment in plan.segments
+    }
     assert material[0].source_id not in selected
     assert material[1].source_id not in selected
 
 
 def test_seed_is_deterministic() -> None:
-    policy = DiversityPolicy(exact_enumeration_limit=100, max_candidate_pool=500, minimum_candidates_per_output=8)
+    policy = DiversityPolicy(
+        exact_enumeration_limit=100,
+        max_candidate_pool=500,
+        minimum_candidates_per_output=8,
+    )
     kwargs = {
         "sources": sources([3, 3, 3, 3, 3]),
         "target_duration_ms": 10_000,
@@ -157,4 +200,6 @@ def test_seed_is_deterministic() -> None:
     }
     left = build_diverse_batch(**kwargs)
     right = build_diverse_batch(**kwargs)
-    assert [plan.body_signature for plan in left.plans] == [plan.body_signature for plan in right.plans]
+    assert [plan.body_signature for plan in left.plans] == [
+        plan.body_signature for plan in right.plans
+    ]
