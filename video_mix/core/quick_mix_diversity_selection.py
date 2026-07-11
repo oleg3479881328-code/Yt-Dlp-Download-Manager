@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import random
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from statistics import mean
-from typing import Iterable, Sequence
 
 from .quick_mix_diversity_candidates import (
     candidate_budget,
