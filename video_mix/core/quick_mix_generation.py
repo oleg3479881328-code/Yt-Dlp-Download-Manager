@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .quick_mix_diversity_models import DiversityPlan, DiversitySegment
+
 
 @dataclass(frozen=True, slots=True)
 class QuickMixGenerationPaths:
@@ -83,7 +85,7 @@ def record_generation(
         ],
     }
     entries.append(entry)
-    _write_json_atomic(index_path, payload)
+    write_generation_json(index_path, payload)
     return entry
 
 
@@ -113,7 +115,83 @@ def _timestamp_generation_id(now: datetime | None) -> str:
     return f"quick_mix_{moment.strftime('%Y%m%dT%H%M%S%fZ')}"
 
 
-def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+def load_prior_diversity_plans(work_dir: Path) -> list[DiversityPlan]:
+    resolved_work_dir = work_dir.resolve()
+    result: list[DiversityPlan] = []
+    for entry in load_generation_index(resolved_work_dir)["generations"]:
+        raw_plan_path = str(entry.get("plan_path") or "")
+        if not raw_plan_path:
+            continue
+        plan_path = (resolved_work_dir / raw_plan_path).resolve()
+        try:
+            plan_path.relative_to(resolved_work_dir)
+        except ValueError:
+            continue
+        try:
+            payload = json.loads(plan_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        result.extend(_plans_from_manifest(payload))
+    return result
+
+
+def _plans_from_manifest(payload: dict[str, Any]) -> list[DiversityPlan]:
+    outputs = payload.get("outputs", [])
+    if not isinstance(outputs, list):
+        return []
+    plans: list[DiversityPlan] = []
+    for raw_output in outputs:
+        if not isinstance(raw_output, dict):
+            continue
+        raw_segments = raw_output.get("segments", [])
+        if not isinstance(raw_segments, list):
+            continue
+        segments: list[DiversitySegment] = []
+        for raw_segment in raw_segments:
+            if not isinstance(raw_segment, dict):
+                continue
+            if str(raw_segment.get("segment_kind") or "body") != "body":
+                continue
+            source_id = str(raw_segment.get("source_id") or "")
+            folder_id = str(raw_segment.get("folder_id") or "")
+            duration_ms = int(raw_segment.get("duration_ms") or 0)
+            if not source_id or not folder_id or duration_ms <= 0:
+                continue
+            segments.append(
+                DiversitySegment(
+                    source_id=source_id,
+                    base_source_id=str(
+                        raw_segment.get("base_source_id") or source_id
+                    ),
+                    source_group=str(
+                        raw_segment.get("source_group")
+                        or raw_segment.get("normalized_source_group")
+                        or ""
+                    ),
+                    folder_id=folder_id,
+                    source_path=str(raw_segment.get("source_path") or ""),
+                    media_type=str(raw_segment.get("media_type") or ""),
+                    source_start_ms=int(
+                        raw_segment.get("source_start_ms") or 0
+                    ),
+                    duration_ms=duration_ms,
+                )
+            )
+        if segments:
+            plans.append(
+                DiversityPlan(
+                    output_index=int(raw_output.get("output_index") or 0),
+                    target_duration_ms=int(
+                        raw_output.get("target_duration_ms")
+                        or sum(segment.duration_ms for segment in segments)
+                    ),
+                    segments=tuple(segments),
+                )
+            )
+    return plans
+
+
+def write_generation_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f"{path.name}.tmp")
     temporary.write_text(
