@@ -33,7 +33,10 @@ def estimate_search_space(
     nominal = nominal_duration(grouped, target_duration_ms)
     segment_count = max(1, math.ceil(target_duration_ms / nominal))
     first_cycle = min(segment_count, len(grouped))
-    take_counts = [len(items) for items in grouped.values()]
+    take_counts = [
+        sum(source_variant_count(source, target_duration_ms) for source in items)
+        for items in grouped.values()
+    ]
 
     weighted_subsets = [0] * (first_cycle + 1)
     weighted_subsets[0] = 1
@@ -47,6 +50,20 @@ def estimate_search_space(
         average_takes = max(1, round(mean(take_counts)))
         total *= (len(grouped) * average_takes) ** extra
     return min(total, 10**18)
+
+
+def source_variant_count(
+    source: QuickMixSource,
+    target_duration_ms: int,
+) -> int:
+    segment_ms = preferred_quick_mix_segment_ms(source, target_duration_ms)
+    if (
+        source.media_type != "video"
+        or not source.duration_ms
+        or segment_ms <= 0
+    ):
+        return 1
+    return max(1, math.ceil(source.duration_ms / segment_ms))
 
 
 def candidate_budget(
@@ -77,6 +94,11 @@ def enumerate_candidates(
         return []
     if any(
         preferred_quick_mix_segment_ms(source, target_duration_ms) != nominal
+        or (
+            source.media_type == "video"
+            and bool(source.duration_ms)
+            and int(source.duration_ms or 0) > nominal
+        )
         for items in grouped.values()
         for source in items
     ):
