@@ -1,6 +1,11 @@
+import json
+import zipfile
 from pathlib import Path
 
+import pytest
+
 from video_mix.core.asset_scan import detect_media_type, stable_id
+from video_mix.core.media_probe import probe_asset
 from video_mix.core.models import Asset, CandidateStatus, Clip, MediaType, Orientation, Project, SegmenterName
 from video_mix.core.review import (
     build_review_html,
@@ -8,8 +13,172 @@ from video_mix.core.review import (
     collect_existing_thumbnails,
     write_review_html,
 )
-from video_mix.core.storage import build_asset, build_candidate, build_clip, to_jsonable
-from video_mix.service import quick_mix_source_materials, resolve_work_dir
+from video_mix.core.storage import build_asset, build_candidate, build_clip, read_json, to_jsonable
+from video_mix.service import (
+    _build_episode_groups,
+    _build_variant_similarity_rank,
+    _build_video_segment_command,
+    _choose_take_render_window,
+    _mux_quick_mix_audio,
+    _resolve_audio_track_duration_ms,
+    _resolve_music_paths,
+    _take_next_balanced_variant,
+    estimate_quick_mix_capacity,
+    quick_mix_source_materials,
+    resolve_work_dir,
+    scan_source_materials,
+)
+
+
+class _DeterministicChoice:
+    @staticmethod
+    def choice(values):
+        return values[0]
+
+    @staticmethod
+    def randint(start, end):
+        return start
+
+
+def test_take_next_balanced_variant_prefers_less_used_take() -> None:
+    variants = [
+        {"take_id": "take_001"},
+        {"take_id": "take_002"},
+        {"take_id": "take_003"},
+    ]
+
+    selected = _take_next_balanced_variant(
+        variants,
+        [],
+        {"take_001": 4, "take_002": 1, "take_003": 0},
+    )
+
+    assert selected is not None
+    assert selected["take_id"] == "take_003"
+
+
+def test_take_next_balanced_variant_avoids_recent_take_ids_when_possible() -> None:
+    variants = [
+        {"take_id": "take_001"},
+        {"take_id": "take_002"},
+        {"take_id": "take_003"},
+    ]
+
+    selected = _take_next_balanced_variant(
+        variants,
+        [],
+        {"take_001": 0, "take_002": 0, "take_003": 0},
+        avoid_take_ids={"take_003", "take_002"},
+    )
+
+    assert selected is not None
+    assert selected["take_id"] == "take_001"
+
+
+def test_take_next_balanced_variant_avoids_asset_ids_when_possible() -> None:
+    variants = [
+        {"take_id": "take_001", "asset": Asset(asset_id="asset_1", project_id="p", path=Path("a.mp4"), media_type=MediaType.VIDEO)},
+        {"take_id": "take_002", "asset": Asset(asset_id="asset_2", project_id="p", path=Path("b.mp4"), media_type=MediaType.VIDEO)},
+        {"take_id": "take_003", "asset": Asset(asset_id="asset_3", project_id="p", path=Path("c.mp4"), media_type=MediaType.VIDEO)},
+    ]
+
+    selected = _take_next_balanced_variant(
+        variants,
+        [],
+        {"take_001": 0, "take_002": 0, "take_003": 0},
+        avoid_asset_ids={"asset_3", "asset_2"},
+    )
+
+    assert selected is not None
+    assert selected["take_id"] == "take_001"
+
+
+def test_take_next_balanced_variant_prunes_stale_pool_entries() -> None:
+    variants = [
+        {"take_id": "take_001", "asset": Asset(asset_id="asset_1", project_id="p", path=Path("a.mp4"), media_type=MediaType.VIDEO)},
+        {"take_id": "take_002", "asset": Asset(asset_id="asset_2", project_id="p", path=Path("b.mp4"), media_type=MediaType.VIDEO)},
+    ]
+    stale_pool = list(variants)
+
+    selected = _take_next_balanced_variant(
+        variants,
+        stale_pool,
+        {"take_001": 0, "take_002": 0},
+        avoid_asset_ids={"asset_2"},
+    )
+
+    assert selected is not None
+    assert selected["take_id"] == "take_001"
+
+
+def test_take_next_balanced_variant_returns_none_when_only_repeats_remain() -> None:
+    variants = [
+        {"take_id": "take_001", "asset": Asset(asset_id="asset_1", project_id="p", path=Path("a.mp4"), media_type=MediaType.VIDEO)},
+        {"take_id": "take_002", "asset": Asset(asset_id="asset_2", project_id="p", path=Path("b.mp4"), media_type=MediaType.VIDEO)},
+    ]
+
+    selected = _take_next_balanced_variant(
+        variants,
+        [],
+        {"take_001": 0, "take_002": 0},
+        avoid_asset_ids={"asset_1", "asset_2"},
+    )
+
+    assert selected is None
+
+
+def test_choose_take_render_window_randomizes_start_inside_take(monkeypatch: pytest.MonkeyPatch) -> None:
+    asset = Asset(
+        asset_id="asset_1",
+        project_id="project_1",
+        path=Path("demo.mp4"),
+        media_type=MediaType.VIDEO,
+        duration_ms=12000,
+    )
+    selected_take = {
+        "start_ms": 3000,
+        "end_ms": 9000,
+        "max_duration_ms": 6000,
+        "take_id": "take_001",
+    }
+
+    monkeypatch.setattr("video_mix.service._random_int_inclusive", lambda max_value: max_value)
+
+    start_ms, segment_ms = _choose_take_render_window(selected_take, asset, preferred_ms=2000)
+
+    assert segment_ms == 2000
+    assert start_ms == 7000
+
+
+def test_build_video_segment_command_uses_decode_time_trim_for_precise_cut() -> None:
+    asset = Asset(
+        asset_id="asset_1",
+        project_id="project_1",
+        path=Path("demo.mp4"),
+        media_type=MediaType.VIDEO,
+        duration_ms=8000,
+        width=1080,
+        height=1920,
+        fps=30.0,
+        orientation=Orientation.VERTICAL,
+        has_audio=False,
+        probe_status="ok",
+        quality_score=80.0,
+        metadata={},
+    )
+
+    command = _build_video_segment_command(
+        asset,
+        Path("out.mp4"),
+        start_ms=15420,
+        duration_ms=2000,
+        ffmpeg_path="ffmpeg",
+    )
+
+    assert command[:4] == ["ffmpeg", "-y", "-i", "demo.mp4"]
+    assert "-ss" not in command
+    vf_index = command.index("-vf")
+    assert command[vf_index + 1].startswith("trim=start=15.420:duration=2.000,setpts=PTS-STARTPTS,")
 
 
 def test_detect_media_type_video() -> None:
@@ -18,6 +187,28 @@ def test_detect_media_type_video() -> None:
 
 def test_stable_id_is_repeatable() -> None:
     assert stable_id("asset", "abc") == stable_id("asset", "abc")
+
+
+def test_probe_asset_decodes_ffprobe_json_from_bytes_stdout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    asset = Asset(
+        asset_id="asset_1",
+        project_id="project_1",
+        path=tmp_path / "clip.mp4",
+        media_type=MediaType.VIDEO,
+    )
+
+    class _Completed:
+        stdout = b'{"streams":[{"codec_type":"video","width":1080,"height":1920,"avg_frame_rate":"30/1"}],"format":{"duration":"12.34"}}'
+
+    monkeypatch.setattr("video_mix.core.media_probe.subprocess.run", lambda *args, **kwargs: _Completed())
+
+    result = probe_asset(asset, ffprobe_path="ffprobe")
+
+    assert result.probe_status == "ok"
+    assert result.duration_ms == 12340
+    assert result.width == 1080
+    assert result.height == 1920
+    assert result.fps == 30.0
 
 
 def test_candidate_round_trip_from_jsonable() -> None:
@@ -213,6 +404,51 @@ def test_resolve_work_dir_preserves_relative_cli_semantics(tmp_path: Path) -> No
     assert resolved == (cwd / "video_mix_validation" / "work").resolve()
 
 
+def test_scan_source_materials_supports_zip_input(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip.mp4").write_bytes(b"video")
+    (source_dir / "photo.jpg").write_bytes(b"photo")
+    zip_path = tmp_path / "bundle.zip"
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.write(source_dir / "clip.mp4", "clip.mp4")
+        archive.write(source_dir / "photo.jpg", "photo.jpg")
+
+    result = scan_source_materials(str(zip_path))
+
+    assert result["source_dir"] == str(zip_path.resolve())
+    assert result["source_kind"] == "zip"
+    assert result["supported_media_count"] == 2
+    assert result["suggested_work_dir"] == str((tmp_path / "bundle_video_mix_work").resolve())
+    assert Path(result["resolved_source_dir"]).exists()
+
+
+def test_scan_source_materials_allows_imported_media_under_work_dir_root(tmp_path: Path) -> None:
+    source_dir = tmp_path / "input" / "_video_mix_work" / "imports" / "bundle"
+    folder = source_dir / "01_Невеста"
+    folder.mkdir(parents=True)
+    (folder / "clip.mp4").write_bytes(b"video")
+
+    result = scan_source_materials(str(source_dir))
+
+    assert result["supported_media_count"] == 1
+    assert result["preview_files"] == ["01_Невеста/clip.mp4"]
+
+
+def test_scan_source_materials_still_skips_nested_internal_work_dirs(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip.mp4").write_bytes(b"video")
+    nested_internal = source_dir / "_video_mix_work"
+    nested_internal.mkdir()
+    (nested_internal / "ignored.mp4").write_bytes(b"video")
+
+    result = scan_source_materials(str(source_dir))
+
+    assert result["supported_media_count"] == 1
+    assert result["preview_files"] == ["clip.mp4"]
+
+
 def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, monkeypatch) -> None:
     source_dir = tmp_path / "source"
     source_dir.mkdir()
@@ -242,7 +478,14 @@ def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, m
         output_path.write_bytes(f"{asset.media_type}:{start_ms}:{duration_ms}".encode())
         rendered_segments.append(output_path)
 
-    def fake_render_output(segment_paths: list[Path], output_path: Path, ffmpeg_path: str) -> None:
+    def fake_render_output(
+        segment_paths: list[Path],
+        output_path: Path,
+        ffmpeg_path: str,
+        *,
+        music_path: Path | None = None,
+        music_start_ms: int = 0,
+    ) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes("\n".join(path.name for path in segment_paths).encode("utf-8"))
         rendered_outputs.append(output_path)
@@ -264,6 +507,1280 @@ def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, m
     assert result["video_count"] == 1
     assert result["image_count"] == 1
     assert result["photo_support"] is True
+    assert result["duration_source"] == "manual"
+    assert result["generation_elapsed_ms"] >= 0
+    assert result["quick_mix_plan_path"] == "reports/quick_mix_plan.json"
+    assert result["quick_mix_warning_count"] >= 1
+    assert any(warning["code"] == "quick_mix_unique_material_exhausted" for warning in result["quick_mix_warnings"])
     assert result["output_paths"] == ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"]
     assert len(rendered_segments) >= 2
     assert len(rendered_outputs) == 2
+    quick_mix_json = read_json(tmp_path / "work" / "reports" / "quick_mix.json")
+    quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
+    assert quick_mix_json["quick_mix_plan_path"] == "reports/quick_mix_plan.json"
+    assert quick_mix_json["quick_mix_warning_count"] >= 1
+    assert quick_mix_plan["warning_count"] >= 1
+    assert len(quick_mix_plan["outputs"]) == 2
+
+
+def test_quick_mix_source_materials_avoids_duplicate_whatsapp_groups_per_output(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for path in (
+        source_dir / "WhatsApp Video 2026-07-03 at 10.21.53 PM.jpg",
+        source_dir / "WhatsApp Video 2026-07-03 at 10.21.53 PM (1).jpg",
+        source_dir / "cake_detail.jpg",
+    ):
+        path.write_bytes(b"photo")
+
+    rendered_asset_names: list[str] = []
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.probe_status = "skipped_photo"
+        return assets
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(asset.path.name.encode("utf-8"))
+        rendered_asset_names.append(asset.path.name)
+
+    def fake_render_output(
+        segment_paths: list[Path],
+        output_path: Path,
+        ffmpeg_path: str,
+        *,
+        music_path: Path | None = None,
+        music_start_ms: int = 0,
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"ok")
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", fake_render_output)
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=3,
+        output_count=1,
+        project_name="Planner Validation",
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert result["quick_mix_warning_count"] == 0
+    assert result["quick_mix_warnings"] == []
+    assert len(rendered_asset_names) == 2
+    assert "cake_detail.jpg" in rendered_asset_names
+    assert len([name for name in rendered_asset_names if "WhatsApp Video 2026-07-03 at 10.21.53 PM" in name]) == 1
+    quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
+    groups = [segment["normalized_source_group"] for segment in quick_mix_plan["outputs"][0]["segments"]]
+    assert len(groups) == len(set(groups))
+    assert quick_mix_plan["warning_count"] == 0
+
+
+def test_quick_mix_source_materials_backfills_short_clip_to_requested_duration(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for name in ("a.mp4", "b.mp4", "c.mp4", "d.mp4"):
+        (source_dir / name).write_bytes(b"video")
+
+    durations_by_name = {"a.mp4": 2000, "b.mp4": 2000, "c.mp4": 700, "d.mp4": 2000}
+    rendered_calls: list[tuple[str, int]] = []
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = durations_by_name[asset.path.name]
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(f"{asset.path.name}:{duration_ms}".encode())
+        rendered_calls.append((asset.path.name, duration_ms))
+
+    def fake_render_output(
+        segment_paths: list[Path],
+        output_path: Path,
+        ffmpeg_path: str,
+        *,
+        music_path: Path | None = None,
+        music_start_ms: int = 0,
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"ok")
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", fake_render_output)
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=1,
+        project_name="Backfill Validation",
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert result["generated_count"] == 1
+    assert sum(duration_ms for _, duration_ms in rendered_calls) == 6000
+    quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
+    assert quick_mix_plan["outputs"][0]["planned_duration_ms"] == 6000
+    assert sum(segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]) == 6000
+    assert 700 in [segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]]
+
+
+def test_quick_mix_source_materials_supports_music_and_pinned_media(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip.mp4").write_bytes(b"video")
+    (source_dir / "photo.jpg").write_bytes(b"photo")
+    music_path = tmp_path / "music.mp3"
+    opening_path = tmp_path / "opening.jpg"
+    closing_path = tmp_path / "closing.mp4"
+    music_path.write_bytes(b"audio")
+    opening_path.write_bytes(b"opening")
+    closing_path.write_bytes(b"closing")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            if asset.media_type == MediaType.VIDEO:
+                asset.duration_ms = 4000
+                asset.width = 1080
+                asset.height = 1920
+                asset.fps = 30.0
+                asset.orientation = Orientation.VERTICAL
+                asset.probe_status = "ok"
+            else:
+                asset.probe_status = "skipped_photo"
+        return assets
+
+    rendered_segments: list[tuple[str, int, int]] = []
+    rendered_outputs: list[tuple[Path, Path | None]] = []
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(f"{asset.path.name}:{start_ms}:{duration_ms}".encode())
+        rendered_segments.append((asset.path.name, start_ms, duration_ms))
+
+    def fake_render_output(
+        segment_paths: list[Path],
+        output_path: Path,
+        ffmpeg_path: str,
+        *,
+        music_path: Path | None = None,
+        music_start_ms: int = 0,
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes("\n".join(path.name for path in segment_paths).encode("utf-8"))
+        rendered_outputs.append((output_path, music_path))
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", fake_render_output)
+    monkeypatch.setattr("video_mix.service._resolve_audio_track_duration_ms", lambda *_args, **_kwargs: 9000)
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=1,
+        project_name="Quick Mix Validation",
+        work_dir=str(tmp_path / "work"),
+        music_path=str(music_path),
+        use_music_duration=True,
+        opening_media_path=str(opening_path),
+        closing_media_path=str(closing_path),
+    )
+
+    assert result["duration_seconds"] == 9
+    assert result["duration_source"] == "music"
+    assert result["music_path"] == str(music_path.resolve())
+    assert result["opening_media_path"] == str(opening_path.resolve())
+    assert result["closing_media_path"] == str(closing_path.resolve())
+    assert rendered_outputs == [((tmp_path / "work" / "exports" / "quick_mix_001.mp4"), music_path.resolve())]
+    assert rendered_segments[0][0] == "opening.jpg"
+    assert rendered_segments[-1][0] == "closing.mp4"
+    assert rendered_segments[-1][1] > 0
+
+
+def test_quick_mix_source_materials_randomizes_music_offset_when_not_using_full_track(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip.mp4").write_bytes(b"video")
+    music_path = tmp_path / "music.mp3"
+    music_path.write_bytes(b"audio")
+    captured_music_start_ms: list[int] = []
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 4000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    def fake_render_output(
+        segment_paths: list[Path],
+        output_path: Path,
+        ffmpeg_path: str,
+        *,
+        music_path: Path | None = None,
+        music_start_ms: int = 0,
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"out")
+        captured_music_start_ms.append(music_start_ms)
+
+    class _OffsetRandom:
+        @staticmethod
+        def shuffle(items):
+            return None
+
+        @staticmethod
+        def randint(start, end):
+            return min(end, 1500)
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", lambda *args, **kwargs: Path(args[1]).write_bytes(b"seg"))
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", fake_render_output)
+    monkeypatch.setattr("video_mix.service._resolve_audio_track_duration_ms", lambda *_args, **_kwargs: 9000)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _OffsetRandom())
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=4,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+        music_path=str(music_path),
+        use_music_duration=False,
+    )
+
+    assert captured_music_start_ms == [1500]
+    assert result["variants"][0]["music_start_ms"] == 1500
+
+
+def test_quick_mix_source_materials_can_keep_manual_duration_with_music(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip.mp4").write_bytes(b"video")
+    music_path = tmp_path / "music.mp3"
+    music_path.write_bytes(b"audio")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 4000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", lambda *args, **kwargs: Path(args[1]).write_bytes(b"seg"))
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._resolve_audio_track_duration_ms", lambda *_args, **_kwargs: 9000)
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+        music_path=str(music_path),
+        use_music_duration=False,
+    )
+
+    assert result["duration_seconds"] == 6
+    assert result["duration_source"] == "manual"
+
+
+def test_resolve_music_paths_accepts_video_file_as_music_source(tmp_path: Path) -> None:
+    music_video_path = tmp_path / "music_source.mp4"
+    music_video_path.write_bytes(b"video-with-audio")
+
+    resolved = _resolve_music_paths(str(music_video_path), None)
+
+    assert resolved == [music_video_path.resolve()]
+
+
+def test_resolve_audio_track_duration_requires_audio_stream(tmp_path: Path, monkeypatch) -> None:
+    silent_video_path = tmp_path / "silent.mp4"
+    silent_video_path.write_bytes(b"video")
+
+    class _FakeCompleted:
+        stdout = '{"streams":[{"codec_type":"video","duration":"5.0"}],"format":{"duration":"5.0"}}'
+
+    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: _FakeCompleted())
+
+    with pytest.raises(ValueError, match="Could not read music track duration"):
+        _resolve_audio_track_duration_ms(silent_video_path, "ffprobe")
+
+
+def test_mux_quick_mix_audio_maps_audio_stream_from_video_music_source(tmp_path: Path, monkeypatch) -> None:
+    captured: list[list[str]] = []
+    video_path = tmp_path / "visual.mp4"
+    music_video_path = tmp_path / "music_source.mp4"
+    output_path = tmp_path / "out.mp4"
+
+    video_path.write_bytes(b"video")
+    music_video_path.write_bytes(b"music-video")
+
+    monkeypatch.setattr("subprocess.run", lambda command, check=True: captured.append(command))
+
+    _mux_quick_mix_audio(video_path, output_path, music_video_path, "ffmpeg")
+
+    assert captured
+    command = captured[0]
+    assert "-map" in command
+    assert "0:v:0" in command
+    assert "1:a:0" in command
+
+
+def test_mux_quick_mix_audio_can_start_from_random_offset(tmp_path: Path, monkeypatch) -> None:
+    captured: list[list[str]] = []
+    video_path = tmp_path / "visual.mp4"
+    music_path = tmp_path / "music.mp3"
+    output_path = tmp_path / "out.mp4"
+
+    video_path.write_bytes(b"video")
+    music_path.write_bytes(b"music")
+
+    monkeypatch.setattr("subprocess.run", lambda command, check=True: captured.append(command))
+
+    _mux_quick_mix_audio(video_path, output_path, music_path, "ffmpeg", music_start_ms=4250)
+
+    command = captured[0]
+    assert "-ss" in command
+    assert "4.250" in command
+
+
+def test_quick_mix_source_materials_supports_zip_source(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip.mp4").write_bytes(b"video")
+    (source_dir / "photo.jpg").write_bytes(b"photo")
+    zip_path = tmp_path / "bundle.zip"
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.write(source_dir / "clip.mp4", "clip.mp4")
+        archive.write(source_dir / "photo.jpg", "photo.jpg")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            if asset.media_type == MediaType.VIDEO:
+                asset.duration_ms = 4000
+                asset.width = 1080
+                asset.height = 1920
+                asset.fps = 30.0
+                asset.orientation = Orientation.VERTICAL
+                asset.probe_status = "ok"
+            else:
+                asset.probe_status = "skipped_photo"
+        return assets
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", lambda *args, **kwargs: Path(args[1]).write_bytes(b"seg"))
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+
+    result = quick_mix_source_materials(
+        str(zip_path),
+        duration_seconds=6,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert result["source_dir"] == str(zip_path.resolve())
+    assert result["source_kind"] == "zip"
+    assert result["generated_count"] == 1
+    assert Path(result["resolved_source_dir"]).exists()
+
+
+def test_quick_mix_source_materials_uses_unique_video_windows_before_reuse(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip_a.mp4").write_bytes(b"video-a")
+    (source_dir / "clip_b.mp4").write_bytes(b"video-b")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 9000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    rendered_segments: list[tuple[str, int]] = []
+    rendered_durations: list[int] = []
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"seg")
+        rendered_segments.append((asset.path.name, start_ms))
+        rendered_durations.append(duration_ms)
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=2,
+        output_count=4,
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert rendered_segments == [
+        ("clip_a.mp4", 0),
+        ("clip_b.mp4", 0),
+        ("clip_a.mp4", 3000),
+        ("clip_b.mp4", 3000),
+    ]
+    assert rendered_durations == [2000, 2000, 2000, 2000]
+
+
+def test_quick_mix_source_materials_refills_episode_queue_until_target_duration(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip_a.mp4").write_bytes(b"video-a")
+    (source_dir / "clip_b.mp4").write_bytes(b"video-b")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 9000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    rendered_segments: list[tuple[str, int, int]] = []
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"seg")
+        rendered_segments.append((asset.path.name, start_ms, duration_ms))
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert rendered_segments == [
+        ("clip_a.mp4", 0, 2000),
+        ("clip_b.mp4", 0, 2000),
+        ("clip_a.mp4", 3000, 2000),
+    ]
+
+
+def test_quick_mix_source_materials_does_not_reuse_opening_asset_in_body(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    clip_a = source_dir / "clip_a.mp4"
+    clip_b = source_dir / "clip_b.mp4"
+    clip_c = source_dir / "clip_c.mp4"
+    clip_a.write_bytes(b"video-a")
+    clip_b.write_bytes(b"video-b")
+    clip_c.write_bytes(b"video-c")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 4000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    rendered_segments: list[str] = []
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"seg")
+        rendered_segments.append(asset.path.name)
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+        opening_media_path=str(clip_a),
+    )
+
+    assert rendered_segments == [
+        "clip_a.mp4",
+        "clip_b.mp4",
+        "clip_c.mp4",
+    ]
+
+
+def test_quick_mix_source_materials_excludes_all_marker_variants_from_body(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    clip_a = source_dir / "clip_a.mp4"
+    clip_b = source_dir / "clip_b.mp4"
+    clip_c = source_dir / "clip_c.mp4"
+    clip_d = source_dir / "clip_d.mp4"
+    for clip_path, payload in (
+        (clip_a, b"video-a"),
+        (clip_b, b"video-b"),
+        (clip_c, b"video-c"),
+        (clip_d, b"video-d"),
+    ):
+        clip_path.write_bytes(payload)
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 4000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    rendered_segments: list[str] = []
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"seg")
+        rendered_segments.append(asset.path.name)
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+        opening_media_paths=[str(clip_a), str(clip_b)],
+    )
+
+    assert rendered_segments[0] == "clip_b.mp4"
+    assert rendered_segments[1:] == [
+        "clip_c.mp4",
+        "clip_d.mp4",
+    ]
+
+
+def test_quick_mix_source_materials_allows_short_tail_under_body_minimum(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip_a.mp4").write_bytes(b"video-a")
+    (source_dir / "clip_b.mp4").write_bytes(b"video-b")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 5000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    rendered_durations: list[int] = []
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"seg")
+        rendered_durations.append(duration_ms)
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=3.2,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert rendered_durations == [2000, 1200]
+
+
+def test_estimate_quick_mix_capacity_returns_unique_output_estimate(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(4):
+        (source_dir / f"clip_{index}.mp4").write_bytes(b"video")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 4000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+
+    result = estimate_quick_mix_capacity(
+        str(source_dir),
+        duration_seconds=6,
+    )
+
+    assert result["duration_source"] == "manual"
+    assert result["usable_asset_count"] == 4
+    assert result["episode_group_count"] == 4
+    assert result["total_segment_candidates"] == 8
+    assert result["selected_episode_count"] == 4
+    assert result["segments_per_output"] == 4
+    assert result["estimated_unique_outputs"] == 384
+
+
+def test_build_episode_groups_splits_marker_delimited_takes(tmp_path: Path, monkeypatch) -> None:
+    source_path = tmp_path / "episode.mp4"
+    source_path.write_bytes(b"video")
+    asset = build_asset(
+        {
+            "asset_id": "asset_1",
+            "project_id": "project_1",
+            "path": str(source_path),
+            "media_type": MediaType.VIDEO.value,
+            "duration_ms": 3500,
+            "width": 1080,
+            "height": 1920,
+            "fps": 30.0,
+            "orientation": Orientation.VERTICAL.value,
+            "has_audio": True,
+            "probe_status": "ok",
+            "quality_score": 80.0,
+            "metadata": {},
+        }
+    )
+
+    monkeypatch.setattr("video_mix.service._detect_magenta_marker_ranges", lambda *_args, **_kwargs: [(1000, 1400), (2200, 2600)])
+
+    groups = _build_episode_groups([asset], "ffmpeg")
+
+    assert len(groups) == 1
+    episode = groups[0]
+    assert episode["marker_split"] is True
+    assert episode["take_count"] == 3
+    takes = episode["takes"]
+    assert takes[0]["start_ms"] == 0
+    assert takes[0]["end_ms"] == 880
+    assert takes[1]["start_ms"] == 1520
+    assert takes[1]["end_ms"] == 2080
+    assert takes[2]["start_ms"] == 2720
+    assert takes[2]["end_ms"] == 3500
+
+
+def test_build_episode_groups_uses_first_level_folders_as_episode_groups(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    bride_dir = source_dir / "01_Невеста"
+    guests_dir = source_dir / "02_Гости"
+    bride_dir.mkdir(parents=True)
+    guests_dir.mkdir(parents=True)
+    clip_a = bride_dir / "clip_a.mp4"
+    clip_b = bride_dir / "clip_b.mp4"
+    clip_c = guests_dir / "clip_c.mp4"
+    for clip_path in (clip_a, clip_b, clip_c):
+        clip_path.write_bytes(b"video")
+
+    assets = [
+        build_asset(
+            {
+                "asset_id": f"asset_{index}",
+                "project_id": "project_1",
+                "path": str(path),
+                "media_type": MediaType.VIDEO.value,
+                "duration_ms": 4000,
+                "width": 1080,
+                "height": 1920,
+                "fps": 30.0,
+                "orientation": Orientation.VERTICAL.value,
+                "has_audio": True,
+                "probe_status": "ok",
+                "quality_score": 80.0,
+                "metadata": {},
+            }
+        )
+        for index, path in enumerate((clip_a, clip_b, clip_c), start=1)
+    ]
+
+    monkeypatch.setattr("video_mix.service._detect_magenta_marker_ranges", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+
+    groups = _build_episode_groups(assets, "ffmpeg", source_dir)
+
+    assert [group["episode_label"] for group in groups] == ["Невеста", "Гости"]
+    assert groups[0]["take_count"] == 4
+    assert groups[0]["group_kind"] == "directory"
+    assert groups[0]["source_folder"] == "01_Невеста"
+    assert len(groups[0]["assets"]) == 2
+    assert [take["asset"].path.name for take in groups[0]["takes"]] == [
+        "clip_a.mp4",
+        "clip_a.mp4",
+        "clip_b.mp4",
+        "clip_b.mp4",
+    ]
+
+
+def test_build_episode_groups_preserves_flat_asset_based_behavior_without_folders(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    clip_a = source_dir / "clip_a.mp4"
+    clip_b = source_dir / "clip_b.mp4"
+    for clip_path in (clip_a, clip_b):
+        clip_path.write_bytes(b"video")
+
+    assets = [
+        build_asset(
+            {
+                "asset_id": f"asset_{index}",
+                "project_id": "project_1",
+                "path": str(path),
+                "media_type": MediaType.VIDEO.value,
+                "duration_ms": 4000,
+                "width": 1080,
+                "height": 1920,
+                "fps": 30.0,
+                "orientation": Orientation.VERTICAL.value,
+                "has_audio": True,
+                "probe_status": "ok",
+                "quality_score": 80.0,
+                "metadata": {},
+            }
+        )
+        for index, path in enumerate((clip_a, clip_b), start=1)
+    ]
+
+    monkeypatch.setattr("video_mix.service._detect_magenta_marker_ranges", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+
+    groups = _build_episode_groups(assets, "ffmpeg", source_dir)
+
+    assert [group["episode_label"] for group in groups] == ["clip_a", "clip_b"]
+    assert all(group["group_kind"] == "asset" for group in groups)
+
+
+def test_quick_mix_source_materials_uses_folder_groups_for_episode_selection(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    bride_dir = source_dir / "01_Невеста"
+    guests_dir = source_dir / "02_Гости"
+    bride_dir.mkdir(parents=True)
+    guests_dir.mkdir(parents=True)
+    for clip_path in (
+        bride_dir / "bride_a.mp4",
+        bride_dir / "bride_b.mp4",
+        guests_dir / "guest_a.mp4",
+    ):
+        clip_path.write_bytes(b"video")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 4000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._detect_magenta_marker_ranges", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", lambda *args, **kwargs: Path(args[1]).write_bytes(b"seg"))
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=4,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert [group["episode_label"] for group in result["episode_groups"]] == ["Невеста", "Гости"]
+    assert result["episode_groups"][0]["source_folder"] == "01_Невеста"
+    assert result["episode_groups"][0]["asset_count"] == 2
+    assert result["episode_groups"][1]["asset_count"] == 1
+    assert len(result["variants"][0]["episode_order"]) == 2
+    assert set(result["variants"][0]["episode_order"]) == {
+        result["episode_groups"][0]["episode_id"],
+        result["episode_groups"][1]["episode_id"],
+    }
+
+
+def test_quick_mix_source_materials_records_episode_variant_manifest(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    clip_a = source_dir / "clip_a.mp4"
+    clip_b = source_dir / "clip_b.mp4"
+    clip_a.write_bytes(b"video-a")
+    clip_b.write_bytes(b"video-b")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 3500 if asset.path.name == "clip_a.mp4" else 4000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    def fake_marker_ranges(asset: Asset, ffmpeg_path: str):
+        if asset.path.name == "clip_a.mp4":
+            return [(1000, 1400)]
+        return []
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._detect_magenta_marker_ranges", fake_marker_ranges)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", lambda *args, **kwargs: Path(args[1]).write_bytes(b"seg"))
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=4,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert len(result["episode_groups"]) == 2
+    marker_episode = next(group for group in result["episode_groups"] if group["episode_label"] == "clip_a")
+    assert marker_episode["marker_split"] is True
+    assert marker_episode["take_count"] == 2
+    assert result["variants"][0]["variant_id"] == "quick_mix_001"
+    assert len(result["variants"][0]["episode_order"]) == 3
+    assert result["variants"][0]["selected_takes"][0]["episode_label"] == "clip_a"
+    assert result["variants"][0]["selected_takes"][0]["marker_split"] is True
+    assert result["variants"][0]["selected_takes"][0]["source_end_ms"] == 3500
+
+
+def test_quick_mix_source_materials_spreads_outputs_across_least_used_assets(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for name in ("clip_a.mp4", "clip_b.mp4", "clip_c.mp4", "clip_d.mp4"):
+        (source_dir / name).write_bytes(b"video")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 9000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    rendered_segments: list[tuple[str, int]] = []
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"seg")
+        rendered_segments.append((asset.path.name, start_ms))
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=2,
+        output_count=6,
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert rendered_segments == [
+        ("clip_a.mp4", 0),
+        ("clip_b.mp4", 0),
+        ("clip_c.mp4", 0),
+        ("clip_d.mp4", 0),
+        ("clip_a.mp4", 3000),
+        ("clip_b.mp4", 3000),
+    ]
+
+
+def test_quick_mix_source_materials_randomizes_episode_order_within_output(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for name in ("clip_a.mp4", "clip_b.mp4", "clip_c.mp4", "clip_d.mp4"):
+        (source_dir / name).write_bytes(b"video")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 4000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    rendered_segments: list[str] = []
+
+    def fake_render_segment(asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"seg")
+        rendered_segments.append(asset.path.name)
+
+    def reverse_shuffle(items: list) -> None:
+        items.reverse()
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", reverse_shuffle)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=8,
+        output_count=1,
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert rendered_segments == [
+        "clip_d.mp4",
+        "clip_c.mp4",
+        "clip_b.mp4",
+        "clip_a.mp4",
+    ]
+
+
+def test_variant_similarity_rank_prefers_fewer_positional_take_matches() -> None:
+    seen_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {"episode_id": "ep_1", "take_id": "take_1"},
+            {"episode_id": "ep_2", "take_id": "take_2"},
+            {"episode_id": "ep_3", "take_id": "take_3"},
+        ],
+        "episode_order": ["ep_1", "ep_2", "ep_3"],
+    }
+    more_similar_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {"episode_id": "ep_1", "take_id": "take_1"},
+            {"episode_id": "ep_4", "take_id": "take_4"},
+            {"episode_id": "ep_3", "take_id": "take_3"},
+        ],
+        "episode_order": ["ep_1", "ep_4", "ep_3"],
+    }
+    less_similar_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {"episode_id": "ep_4", "take_id": "take_4"},
+            {"episode_id": "ep_5", "take_id": "take_5"},
+            {"episode_id": "ep_6", "take_id": "take_6"},
+        ],
+        "episode_order": ["ep_4", "ep_5", "ep_6"],
+    }
+
+    assert _build_variant_similarity_rank(less_similar_variant, [seen_variant]) < _build_variant_similarity_rank(
+        more_similar_variant,
+        [seen_variant],
+    )
+
+
+def test_variant_similarity_rank_prefers_lower_overlap_across_seen_variants() -> None:
+    seen_variants = [
+        {
+            "target_duration_ms": 6000,
+            "music_path": "",
+            "opening_media_path": "",
+            "closing_media_path": "",
+            "selected_takes": [
+                {"episode_id": "ep_1", "take_id": "take_1"},
+                {"episode_id": "ep_2", "take_id": "take_2"},
+                {"episode_id": "ep_3", "take_id": "take_3"},
+            ],
+            "episode_order": ["ep_1", "ep_2", "ep_3"],
+        },
+        {
+            "target_duration_ms": 6000,
+            "music_path": "",
+            "opening_media_path": "",
+            "closing_media_path": "",
+            "selected_takes": [
+                {"episode_id": "ep_4", "take_id": "take_4"},
+                {"episode_id": "ep_5", "take_id": "take_5"},
+                {"episode_id": "ep_6", "take_id": "take_6"},
+            ],
+            "episode_order": ["ep_4", "ep_5", "ep_6"],
+        },
+    ]
+    more_similar_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {"episode_id": "ep_1", "take_id": "take_1"},
+            {"episode_id": "ep_5", "take_id": "take_5"},
+            {"episode_id": "ep_7", "take_id": "take_7"},
+        ],
+        "episode_order": ["ep_1", "ep_5", "ep_7"],
+    }
+    less_similar_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {"episode_id": "ep_7", "take_id": "take_7"},
+            {"episode_id": "ep_8", "take_id": "take_8"},
+            {"episode_id": "ep_9", "take_id": "take_9"},
+        ],
+        "episode_order": ["ep_7", "ep_8", "ep_9"],
+    }
+
+    assert _build_variant_similarity_rank(less_similar_variant, seen_variants) < _build_variant_similarity_rank(
+        more_similar_variant,
+        seen_variants,
+    )
+
+
+def test_variant_similarity_rank_penalizes_repeated_episode_transitions() -> None:
+    seen_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {"episode_id": "ep_1", "take_id": "take_1", "source_path": "a.mp4"},
+            {"episode_id": "ep_2", "take_id": "take_2", "source_path": "b.mp4"},
+            {"episode_id": "ep_3", "take_id": "take_3", "source_path": "c.mp4"},
+        ],
+        "episode_order": ["ep_1", "ep_2", "ep_3"],
+    }
+    more_similar_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {"episode_id": "ep_4", "take_id": "take_4", "source_path": "d.mp4"},
+            {"episode_id": "ep_2", "take_id": "take_5", "source_path": "b.mp4"},
+            {"episode_id": "ep_3", "take_id": "take_6", "source_path": "c.mp4"},
+        ],
+        "episode_order": ["ep_4", "ep_2", "ep_3"],
+    }
+    less_similar_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {"episode_id": "ep_4", "take_id": "take_4", "source_path": "d.mp4"},
+            {"episode_id": "ep_5", "take_id": "take_5", "source_path": "e.mp4"},
+            {"episode_id": "ep_6", "take_id": "take_6", "source_path": "f.mp4"},
+        ],
+        "episode_order": ["ep_4", "ep_5", "ep_6"],
+    }
+
+    assert _build_variant_similarity_rank(less_similar_variant, [seen_variant]) < _build_variant_similarity_rank(
+        more_similar_variant,
+        [seen_variant],
+    )
+
+
+def test_variant_similarity_rank_penalizes_reused_take_windows() -> None:
+    seen_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {
+                "episode_id": "ep_1",
+                "take_id": "take_1",
+                "source_path": "a.mp4",
+                "render_start_ms": 0,
+                "render_end_ms": 2000,
+            }
+        ],
+        "episode_order": ["ep_1"],
+    }
+    more_similar_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {
+                "episode_id": "ep_2",
+                "take_id": "take_1",
+                "source_path": "a.mp4",
+                "render_start_ms": 0,
+                "render_end_ms": 2000,
+            }
+        ],
+        "episode_order": ["ep_2"],
+    }
+    less_similar_variant = {
+        "target_duration_ms": 6000,
+        "music_path": "",
+        "opening_media_path": "",
+        "closing_media_path": "",
+        "selected_takes": [
+            {
+                "episode_id": "ep_2",
+                "take_id": "take_1",
+                "source_path": "a.mp4",
+                "render_start_ms": 1500,
+                "render_end_ms": 3500,
+            }
+        ],
+        "episode_order": ["ep_2"],
+    }
+
+    assert _build_variant_similarity_rank(less_similar_variant, [seen_variant]) < _build_variant_similarity_rank(
+        more_similar_variant,
+        [seen_variant],
+    )
+
+
+def test_quick_mix_source_materials_rejects_duplicate_combinations_within_batch(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "clip.mp4").write_bytes(b"video")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 2000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", lambda *args, **kwargs: Path(args[1]).write_bytes(b"seg"))
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    with pytest.raises(ValueError, match="No new unique Quick Mix combinations remain"):
+        quick_mix_source_materials(
+            str(source_dir),
+            duration_seconds=2,
+            output_count=2,
+            work_dir=str(tmp_path / "work"),
+        )
+
+
+def test_quick_mix_source_materials_rejects_combinations_already_seen_in_workdir(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    clip_path = source_dir / "clip.mp4"
+    clip_path.write_bytes(b"video")
+    work_dir = tmp_path / "work"
+    (work_dir / "reports").mkdir(parents=True, exist_ok=True)
+    take_id = f"{stable_id('asset', str(clip_path.resolve()))}_take_001"
+    (work_dir / "reports" / "quick_mix.json").write_text(
+        json.dumps(
+            {
+                "variants": [
+                    {
+                        "variant_id": "quick_mix_001",
+                        "music_path": "",
+                        "opening_media_path": "",
+                        "closing_media_path": "",
+                        "target_duration_ms": 2000,
+                        "selected_takes": [
+                            {
+                                "take_id": take_id,
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 2000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", lambda *args, **kwargs: Path(args[1]).write_bytes(b"seg"))
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+    monkeypatch.setattr("video_mix.service._shuffle_in_place", lambda items: None)
+    monkeypatch.setattr("video_mix.service._SYSTEM_RANDOM", _DeterministicChoice())
+
+    with pytest.raises(ValueError, match="No new unique Quick Mix combinations remain"):
+        quick_mix_source_materials(
+            str(source_dir),
+            duration_seconds=2,
+            output_count=1,
+            work_dir=str(work_dir),
+        )
