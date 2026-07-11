@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 from video_mix.core.quick_mix_generation import (
     allocate_generation_paths,
     load_generation_index,
+    load_prior_diversity_plans,
     record_generation,
+    write_generation_json,
 )
 
 
@@ -57,3 +59,47 @@ def test_generation_index_is_append_only(tmp_path) -> None:
     assert index["generations"][0]["output_paths"] != index["generations"][1][
         "output_paths"
     ]
+
+
+def test_prior_diversity_plans_load_from_generation_manifests(tmp_path) -> None:
+    paths = allocate_generation_paths(tmp_path, generation_id="generation_history")
+    write_generation_json(
+        paths.plan_path,
+        {
+            "outputs": [
+                {
+                    "output_index": 1,
+                    "target_duration_ms": 4000,
+                    "segments": [
+                        {
+                            "segment_kind": "body",
+                            "source_id": "take_a",
+                            "base_source_id": "asset_a",
+                            "source_group": "a.mp4",
+                            "folder_id": "folder_a",
+                            "source_path": "folder_a/a.mp4",
+                            "media_type": "video",
+                            "source_start_ms": 1000,
+                            "duration_ms": 2000,
+                        },
+                        {
+                            "segment_kind": "opening",
+                            "source_id": "opening",
+                            "folder_id": "opening",
+                            "duration_ms": 1000,
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+    record_generation(
+        tmp_path,
+        paths,
+        requested_output_count=1,
+        achieved_output_count=1,
+        output_paths=[],
+    )
+    plans = load_prior_diversity_plans(tmp_path)
+    assert len(plans) == 1
+    assert plans[0].body_signature == ("take_a@1000:3000",)
