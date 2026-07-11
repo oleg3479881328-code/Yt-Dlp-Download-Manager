@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
 QUICK_MIX_UNIQUE_MATERIAL_EXHAUSTED = "quick_mix_unique_material_exhausted"
 QUICK_MIX_SOURCE_GROUP_RELAXED = "quick_mix_source_group_relaxed"
 QUICK_MIX_ASSET_REPEAT_RELAXED = "quick_mix_asset_repeat_relaxed"

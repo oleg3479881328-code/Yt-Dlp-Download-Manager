@@ -49,8 +49,8 @@ def probe_asset(asset: Asset, ffprobe_path: str = "ffprobe") -> Asset:
     ]
 
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-        payload = json.loads(result.stdout)
+        result = subprocess.run(command, capture_output=True, check=True)
+        payload = json.loads(result.stdout.decode("utf-8", errors="replace"))
     except Exception as exc:  # noqa: BLE001
         asset.probe_status = "failed"
         asset.metadata["probe_error"] = str(exc)

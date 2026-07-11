@@ -451,3 +451,72 @@ def test_quick_mix_source_materials_records_exhaustion_warning_when_unique_mater
     quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
     assert quick_mix_plan["warning_count"] == 1
     assert quick_mix_plan["warnings"][0]["code"] == "quick_mix_unique_material_exhausted"
+
+
+def test_quick_mix_source_materials_backfills_short_clip_to_requested_duration(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    names = ["a.mp4", "b.mp4", "c.mp4", "d.mp4"]
+    for name in names:
+        (source_dir / name).write_bytes(b"video")
+
+    durations_by_name = {
+        "a.mp4": 2000,
+        "b.mp4": 2000,
+        "c.mp4": 700,
+        "d.mp4": 2000,
+    }
+    rendered_calls: list[tuple[str, int]] = []
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = durations_by_name[asset.path.name]
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    def fake_render_segment(
+        asset: Asset,
+        output_path: Path,
+        *,
+        start_ms: int,
+        duration_ms: int,
+        ffmpeg_path: str,
+        output_width: int = 1080,
+        output_height: int = 1920,
+        caption_text_path: Path | None = None,
+        caption_position: str = "bottom",
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(f"{asset.path.name}:{duration_ms}".encode())
+        rendered_calls.append((asset.path.name, duration_ms))
+
+    def fake_render_output(segment_paths: list[Path], output_path: Path, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"ok")
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", fake_render_output)
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=1,
+        project_name="Backfill Validation",
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert result["generated_count"] == 1
+    assert sum(duration_ms for _, duration_ms in rendered_calls) == 6000
+    assert [name for name, _ in rendered_calls] == ["a.mp4", "b.mp4", "c.mp4", "d.mp4"]
+
+    quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
+    assert quick_mix_plan["outputs"][0]["planned_duration_ms"] == 6000
+    assert [segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]] == [2000, 2000, 700, 1300]
