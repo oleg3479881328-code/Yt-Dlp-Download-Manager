@@ -63,28 +63,48 @@ def build_diverse_batch(
         else "sample"
     )
     budget = candidate_budget(grouped, output_count, estimated_space, active_policy)
-    candidates = (
-        enumerate_candidates(
+    candidates: list[DiversityPlan] = []
+    if strategy == "enumerate":
+        candidates = enumerate_candidates(
             grouped,
             target_duration_ms,
             active_policy.exact_enumeration_limit,
         )
-        if strategy == "enumerate"
-        else []
-    )
-    if not candidates:
-        strategy = "sample"
-        candidates = sample_candidates(grouped, target_duration_ms, budget, seed)
+        if not candidates:
+            strategy = "sample"
 
-    unique = {candidate.body_signature: candidate for candidate in candidates}
-    duplicate_count = len(candidates) - len(unique)
-    selected, rejected = _select_farthest(
-        list(unique.values()),
-        output_count,
-        active_policy,
-        list(prior_plans),
-        seed,
-    )
+    selected: list[DiversityPlan] = []
+    rejected: Counter[str] = Counter()
+    duplicate_count = 0
+    candidate_count = 0
+    while True:
+        if strategy == "sample":
+            candidates = sample_candidates(
+                grouped,
+                target_duration_ms,
+                budget,
+                seed,
+            )
+        unique = {candidate.body_signature: candidate for candidate in candidates}
+        candidate_count = len(candidates)
+        duplicate_count = candidate_count - len(unique)
+        selected, rejected = _select_farthest(
+            list(unique.values()),
+            output_count,
+            active_policy,
+            list(prior_plans),
+            seed,
+        )
+        if len(selected) >= output_count or strategy != "sample":
+            break
+        maximum_budget = min(
+            active_policy.max_candidate_pool,
+            estimated_space,
+        )
+        if budget >= maximum_budget:
+            break
+        budget = min(maximum_budget, max(budget * 2, budget + output_count))
+
     indexed = tuple(
         replace(plan, output_index=index)
         for index, plan in enumerate(selected, start=1)
@@ -104,7 +124,7 @@ def build_diverse_batch(
         strategy,
         estimated_space,
         budget,
-        len(unique),
+        candidate_count,
         duplicate_count,
         output_count,
         dict(rejected),
