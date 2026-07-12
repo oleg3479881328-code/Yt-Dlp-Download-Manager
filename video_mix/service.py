@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 from collections import deque
+from dataclasses import replace
 from hashlib import sha1
 from pathlib import Path
 
@@ -17,6 +18,19 @@ from .core.candidate_builder import build_candidates
 from .core.duplicate_detection import apply_duplicate_detection
 from .core.media_probe import probe_assets
 from .core.models import Asset, MediaType, Project
+from .core.quick_mix_diversity import QUICK_MIX_DIVERSITY_EXHAUSTED, compare_plans
+from .core.quick_mix_diversity_adapter import (
+    build_episode_group_diversity_plan,
+    diversity_batch_manifest,
+    render_segments_for_plan,
+    selected_take_manifest_for_plan,
+)
+from .core.quick_mix_generation import (
+    allocate_generation_paths,
+    load_prior_diversity_plans,
+    record_generation,
+    write_generation_json,
+)
 from .core.quick_mix_planner import (
     QUICK_MIX_ASSET_REPEAT_RELAXED,
     QUICK_MIX_SOURCE_GROUP_RELAXED,
@@ -41,7 +55,6 @@ from .core.tagging import apply_filename_tags
 from .packs.wedding import get_wedding_templates
 
 _SYSTEM_RANDOM = random.SystemRandom()
-QUICK_MIX_VARIANT_SEARCH_ATTEMPTS = 192
 MAGENTA_MARKER_SAMPLE_FPS = 20
 MAGENTA_MARKER_MIN_DURATION_MS = 250
 MAGENTA_MARKER_TRIM_PADDING_MS = 120
@@ -914,6 +927,36 @@ def _pinned_segment_ms(asset: Asset, remaining_ms: int, *, use_full_duration: bo
     return min(remaining_ms, min(2000, asset.duration_ms))
 
 
+def _quick_mix_body_budget_ms(
+    *,
+    target_duration_ms: int,
+    opening_asset: Asset | None,
+    closing_asset: Asset | None,
+    use_closing_duration: bool,
+) -> tuple[int, int, int]:
+    remaining_ms = target_duration_ms
+    opening_segment_ms = 0
+    if opening_asset is not None:
+        opening_segment_ms = _pinned_segment_ms(opening_asset, remaining_ms)
+        remaining_ms = max(0, remaining_ms - opening_segment_ms)
+
+    closing_segment_ms = 0
+    if closing_asset is not None:
+        if use_closing_duration:
+            closing_remaining_ms = closing_asset.duration_ms or remaining_ms
+            closing_segment_ms = _pinned_segment_ms(
+                closing_asset,
+                closing_remaining_ms,
+                use_full_duration=True,
+            )
+        else:
+            closing_segment_ms = _pinned_segment_ms(closing_asset, remaining_ms)
+
+    reserved_closing_ms = 0 if use_closing_duration else closing_segment_ms
+    body_duration_ms = max(0, remaining_ms - reserved_closing_ms)
+    return body_duration_ms, opening_segment_ms, closing_segment_ms
+
+
 def _build_episode_order_queue(
     ordered_episode_ids: list[str],
     used_episode_ids: set[str],
@@ -1274,6 +1317,66 @@ def _build_quick_mix_plan_report(
     }
 
 
+def _summarize_diversity_plans(
+    plans: list[object],
+) -> dict[str, object]:
+    pairwise_distances: list[float] = []
+    nearest_by_output: dict[int, float] = {}
+    source_usage: dict[str, int] = {}
+    folder_usage: dict[str, int] = {}
+    folder_position_usage: dict[str, int] = {}
+    folder_transition_usage: dict[str, int] = {}
+
+    for left_index, left_plan in enumerate(plans):
+        left_segments = list(getattr(left_plan, "segments", ()))
+        left_output_index = int(getattr(left_plan, "output_index", left_index + 1) or left_index + 1)
+        nearest = 1.0
+        for right_plan in plans[left_index + 1 :]:
+            metrics = compare_plans(left_plan, right_plan)
+            pairwise_distances.append(metrics.distance)
+            nearest = min(nearest, metrics.distance)
+            right_output_index = int(getattr(right_plan, "output_index", 0) or 0)
+            if right_output_index:
+                nearest_by_output[right_output_index] = min(
+                    nearest_by_output.get(right_output_index, 1.0),
+                    metrics.distance,
+                )
+        nearest_by_output[left_output_index] = min(nearest_by_output.get(left_output_index, 1.0), nearest)
+
+        previous_folder_id = ""
+        for position_index, segment in enumerate(left_segments, start=1):
+            source_id = str(getattr(segment, "source_id", "") or "")
+            folder_id = str(getattr(segment, "folder_id", "") or "")
+            if source_id:
+                source_usage[source_id] = source_usage.get(source_id, 0) + 1
+            if folder_id:
+                folder_usage[folder_id] = folder_usage.get(folder_id, 0) + 1
+                position_key = f"{position_index}:{folder_id}"
+                folder_position_usage[position_key] = folder_position_usage.get(position_key, 0) + 1
+                if previous_folder_id:
+                    transition_key = f"{previous_folder_id}->{folder_id}"
+                    folder_transition_usage[transition_key] = folder_transition_usage.get(transition_key, 0) + 1
+                previous_folder_id = folder_id
+
+    if pairwise_distances:
+        minimum_distance = min(pairwise_distances)
+        average_distance = sum(pairwise_distances) / len(pairwise_distances)
+        maximum_distance = max(pairwise_distances)
+    else:
+        minimum_distance = average_distance = maximum_distance = 1.0
+
+    return {
+        "minimum_pairwise_distance": minimum_distance,
+        "average_pairwise_distance": average_distance,
+        "maximum_pairwise_distance": maximum_distance,
+        "nearest_neighbour_distance_by_output": dict(sorted(nearest_by_output.items())),
+        "source_usage": dict(sorted(source_usage.items())),
+        "folder_usage": dict(sorted(folder_usage.items())),
+        "folder_position_usage": dict(sorted(folder_position_usage.items())),
+        "folder_transition_usage": dict(sorted(folder_transition_usage.items())),
+    }
+
+
 def _build_video_segment_command(
     asset: Asset,
     output_path: Path,
@@ -1473,6 +1576,11 @@ def _prepare_quick_mix_workdir(
     episode_groups: list[dict[str, object]] | None = None,
     quick_mix_warning_count: int = 0,
     quick_mix_warnings: list[dict[str, object]] | None = None,
+    quick_mix_generation_id: str = "",
+    quick_mix_requested_output_count: int = 0,
+    quick_mix_achieved_output_count: int = 0,
+    quick_mix_report_path: str = "",
+    quick_mix_generation_index_path: str = "",
     quick_mix_plan_path: str = "",
 ) -> None:
     save_project(work_dir, project)
@@ -1504,6 +1612,11 @@ def _prepare_quick_mix_workdir(
             "variants": variants or [],
             "quick_mix_warning_count": quick_mix_warning_count,
             "quick_mix_warnings": quick_mix_warnings or [],
+            "quick_mix_generation_id": quick_mix_generation_id,
+            "quick_mix_requested_output_count": quick_mix_requested_output_count,
+            "quick_mix_achieved_output_count": quick_mix_achieved_output_count,
+            "quick_mix_report_path": quick_mix_report_path,
+            "quick_mix_generation_index_path": quick_mix_generation_index_path,
             "quick_mix_plan_path": quick_mix_plan_path,
             "output_paths": [str(path.relative_to(work_dir)).replace("\\", "/") for path in output_paths],
         },
@@ -1571,47 +1684,13 @@ def quick_mix_source_materials(
     )
     resolved_music_paths = _resolve_music_paths(music_path, music_paths)
 
-    exports_dir = resolved_work_dir / "exports"
-    segments_dir = resolved_work_dir / "quick_mix_segments"
-    exports_dir.mkdir(parents=True, exist_ok=True)
-    segments_dir.mkdir(parents=True, exist_ok=True)
-
     episode_groups = _build_episode_groups(usable_assets, ffmpeg_path, source_dir)
     if not episode_groups:
         raise ValueError("No usable Quick Mix episode groups could be built from the selected source folder.")
-    ordered_episode_ids = [str(group["episode_id"]) for group in episode_groups]
-    episode_lookup = {str(group["episode_id"]): group for group in episode_groups}
-    episode_take_pools: dict[str, list[dict[str, int | str | Asset | bool]]] = {
-        episode_id: [] for episode_id in ordered_episode_ids
-    }
-    total_unique_asset_ids = {
-        asset.asset_id
-        for group in episode_groups
-        for asset in list(group.get("assets", []))
-    }
-    episode_take_cooldowns = {
-        episode_id: _episode_take_cooldown_size(int(group["take_count"]), normalized_output_count)
-        for episode_id, group in episode_lookup.items()
-    }
-    episode_asset_cycles = {
-        episode_id: _episode_asset_cycle_size(len(list(group.get("assets", []))))
-        for episode_id, group in episode_lookup.items()
-    }
-    episode_usage_counts: dict[str, int] = {}
-    take_usage_counts: dict[str, int] = {}
-    asset_usage_counts: dict[str, int] = {}
-    source_group_usage_counts: dict[str, int] = {}
-    recent_take_ids_by_episode: dict[str, deque[str]] = {
-        episode_id: deque(maxlen=max(1, cooldown_size))
-        for episode_id, cooldown_size in episode_take_cooldowns.items()
-        if cooldown_size > 0
-    }
-    exhausted_asset_ids_by_episode: dict[str, deque[str]] = {
-        episode_id: deque(maxlen=max(1, cycle_size))
-        for episode_id, cycle_size in episode_asset_cycles.items()
-        if cycle_size > 0
-    }
-    globally_exhausted_asset_ids = deque(maxlen=max(1, len(total_unique_asset_ids) - 1)) if len(total_unique_asset_ids) > 1 else deque()
+
+    generation_paths = allocate_generation_paths(resolved_work_dir)
+    prior_diversity_plans = load_prior_diversity_plans(resolved_work_dir)
+
     output_paths: list[Path] = []
     selected_music_paths: list[Path] = []
     selected_music_start_ms_values: list[int] = []
@@ -1620,355 +1699,157 @@ def quick_mix_source_materials(
     selected_closing_paths: list[Path] = []
     variant_manifests: list[dict[str, object]] = []
     quick_mix_warnings: list[dict[str, object]] = []
-    existing_variant_manifests = _load_existing_quick_mix_variants(resolved_work_dir)
-    seen_variant_manifests = list(existing_variant_manifests)
-    used_variant_signatures = {
-        _build_quick_mix_variant_signature_from_manifest(variant)
-        for variant in existing_variant_manifests
-    }
-    used_variant_signatures.update(
-        _build_quick_mix_variant_legacy_signature_from_manifest(variant)
-        for variant in existing_variant_manifests
-    )
     music_variant_pool: list[Path] = []
     music_duration_cache: dict[Path, int] = {}
     opening_variant_pool: list[Asset] = []
     closing_variant_pool: list[Asset] = []
-    marker_episode_ids = {
-        asset.asset_id
-        for asset in [*opening_assets, *closing_assets]
-    }
+    reserved_body_asset_ids: set[str] = set()
+    reserved_body_source_groups: set[str] = set()
+    planned_requests: list[dict[str, object]] = []
 
-    for output_index in range(normalized_output_count):
-        accepted_plan: dict[str, object] | None = None
-        accepted_rank: tuple[int, ...] | None = None
-        duplicate_fallback_plan: dict[str, object] | None = None
-        duplicate_fallback_rank: tuple[int, ...] | None = None
-        for _attempt_index in range(QUICK_MIX_VARIANT_SEARCH_ATTEMPTS):
-            attempt_music_variant_pool = list(music_variant_pool)
-            attempt_opening_variant_pool = list(opening_variant_pool)
-            attempt_closing_variant_pool = list(closing_variant_pool)
-            attempt_episode_take_pools = {
-                episode_id: list(pool)
-                for episode_id, pool in episode_take_pools.items()
-            }
-            attempt_episode_usage_counts = dict(episode_usage_counts)
-            attempt_take_usage_counts = dict(take_usage_counts)
-            attempt_asset_usage_counts = dict(asset_usage_counts)
-            attempt_source_group_usage_counts = dict(source_group_usage_counts)
-            attempt_recent_take_ids_by_episode = {
-                episode_id: deque(recent_take_ids, maxlen=recent_take_ids.maxlen)
-                for episode_id, recent_take_ids in recent_take_ids_by_episode.items()
-            }
-            attempt_exhausted_asset_ids_by_episode = {
-                episode_id: deque(exhausted_asset_ids, maxlen=exhausted_asset_ids.maxlen)
-                for episode_id, exhausted_asset_ids in exhausted_asset_ids_by_episode.items()
-            }
-            attempt_globally_exhausted_asset_ids = deque(
-                globally_exhausted_asset_ids,
-                maxlen=globally_exhausted_asset_ids.maxlen,
-            )
-
-            selected_music_path = _take_next_variant(resolved_music_paths, attempt_music_variant_pool)
-            opening_asset = _take_next_variant(opening_assets, attempt_opening_variant_pool)
-            closing_asset = _take_next_variant(closing_assets, attempt_closing_variant_pool)
-            if selected_music_path is not None and use_music_duration:
-                target_duration_ms = _resolve_audio_track_duration_ms(selected_music_path, ffprobe_path)
-            else:
-                target_duration_ms = fallback_duration_ms
-            selected_music_start_ms = _select_music_start_ms(
-                selected_music_path,
-                target_duration_ms=target_duration_ms,
-                ffprobe_path=ffprobe_path,
-                use_music_duration=use_music_duration,
-                duration_cache=music_duration_cache,
-            )
-
-            remaining_ms = target_duration_ms
-            step_index = 0
-            selected_take_manifest: list[dict[str, object]] = []
-            episode_order: list[str] = []
-            segment_plans: list[dict[str, object]] = []
-            output_warnings: list[dict[str, object]] = []
-            used_episode_ids_in_output: set[str] = set()
-            used_take_ids_in_output: set[str] = set()
-            used_asset_ids_in_output: set[str] = set()
-            used_source_groups_in_output: set[str] = set()
-            allow_output_level_reuse = False
-            reserved_episode_ids_in_output = set(marker_episode_ids)
-            used_episode_ids_in_output.update(reserved_episode_ids_in_output)
-            episode_order_queue = _build_episode_order_queue(
-                ordered_episode_ids,
-                used_episode_ids_in_output,
-                reserved_episode_ids_in_output,
-                attempt_episode_usage_counts,
-            )
-            cycle_progress = False
-
-            if opening_asset is not None:
-                intro_ms = _pinned_segment_ms(opening_asset, remaining_ms)
-                if intro_ms > 0:
-                    segment_plans.append(
-                        {
-                            "asset": opening_asset,
-                            "start_ms": 0,
-                            "duration_ms": intro_ms,
-                            "step_index": step_index,
-                        }
-                    )
-                    remaining_ms -= intro_ms
-                    step_index += 1
-
-            if closing_asset is not None:
-                if use_closing_duration:
-                    closing_remaining_ms = closing_asset.duration_ms or remaining_ms
-                    closing_segment_ms = _pinned_segment_ms(
-                        closing_asset,
-                        closing_remaining_ms,
-                        use_full_duration=True,
-                    )
-                else:
-                    closing_segment_ms = _pinned_segment_ms(closing_asset, remaining_ms, use_full_duration=False)
-            else:
-                closing_segment_ms = 0
-
-            reserved_closing_ms = 0 if use_closing_duration else closing_segment_ms
-
-            while remaining_ms > reserved_closing_ms:
-                if not episode_order_queue:
-                    if not cycle_progress:
-                        if allow_output_level_reuse:
-                            break
-                        allow_output_level_reuse = True
-                    episode_order_queue = _build_episode_order_queue(
-                        ordered_episode_ids,
-                        used_episode_ids_in_output,
-                        reserved_episode_ids_in_output,
-                        attempt_episode_usage_counts,
-                    )
-                    if not episode_order_queue:
-                        break
-                    cycle_progress = False
-                episode_id = episode_order_queue.popleft()
-                episode_group = episode_lookup[episode_id]
-                take_pool = attempt_episode_take_pools.setdefault(episode_id, [])
-                recent_take_ids = set(attempt_recent_take_ids_by_episode.get(episode_id, ()))
-                exhausted_asset_ids = set(attempt_exhausted_asset_ids_by_episode.get(episode_id, ()))
-                selected_take, selection_warning = _select_balanced_take_variant(
-                    episode_group["takes"],
-                    take_pool,
-                    attempt_take_usage_counts,
-                    attempt_asset_usage_counts,
-                    attempt_source_group_usage_counts,
-                    avoid_take_ids=((set() if allow_output_level_reuse else used_take_ids_in_output) | recent_take_ids),
-                    avoid_asset_ids=(
-                        (set() if allow_output_level_reuse else used_asset_ids_in_output)
-                        | exhausted_asset_ids
-                        | set(attempt_globally_exhausted_asset_ids)
-                    ),
-                    avoid_source_groups=(set() if allow_output_level_reuse else used_source_groups_in_output),
-                    output_index=output_index,
-                    step_index=step_index,
-                )
-                if selected_take is None:
-                    continue
-                asset = selected_take["asset"]
-                attempt_episode_usage_counts[episode_id] = attempt_episode_usage_counts.get(episode_id, 0) + 1
-                selected_take_id = _take_identifier(selected_take)
-                attempt_take_usage_counts[selected_take_id] = attempt_take_usage_counts.get(selected_take_id, 0) + 1
-                selected_asset_id = _asset_identifier(selected_take)
-                attempt_asset_usage_counts[selected_asset_id] = attempt_asset_usage_counts.get(selected_asset_id, 0) + 1
-                selected_source_group = _source_group_identifier(selected_take)
-                if selected_source_group:
-                    attempt_source_group_usage_counts[selected_source_group] = (
-                        attempt_source_group_usage_counts.get(selected_source_group, 0) + 1
-                    )
-                used_take_ids_in_output.add(selected_take_id)
-                used_asset_ids_in_output.add(selected_asset_id)
-                if selected_source_group:
-                    used_source_groups_in_output.add(selected_source_group)
-                recent_take_ids_queue = attempt_recent_take_ids_by_episode.get(episode_id)
-                if recent_take_ids_queue is not None:
-                    recent_take_ids_queue.append(selected_take_id)
-                exhausted_asset_ids_queue = attempt_exhausted_asset_ids_by_episode.get(episode_id)
-                if exhausted_asset_ids_queue is not None:
-                    exhausted_asset_ids_queue.append(selected_asset_id)
-                if attempt_globally_exhausted_asset_ids.maxlen:
-                    attempt_globally_exhausted_asset_ids.append(selected_asset_id)
-                if selection_warning is not None:
-                    output_warnings.append(selection_warning)
-                segment_budget_ms = remaining_ms - reserved_closing_ms
-                preferred_ms = _choose_body_segment_ms(
-                    asset,
-                    segment_budget_ms,
-                    minimum_body_ms=minimum_body_ms,
-                    maximum_body_ms=maximum_body_ms,
-                )
-                if preferred_ms <= 0:
-                    raise ValueError(f"Could not determine a usable segment duration for asset: {asset.path}")
-                start_ms, segment_ms = _choose_take_render_window(selected_take, asset, preferred_ms)
-                if segment_ms <= 0:
-                    continue
-
-                segment_plans.append(
-                    {
-                        "asset": asset,
-                        "start_ms": start_ms,
-                        "duration_ms": segment_ms,
-                        "step_index": step_index,
-                    }
-                )
-                remaining_ms -= segment_ms
-                step_index += 1
-                cycle_progress = True
-                used_episode_ids_in_output.add(episode_id)
-                episode_order.append(episode_id)
-                selected_take_manifest.append(
-                    {
-                        "episode_id": episode_id,
-                        "episode_label": episode_group["episode_label"],
-                        "take_id": selected_take["take_id"],
-                        "take_index": selected_take["take_index"],
-                        "marker_split": bool(selected_take["marker_split"]),
-                        "asset_id": asset.asset_id,
-                        "media_type": asset.media_type.value,
-                        "normalized_source_group": normalize_quick_mix_source_group(asset.path),
-                        "source_path": str(asset.path.resolve()),
-                        "source_start_ms": int(selected_take["start_ms"]),
-                        "source_end_ms": int(selected_take["end_ms"]),
-                        "render_start_ms": start_ms,
-                        "render_end_ms": start_ms + segment_ms,
-                    }
-                )
-
-            if closing_asset is not None and closing_segment_ms > 0:
-                closing_start_ms = 0
-                if closing_asset.media_type == MediaType.VIDEO and closing_asset.duration_ms:
-                    closing_start_ms = max(0, closing_asset.duration_ms - closing_segment_ms)
-                segment_plans.append(
-                    {
-                        "asset": closing_asset,
-                        "start_ms": closing_start_ms,
-                        "duration_ms": closing_segment_ms,
-                        "step_index": step_index,
-                    }
-                )
-
-            variant_signature = _build_quick_mix_variant_signature(
-                selected_take_manifest,
-                selected_music_path=selected_music_path,
-                selected_music_start_ms=selected_music_start_ms,
-                opening_asset=opening_asset,
-                closing_asset=closing_asset,
-                target_duration_ms=target_duration_ms,
-                use_closing_duration=use_closing_duration,
-            )
-            variant_legacy_signature = _build_quick_mix_variant_legacy_signature(
-                selected_take_manifest,
-                selected_music_path=selected_music_path,
-                selected_music_start_ms=selected_music_start_ms,
-                opening_asset=opening_asset,
-                closing_asset=closing_asset,
-                target_duration_ms=target_duration_ms,
-                use_closing_duration=use_closing_duration,
-            )
-            variant_manifest_preview = {
-                "episode_order": episode_order,
-                "selected_takes": selected_take_manifest,
-                "music_path": str(selected_music_path) if selected_music_path else "",
-                "music_start_ms": selected_music_start_ms,
-                "opening_media_path": str(opening_asset.path.resolve()) if opening_asset is not None else "",
-                "closing_media_path": str(closing_asset.path.resolve()) if closing_asset is not None else "",
-                "use_closing_duration": use_closing_duration,
-                "target_duration_ms": target_duration_ms,
-            }
-            variant_rank = _build_variant_similarity_rank(variant_manifest_preview, seen_variant_manifests)
-            candidate_plan = {
+    for request_index in range(normalized_output_count):
+        selected_music_path = _take_next_variant(resolved_music_paths, music_variant_pool)
+        opening_asset = _take_next_variant(opening_assets, opening_variant_pool)
+        closing_asset = _take_next_variant(closing_assets, closing_variant_pool)
+        if selected_music_path is not None and use_music_duration:
+            target_duration_ms = _resolve_audio_track_duration_ms(selected_music_path, ffprobe_path)
+        else:
+            target_duration_ms = fallback_duration_ms
+        selected_music_start_ms = _select_music_start_ms(
+            selected_music_path,
+            target_duration_ms=target_duration_ms,
+            ffprobe_path=ffprobe_path,
+            use_music_duration=use_music_duration,
+            duration_cache=music_duration_cache,
+        )
+        body_duration_ms, opening_segment_ms, closing_segment_ms = _quick_mix_body_budget_ms(
+            target_duration_ms=target_duration_ms,
+            opening_asset=opening_asset,
+            closing_asset=closing_asset,
+            use_closing_duration=use_closing_duration,
+        )
+        planned_requests.append(
+            {
+                "request_index": request_index,
                 "selected_music_path": selected_music_path,
                 "selected_music_start_ms": selected_music_start_ms,
                 "opening_asset": opening_asset,
                 "closing_asset": closing_asset,
                 "target_duration_ms": target_duration_ms,
-                "segment_plans": segment_plans,
-                "selected_take_manifest": selected_take_manifest,
-                "episode_order": episode_order,
-                "variant_manifest_preview": variant_manifest_preview,
-                "variant_signature": variant_signature,
-                "variant_legacy_signature": variant_legacy_signature,
-                "variant_rank": variant_rank,
-                "output_warnings": output_warnings,
-                "episode_take_pools": attempt_episode_take_pools,
-                "episode_usage_counts": attempt_episode_usage_counts,
-                "take_usage_counts": attempt_take_usage_counts,
-                "asset_usage_counts": attempt_asset_usage_counts,
-                "source_group_usage_counts": attempt_source_group_usage_counts,
-                "recent_take_ids_by_episode": attempt_recent_take_ids_by_episode,
-                "exhausted_asset_ids_by_episode": attempt_exhausted_asset_ids_by_episode,
-                "globally_exhausted_asset_ids": attempt_globally_exhausted_asset_ids,
-                "music_variant_pool": attempt_music_variant_pool,
-                "opening_variant_pool": attempt_opening_variant_pool,
-                "closing_variant_pool": attempt_closing_variant_pool,
+                "body_duration_ms": body_duration_ms,
+                "opening_segment_ms": opening_segment_ms,
+                "closing_segment_ms": closing_segment_ms,
             }
-            if variant_signature in used_variant_signatures or variant_legacy_signature in used_variant_signatures:
-                if duplicate_fallback_rank is None or variant_rank < duplicate_fallback_rank:
-                    duplicate_fallback_plan = candidate_plan
-                    duplicate_fallback_rank = variant_rank
-                continue
-            if accepted_rank is not None and variant_rank >= accepted_rank:
-                continue
-
-            accepted_plan = candidate_plan
-            accepted_rank = variant_rank
-
-        if accepted_plan is None:
-            if duplicate_fallback_plan is None:
-                raise ValueError(
-                    "No new unique Quick Mix combinations remain for the selected source materials and current options."
-                )
-            fallback_take_ids = {
-                str(take.get("take_id", ""))
-                for take in duplicate_fallback_plan["selected_take_manifest"]
-                if isinstance(take, dict)
-            }
-            if len(fallback_take_ids) <= 1:
-                raise ValueError(
-                    "No new unique Quick Mix combinations remain for the selected source materials and current options."
-                )
-            accepted_plan = duplicate_fallback_plan
-
-        selected_music_path = accepted_plan["selected_music_path"]
-        selected_music_start_ms = int(accepted_plan["selected_music_start_ms"])
-        opening_asset = accepted_plan["opening_asset"]
-        closing_asset = accepted_plan["closing_asset"]
-        target_duration_ms = int(accepted_plan["target_duration_ms"])
-        selected_take_manifest = list(accepted_plan["selected_take_manifest"])
-        episode_order = list(accepted_plan["episode_order"])
-        music_variant_pool = list(accepted_plan["music_variant_pool"])
-        opening_variant_pool = list(accepted_plan["opening_variant_pool"])
-        closing_variant_pool = list(accepted_plan["closing_variant_pool"])
-        episode_take_pools = {
-            episode_id: list(pool)
-            for episode_id, pool in accepted_plan["episode_take_pools"].items()
-        }
-        episode_usage_counts = dict(accepted_plan["episode_usage_counts"])
-        take_usage_counts = dict(accepted_plan["take_usage_counts"])
-        asset_usage_counts = dict(accepted_plan["asset_usage_counts"])
-        source_group_usage_counts = dict(accepted_plan["source_group_usage_counts"])
-        recent_take_ids_by_episode = {
-            episode_id: deque(recent_take_ids, maxlen=recent_take_ids.maxlen)
-            for episode_id, recent_take_ids in accepted_plan["recent_take_ids_by_episode"].items()
-        }
-        exhausted_asset_ids_by_episode = {
-            episode_id: deque(exhausted_asset_ids, maxlen=exhausted_asset_ids.maxlen)
-            for episode_id, exhausted_asset_ids in accepted_plan["exhausted_asset_ids_by_episode"].items()
-        }
-        globally_exhausted_asset_ids = deque(
-            accepted_plan["globally_exhausted_asset_ids"],
-            maxlen=accepted_plan["globally_exhausted_asset_ids"].maxlen,
         )
-        used_variant_signatures.add(str(accepted_plan["variant_signature"]))
-        used_variant_signatures.add(str(accepted_plan["variant_legacy_signature"]))
-        seen_variant_manifests.append(dict(accepted_plan["variant_manifest_preview"]))
+        for pinned_asset in (opening_asset, closing_asset):
+            if pinned_asset is None:
+                continue
+            reserved_body_asset_ids.add(pinned_asset.asset_id)
+            reserved_body_source_groups.add(normalize_quick_mix_source_group(pinned_asset.path))
+
+    requests_by_body_duration: dict[int, list[dict[str, object]]] = {}
+    for request in planned_requests:
+        body_duration_ms = int(request["body_duration_ms"])
+        if body_duration_ms <= 0:
+            continue
+        requests_by_body_duration.setdefault(body_duration_ms, []).append(request)
+
+    selected_body_plans: dict[int, tuple[object, object, dict[str, object]]] = {}
+    accumulated_prior_plans = list(prior_diversity_plans)
+
+    for body_duration_ms, body_requests in sorted(requests_by_body_duration.items()):
+        adapter_result = build_episode_group_diversity_plan(
+            episode_groups,
+            target_duration_ms=body_duration_ms,
+            output_count=len(body_requests),
+            prior_plans=tuple(accumulated_prior_plans),
+            reserved_asset_ids=reserved_body_asset_ids,
+            reserved_source_groups=reserved_body_source_groups,
+        )
+        batch = adapter_result.batch
+        batch_manifest = diversity_batch_manifest(
+            batch,
+            generation_id=generation_paths.generation_id,
+            requested_duration_ms=body_duration_ms,
+        )
+        for warning in batch_manifest.get("warnings", []):
+            if isinstance(warning, dict):
+                quick_mix_warnings.append({**warning, "body_target_duration_ms": body_duration_ms})
+        batch_outputs = batch_manifest.get("outputs", [])
+        if not isinstance(batch_outputs, list):
+            batch_outputs = []
+        for request, plan, manifest_output in zip(body_requests, batch.plans, batch_outputs, strict=False):
+            selected_body_plans[int(request["request_index"])] = (
+                plan,
+                adapter_result,
+                manifest_output if isinstance(manifest_output, dict) else {},
+            )
+            accumulated_prior_plans.append(plan)
+
+    rendered_diversity_plans: list[object] = []
+    rendered_plan_outputs: list[dict[str, object]] = []
+
+    for output_index, request in enumerate(planned_requests, start=1):
+        body_duration_ms = int(request["body_duration_ms"])
+        selected_music_path = request["selected_music_path"]
+        selected_music_start_ms = int(request["selected_music_start_ms"])
+        opening_asset = request["opening_asset"]
+        closing_asset = request["closing_asset"]
+        target_duration_ms = int(request["target_duration_ms"])
+        opening_segment_ms = int(request["opening_segment_ms"])
+        closing_segment_ms = int(request["closing_segment_ms"])
+
+        segment_plans: list[dict[str, object]] = []
+        selected_take_manifest: list[dict[str, object]] = []
+        episode_order: list[str] = []
+        plan_manifest_output: dict[str, object] | None = None
+
+        if opening_asset is not None and opening_segment_ms > 0:
+            segment_plans.append(
+                {
+                    "asset": opening_asset,
+                    "start_ms": 0,
+                    "duration_ms": opening_segment_ms,
+                    "step_index": len(segment_plans),
+                    "segment_kind": "opening",
+                }
+            )
+
+        if body_duration_ms > 0:
+            selected_plan = selected_body_plans.get(int(request["request_index"]))
+            if selected_plan is None:
+                continue
+            diversity_plan, adapter_result, manifest_output = selected_plan
+            diversity_plan = replace(diversity_plan, output_index=output_index)
+            rendered_diversity_plans.append(diversity_plan)
+            plan_manifest_output = dict(manifest_output)
+            body_segments = render_segments_for_plan(diversity_plan, adapter_result)
+            selected_take_manifest = selected_take_manifest_for_plan(diversity_plan, adapter_result)
+            episode_order = [
+                str(take.get("episode_id") or "")
+                for take in selected_take_manifest
+                if str(take.get("episode_id") or "")
+            ]
+            for body_segment in body_segments:
+                body_segment["step_index"] = len(segment_plans)
+                segment_plans.append(body_segment)
+
+        if closing_asset is not None and closing_segment_ms > 0:
+            closing_start_ms = 0
+            if closing_asset.media_type == MediaType.VIDEO and closing_asset.duration_ms:
+                closing_start_ms = max(0, closing_asset.duration_ms - closing_segment_ms)
+            segment_plans.append(
+                {
+                    "asset": closing_asset,
+                    "start_ms": closing_start_ms,
+                    "duration_ms": closing_segment_ms,
+                    "step_index": len(segment_plans),
+                    "segment_kind": "closing",
+                }
+            )
+
+        if not segment_plans:
+            continue
 
         if selected_music_path is not None:
             selected_music_paths.append(selected_music_path)
@@ -1977,14 +1858,14 @@ def quick_mix_source_materials(
             selected_opening_paths.append(opening_asset.path.resolve())
         if closing_asset is not None:
             selected_closing_paths.append(closing_asset.path.resolve())
-        selected_duration_ms_values.append(
-            sum(int(segment_plan["duration_ms"]) for segment_plan in accepted_plan["segment_plans"])
-        )
+
+        generated_duration_ms = sum(int(segment_plan["duration_ms"]) for segment_plan in segment_plans)
+        selected_duration_ms_values.append(generated_duration_ms)
 
         segment_paths: list[Path] = []
-        for segment_plan in accepted_plan["segment_plans"]:
+        for segment_plan in segment_plans:
             step_number = int(segment_plan["step_index"]) + 1
-            segment_path = segments_dir / f"quick_mix_{output_index + 1:03d}_seg_{step_number:02d}.mp4"
+            segment_path = generation_paths.segments_dir / f"quick_mix_{output_index:03d}_seg_{step_number:02d}.mp4"
             _render_quick_mix_segment(
                 segment_plan["asset"],
                 segment_path,
@@ -1994,7 +1875,7 @@ def quick_mix_source_materials(
             )
             segment_paths.append(segment_path)
 
-        output_path = exports_dir / f"quick_mix_{output_index + 1:03d}.mp4"
+        output_path = generation_paths.exports_dir / f"quick_mix_{output_index:03d}.mp4"
         _render_quick_mix_output(
             segment_paths,
             output_path,
@@ -2003,23 +1884,39 @@ def quick_mix_source_materials(
             music_start_ms=selected_music_start_ms,
         )
         output_paths.append(output_path)
+
         variant_manifests.append(
             {
                 "variant_id": output_path.stem,
-                "output_path": str(output_path.relative_to(resolved_work_dir)).replace("\\", "/"),
+                "generation_id": generation_paths.generation_id,
+                "output_path": generation_paths.relative(output_path, resolved_work_dir),
                 "episode_order": episode_order,
                 "selected_takes": selected_take_manifest,
-                "music_path": str(selected_music_path) if selected_music_path else "",
+                "music_path": str(selected_music_path.resolve()) if selected_music_path is not None else "",
                 "music_start_ms": selected_music_start_ms,
                 "opening_media_path": str(opening_asset.path.resolve()) if opening_asset is not None else "",
                 "closing_media_path": str(closing_asset.path.resolve()) if closing_asset is not None else "",
                 "use_closing_duration": use_closing_duration,
                 "target_duration_ms": target_duration_ms,
-                "generated_duration_ms": sum(int(segment_plan["duration_ms"]) for segment_plan in accepted_plan["segment_plans"]),
-                "warnings": list(accepted_plan["output_warnings"]),
+                "generated_duration_ms": generated_duration_ms,
+                "warnings": [],
             }
         )
-        quick_mix_warnings.extend(list(accepted_plan["output_warnings"]))
+
+        if plan_manifest_output is None:
+            rendered_plan_outputs.append(
+                {
+                    "output_index": output_index,
+                    "target_duration_ms": body_duration_ms,
+                    "planned_duration_ms": 0,
+                    "body_visual_signature": [],
+                    "folder_signature": [],
+                    "nearest_neighbour_distance": 1.0,
+                    "segments": [],
+                }
+            )
+        else:
+            rendered_plan_outputs.append({**plan_manifest_output, "output_index": output_index})
 
     generation_elapsed_ms = max(0, int((time.perf_counter() - generation_started_at) * 1000))
     reported_duration_seconds = (
@@ -2027,15 +1924,75 @@ def quick_mix_source_materials(
         if selected_duration_ms_values
         else fallback_duration_ms / 1000
     )
+
+    if len(output_paths) < normalized_output_count:
+        quick_mix_warnings.append(
+            {
+                "code": QUICK_MIX_DIVERSITY_EXHAUSTED,
+                "requested_output_count": normalized_output_count,
+                "achieved_output_count": len(output_paths),
+            }
+        )
+
     quick_mix_plan_path = "reports/quick_mix_plan.json"
-    write_json(
-        resolved_work_dir / quick_mix_plan_path,
-        _build_quick_mix_plan_report(
-            [*existing_variant_manifests, *variant_manifests],
-            requested_duration_ms=fallback_duration_ms,
-            requested_output_count=normalized_output_count,
-            warnings=quick_mix_warnings,
-        ),
+    quick_mix_generation_plan_path = generation_paths.relative(generation_paths.plan_path, resolved_work_dir)
+    quick_mix_report_path = generation_paths.relative(generation_paths.report_path, resolved_work_dir)
+    quick_mix_generation_index_path = "reports/quick_mix_generations.json"
+
+    diversity_summary = _summarize_diversity_plans(rendered_diversity_plans)
+    generation_plan_payload = {
+        "generation_id": generation_paths.generation_id,
+        "planner": "max_min_farthest_point",
+        "requested_duration_ms": fallback_duration_ms,
+        "requested_output_count": normalized_output_count,
+        "achieved_output_count": len(output_paths),
+        "warning_count": len(quick_mix_warnings),
+        "warnings": quick_mix_warnings,
+        "diversity": diversity_summary,
+        "outputs": rendered_plan_outputs,
+    }
+    write_generation_json(generation_paths.plan_path, generation_plan_payload)
+    write_json(resolved_work_dir / quick_mix_plan_path, generation_plan_payload)
+
+    generation_report_payload = {
+        "source_dir": str(project.root_path),
+        "work_dir": str(resolved_work_dir),
+        "generation_id": generation_paths.generation_id,
+        "duration_seconds": reported_duration_seconds,
+        "output_count": normalized_output_count,
+        "episode_duration_min_seconds": minimum_body_ms / 1000,
+        "episode_duration_max_seconds": maximum_body_ms / 1000,
+        "generated_count": len(output_paths),
+        "generation_elapsed_ms": generation_elapsed_ms,
+        "music_path": str(selected_music_paths[0]) if selected_music_paths else "",
+        "music_paths": [str(path) for path in resolved_music_paths],
+        "use_music_duration": use_music_duration,
+        "duration_source": "music" if use_music_duration and selected_music_paths else "manual",
+        "opening_media_path": str(selected_opening_paths[0]) if selected_opening_paths else "",
+        "opening_media_paths": [str(asset.path.resolve()) for asset in opening_assets],
+        "closing_media_path": str(selected_closing_paths[0]) if selected_closing_paths else "",
+        "closing_media_paths": [str(asset.path.resolve()) for asset in closing_assets],
+        "use_closing_duration": use_closing_duration,
+        "episode_groups": [_serialize_episode_group(group) for group in episode_groups],
+        "variants": variant_manifests,
+        "quick_mix_warning_count": len(quick_mix_warnings),
+        "quick_mix_warnings": quick_mix_warnings,
+        "quick_mix_generation_id": generation_paths.generation_id,
+        "quick_mix_requested_output_count": normalized_output_count,
+        "quick_mix_achieved_output_count": len(output_paths),
+        "quick_mix_report_path": quick_mix_report_path,
+        "quick_mix_generation_index_path": quick_mix_generation_index_path,
+        "quick_mix_plan_path": quick_mix_plan_path,
+        "quick_mix_generation_plan_path": quick_mix_generation_plan_path,
+        "output_paths": [generation_paths.relative(path, resolved_work_dir) for path in output_paths],
+    }
+    write_generation_json(generation_paths.report_path, generation_report_payload)
+    record_generation(
+        resolved_work_dir,
+        generation_paths,
+        requested_output_count=normalized_output_count,
+        achieved_output_count=len(output_paths),
+        output_paths=output_paths,
     )
 
     _prepare_quick_mix_workdir(
@@ -2056,10 +2013,15 @@ def quick_mix_source_materials(
         closing_media_paths=[asset.path.resolve() for asset in closing_assets],
         use_closing_duration=use_closing_duration,
         generation_elapsed_ms=generation_elapsed_ms,
-        variants=[*existing_variant_manifests, *variant_manifests],
+        variants=variant_manifests,
         episode_groups=[_serialize_episode_group(group) for group in episode_groups],
         quick_mix_warning_count=len(quick_mix_warnings),
         quick_mix_warnings=quick_mix_warnings,
+        quick_mix_generation_id=generation_paths.generation_id,
+        quick_mix_requested_output_count=normalized_output_count,
+        quick_mix_achieved_output_count=len(output_paths),
+        quick_mix_report_path=quick_mix_report_path,
+        quick_mix_generation_index_path=quick_mix_generation_index_path,
         quick_mix_plan_path=quick_mix_plan_path,
     )
 
@@ -2095,8 +2057,14 @@ def quick_mix_source_materials(
         "variants": variant_manifests,
         "quick_mix_warning_count": len(quick_mix_warnings),
         "quick_mix_warnings": quick_mix_warnings,
+        "quick_mix_generation_id": generation_paths.generation_id,
+        "quick_mix_requested_output_count": normalized_output_count,
+        "quick_mix_achieved_output_count": len(output_paths),
+        "quick_mix_report_path": quick_mix_report_path,
+        "quick_mix_generation_index_path": quick_mix_generation_index_path,
         "quick_mix_plan_path": quick_mix_plan_path,
-        "output_paths": [str(path.relative_to(resolved_work_dir)).replace("\\", "/") for path in output_paths],
+        "quick_mix_generation_plan_path": quick_mix_generation_plan_path,
+        "output_paths": [generation_paths.relative(path, resolved_work_dir) for path in output_paths],
     }
 
 

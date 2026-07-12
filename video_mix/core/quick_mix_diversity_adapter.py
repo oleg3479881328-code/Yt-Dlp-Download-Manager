@@ -49,7 +49,7 @@ def build_episode_group_diversity_plan(
                 continue
             take_id = str(raw_take.get("take_id") or "")
             asset_id = str(getattr(asset, "asset_id", "") or "")
-            path = Path(getattr(asset, "path"))
+            path = Path(asset.path)
             source_group = normalize_quick_mix_source_group(path)
             if (
                 not take_id
