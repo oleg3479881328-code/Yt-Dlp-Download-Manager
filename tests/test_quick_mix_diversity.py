@@ -30,22 +30,28 @@ def sources(
     ]
 
 
-def manual_plan(*source_ids: str) -> DiversityPlan:
+def manual_plan(
+    *source_ids: str,
+    starts_ms: tuple[int, ...] | None = None,
+    base_source_ids: tuple[str, ...] | None = None,
+) -> DiversityPlan:
+    starts = starts_ms or tuple(0 for _ in source_ids)
+    bases = base_source_ids or source_ids
     return DiversityPlan(
         1,
         len(source_ids) * 2000,
         tuple(
             DiversitySegment(
                 source_id,
-                source_id,
+                bases[index],
                 f"{source_id.lower()}.jpg",
                 source_id[0],
                 f"{source_id[0]}/{source_id}.jpg",
                 "photo",
-                0,
+                starts[index],
                 2000,
             )
-            for source_id in source_ids
+            for index, source_id in enumerate(source_ids)
         ),
     )
 
@@ -69,6 +75,85 @@ def test_long_identical_prefix_is_scored_as_more_similar() -> None:
     assert compare_plans(reference, far).distance > compare_plans(
         reference,
         close,
+    ).distance
+
+
+def test_same_take_sequence_with_different_windows_is_rejected() -> None:
+    left = manual_plan(
+        "A1",
+        "B1",
+        "C1",
+        "D1",
+        "E1",
+        starts_ms=(0, 0, 0, 0, 0),
+    )
+    right = manual_plan(
+        "A1",
+        "B1",
+        "C1",
+        "D1",
+        "E1",
+        starts_ms=(500, 500, 500, 500, 500),
+    )
+    assert rejection_reason(left, right, DiversityPolicy()) == "exact_take_duplicate"
+
+
+def test_four_of_five_same_takes_with_different_windows_is_rejected() -> None:
+    left = manual_plan(
+        "A1",
+        "B1",
+        "C1",
+        "D1",
+        "E1",
+        starts_ms=(0, 0, 0, 0, 0),
+    )
+    right = manual_plan(
+        "A1",
+        "B1",
+        "C1",
+        "D1",
+        "E2",
+        starts_ms=(500, 500, 500, 500, 500),
+    )
+    assert rejection_reason(left, right, DiversityPolicy()) == "single_position_change"
+
+
+def test_same_asset_sequence_with_different_take_ids_is_rejected() -> None:
+    left = manual_plan(
+        "A1",
+        "B1",
+        "C1",
+        "D1",
+        "E1",
+        base_source_ids=("asset_a", "asset_b", "asset_c", "asset_d", "asset_e"),
+    )
+    right = manual_plan(
+        "A2",
+        "B2",
+        "C2",
+        "D2",
+        "E2",
+        base_source_ids=("asset_a", "asset_b", "asset_c", "asset_d", "asset_e"),
+        starts_ms=(500, 500, 500, 500, 500),
+    )
+    assert rejection_reason(left, right, DiversityPolicy()) == "exact_asset_duplicate"
+    assert compare_plans(left, right).distance < 0.30
+
+
+def test_truly_different_take_sequence_is_farther_than_same_takes_new_windows() -> None:
+    reference = manual_plan("A1", "B1", "C1", "D1", "E1")
+    same_takes_new_windows = manual_plan(
+        "A1",
+        "B1",
+        "C1",
+        "D1",
+        "E1",
+        starts_ms=(700, 700, 700, 700, 700),
+    )
+    different_takes = manual_plan("A2", "B2", "C2", "D2", "E2")
+    assert compare_plans(reference, different_takes).distance > compare_plans(
+        reference,
+        same_takes_new_windows,
     ).distance
 
 

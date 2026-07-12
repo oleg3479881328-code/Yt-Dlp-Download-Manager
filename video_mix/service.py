@@ -1323,6 +1323,7 @@ def _summarize_diversity_plans(
     pairwise_distances: list[float] = []
     nearest_by_output: dict[int, float] = {}
     source_usage: dict[str, int] = {}
+    asset_usage: dict[str, int] = {}
     folder_usage: dict[str, int] = {}
     folder_position_usage: dict[str, int] = {}
     folder_transition_usage: dict[str, int] = {}
@@ -1346,9 +1347,12 @@ def _summarize_diversity_plans(
         previous_folder_id = ""
         for position_index, segment in enumerate(left_segments, start=1):
             source_id = str(getattr(segment, "source_id", "") or "")
+            asset_id = str(getattr(segment, "base_source_id", "") or "")
             folder_id = str(getattr(segment, "folder_id", "") or "")
             if source_id:
                 source_usage[source_id] = source_usage.get(source_id, 0) + 1
+            if asset_id:
+                asset_usage[asset_id] = asset_usage.get(asset_id, 0) + 1
             if folder_id:
                 folder_usage[folder_id] = folder_usage.get(folder_id, 0) + 1
                 position_key = f"{position_index}:{folder_id}"
@@ -1371,10 +1375,47 @@ def _summarize_diversity_plans(
         "maximum_pairwise_distance": maximum_distance,
         "nearest_neighbour_distance_by_output": dict(sorted(nearest_by_output.items())),
         "source_usage": dict(sorted(source_usage.items())),
+        "asset_usage": dict(sorted(asset_usage.items())),
         "folder_usage": dict(sorted(folder_usage.items())),
         "folder_position_usage": dict(sorted(folder_position_usage.items())),
         "folder_transition_usage": dict(sorted(folder_transition_usage.items())),
     }
+
+
+def _build_full_quick_mix_manifest_segments(
+    segment_plans: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for position_index, segment_plan in enumerate(segment_plans, start=1):
+        asset = segment_plan.get("asset")
+        asset_id = str(getattr(asset, "asset_id", "") or "")
+        asset_path = getattr(asset, "path", None)
+        source_path = str(Path(asset_path).resolve()) if asset_path else ""
+        source_group = (
+            normalize_quick_mix_source_group(Path(asset_path))
+            if asset_path
+            else ""
+        )
+        result.append(
+            {
+                "segment_kind": str(segment_plan.get("segment_kind") or "body"),
+                "asset_id": asset_id,
+                "base_source_id": asset_id,
+                "source_id": str(segment_plan.get("source_id") or ""),
+                "source_group": source_group,
+                "source_path": source_path,
+                "source_start_ms": int(segment_plan.get("start_ms") or 0),
+                "duration_ms": int(segment_plan.get("duration_ms") or 0),
+                "full_timeline_position": position_index,
+                "folder_id": str(segment_plan.get("folder_id") or ""),
+                "media_type": str(
+                    getattr(getattr(asset, "media_type", ""), "value", "")
+                    or getattr(asset, "media_type", "")
+                    or ""
+                ),
+            }
+        )
+    return result
 
 
 def _build_video_segment_command(
@@ -1861,6 +1902,7 @@ def quick_mix_source_materials(
 
         generated_duration_ms = sum(int(segment_plan["duration_ms"]) for segment_plan in segment_plans)
         selected_duration_ms_values.append(generated_duration_ms)
+        full_manifest_segments = _build_full_quick_mix_manifest_segments(segment_plans)
 
         segment_paths: list[Path] = []
         for segment_plan in segment_plans:
@@ -1909,14 +1951,22 @@ def quick_mix_source_materials(
                     "output_index": output_index,
                     "target_duration_ms": body_duration_ms,
                     "planned_duration_ms": 0,
+                    "generated_duration_ms": generated_duration_ms,
                     "body_visual_signature": [],
                     "folder_signature": [],
                     "nearest_neighbour_distance": 1.0,
-                    "segments": [],
+                    "segments": full_manifest_segments,
                 }
             )
         else:
-            rendered_plan_outputs.append({**plan_manifest_output, "output_index": output_index})
+            rendered_plan_outputs.append(
+                {
+                    **plan_manifest_output,
+                    "output_index": output_index,
+                    "generated_duration_ms": generated_duration_ms,
+                    "segments": full_manifest_segments,
+                }
+            )
 
     generation_elapsed_ms = max(0, int((time.perf_counter() - generation_started_at) * 1000))
     reported_duration_seconds = (

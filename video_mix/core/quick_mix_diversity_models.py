@@ -63,6 +63,18 @@ class DiversityPlan:
 
     @property
     def body_signature(self) -> tuple[str, ...]:
+        return self.window_signature
+
+    @property
+    def take_signature(self) -> tuple[str, ...]:
+        return tuple(segment.source_id for segment in self.segments)
+
+    @property
+    def asset_signature(self) -> tuple[str, ...]:
+        return tuple(segment.base_source_id for segment in self.segments)
+
+    @property
+    def window_signature(self) -> tuple[str, ...]:
         return tuple(segment.window_id for segment in self.segments)
 
     @property
@@ -74,13 +86,23 @@ class DiversityPlan:
 class PairMetrics:
     compared_positions: int
     same_take_positions: int
+    same_asset_positions: int
+    same_window_positions: int
     same_folder_positions: int
-    common_prefix_length: int
-    longest_identical_run: int
+    common_take_prefix_length: int
+    common_asset_prefix_length: int
+    common_window_prefix_length: int
+    longest_identical_take_run: int
+    longest_identical_asset_run: int
+    longest_identical_window_run: int
     take_overlap: int
+    asset_overlap: int
+    window_overlap: int
     folder_overlap: int
     folder_transition_overlap: int
     take_transition_overlap: int
+    asset_transition_overlap: int
+    window_transition_overlap: int
     changed_thirds: int
     similarity: float
     distance: float
@@ -101,6 +123,7 @@ class DiversityReport:
     maximum_pairwise_distance: float
     nearest_neighbour_distance_by_output: dict[int, float]
     source_usage: dict[str, int]
+    asset_usage: dict[str, int]
     folder_usage: dict[str, int]
     folder_position_usage: dict[str, int]
     folder_transition_usage: dict[str, int]

@@ -85,7 +85,7 @@ def build_diverse_batch(
                 budget,
                 seed,
             )
-        unique = {candidate.body_signature: candidate for candidate in candidates}
+        unique = {candidate.take_signature: candidate for candidate in candidates}
         candidate_count = len(candidates)
         duplicate_count = candidate_count - len(unique)
         selected, rejected = _select_farthest(
@@ -135,12 +135,14 @@ def build_diverse_batch(
 @dataclass(slots=True)
 class _Usage:
     sources: Counter[str] = field(default_factory=Counter)
+    assets: Counter[str] = field(default_factory=Counter)
     positions: Counter[str] = field(default_factory=Counter)
     transitions: Counter[str] = field(default_factory=Counter)
 
     def add(self, plan: DiversityPlan) -> None:
         for index, segment in enumerate(plan.segments):
             self.sources[segment.source_id] += 1
+            self.assets[segment.base_source_id] += 1
             self.positions[f"{index}:{segment.folder_id}"] += 1
         self.transitions.update(transitions(plan.folder_signature))
 
@@ -150,6 +152,7 @@ class _Usage:
             for index, segment in enumerate(plan.segments)
             for value in (
                 self.sources[segment.source_id],
+                self.assets[segment.base_source_id],
                 self.positions[f"{index}:{segment.folder_id}"],
             )
         ]
@@ -233,6 +236,7 @@ def _report(
     }
     all_distances: list[float] = []
     sources: Counter[str] = Counter()
+    assets: Counter[str] = Counter()
     folders: Counter[str] = Counter()
     positions: Counter[str] = Counter()
     transition_counts: Counter[str] = Counter()
@@ -244,6 +248,7 @@ def _report(
             distances_by_output[right.output_index].append(distance)
         for position, segment in enumerate(left.segments, 1):
             sources[segment.source_id] += 1
+            assets[segment.base_source_id] += 1
             folders[segment.folder_id] += 1
             positions[f"{position}:{segment.folder_id}"] += 1
         transition_counts.update(transitions(left.folder_signature))
@@ -265,6 +270,7 @@ def _report(
         max(all_distances) if all_distances else 1.0,
         nearest,
         dict(sorted(sources.items())),
+        dict(sorted(assets.items())),
         dict(sorted(folders.items())),
         dict(sorted(positions.items())),
         dict(sorted(transition_counts.items())),

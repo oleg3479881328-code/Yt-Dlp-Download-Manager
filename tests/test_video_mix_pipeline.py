@@ -89,6 +89,7 @@ def _fake_diversity_batch(
         maximum_pairwise_distance=1.0,
         nearest_neighbour_distance_by_output={index: 1.0 for index in range(1, achieved_output_count + 1)},
         source_usage={},
+        asset_usage={},
         folder_usage={},
         folder_position_usage={},
         folder_transition_usage={},
@@ -2359,3 +2360,119 @@ def test_quick_mix_source_materials_rejects_combinations_already_seen_in_workdir
 
     assert planner_prior_counts == [0, 1]
     assert planner_music_values == [(None, 0), (None, 0)]
+
+
+def test_quick_mix_plan_manifest_contains_full_opening_body_closing_sequence(tmp_path: Path, monkeypatch) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    clip_path = source_dir / "clip.mp4"
+    clip_path.write_bytes(b"video")
+    opening_path = tmp_path / "opening.mp4"
+    opening_path.write_bytes(b"opening")
+    closing_path = tmp_path / "closing.mp4"
+    closing_path.write_bytes(b"closing")
+    work_dir = tmp_path / "work"
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 2000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    body_asset = Asset(stable_id("asset", str(clip_path.resolve())), "project", clip_path.resolve(), MediaType.VIDEO, duration_ms=2000)
+    opening_asset = Asset(stable_id("asset", str(opening_path.resolve())), "project", opening_path.resolve(), MediaType.VIDEO, duration_ms=1200)
+    closing_asset = Asset(stable_id("asset", str(closing_path.resolve())), "project", closing_path.resolve(), MediaType.VIDEO, duration_ms=1500)
+
+    def fake_build_episode_group_diversity_plan(
+        _episode_groups,
+        *,
+        target_duration_ms,
+        output_count,
+        **_kwargs,
+    ):
+        plan = DiversityPlan(
+            output_index=1,
+            target_duration_ms=target_duration_ms,
+            segments=(
+                _fake_diversity_segment(
+                    body_asset,
+                    source_id="take_001",
+                    folder_id="episode_001",
+                    duration_ms=target_duration_ms,
+                    source_group="clip.mp4",
+                ),
+            ),
+        )
+        return SimpleNamespace(batch=_fake_diversity_batch([plan], requested_output_count=output_count))
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service.build_episode_group_diversity_plan", fake_build_episode_group_diversity_plan)
+    monkeypatch.setattr(
+        "video_mix.service.render_segments_for_plan",
+        lambda *_args, **_kwargs: [
+            {
+                "asset": body_asset,
+                "start_ms": 400,
+                "duration_ms": 4000,
+                "step_index": 0,
+                "segment_kind": "body",
+                "source_id": "take_001",
+                "folder_id": "episode_001",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "video_mix.service.selected_take_manifest_for_plan",
+        lambda *_args, **_kwargs: [
+            {
+                "episode_id": "episode_001",
+                "episode_label": "episode_001",
+                "take_id": "take_001",
+                "take_index": 1,
+                "marker_split": False,
+                "asset_id": body_asset.asset_id,
+                "media_type": "video",
+                "normalized_source_group": "clip.mp4",
+                "source_path": str(body_asset.path),
+                "source_start_ms": 0,
+                "source_end_ms": 2000,
+                "render_start_ms": 400,
+                "render_end_ms": 4400,
+            }
+        ],
+    )
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", lambda *args, **kwargs: Path(args[1]).write_bytes(b"seg"))
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=1,
+        work_dir=str(work_dir),
+        opening_media_path=str(opening_path),
+        closing_media_path=str(closing_path),
+        use_closing_duration=True,
+    )
+
+    compatibility_plan = read_json(work_dir / "reports" / "quick_mix_plan.json")
+    generation_plan = read_json(work_dir / result["quick_mix_generation_plan_path"])
+    output = compatibility_plan["outputs"][0]
+    assert output == generation_plan["outputs"][0]
+    assert [segment["segment_kind"] for segment in output["segments"]] == [
+        "opening",
+        "body",
+        "closing",
+    ]
+    assert output["body_visual_signature"] == ["take_001@0:4000"]
+    assert output["generated_duration_ms"] == sum(segment["duration_ms"] for segment in output["segments"])
+    body_segments = [segment for segment in output["segments"] if segment["segment_kind"] == "body"]
+    assert [segment["source_start_ms"] for segment in body_segments] == [400]
+    assert [segment["base_source_id"] for segment in body_segments] == [body_asset.asset_id]
+    assert [segment["source_group"] for segment in body_segments] == ["clip.mp4"]
+    assert opening_asset.asset_id not in {segment["base_source_id"] for segment in body_segments}
+    assert closing_asset.asset_id not in {segment["base_source_id"] for segment in body_segments}

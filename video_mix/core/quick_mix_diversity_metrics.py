@@ -7,50 +7,88 @@ from .quick_mix_diversity_models import DiversityPlan, DiversityPolicy, PairMetr
 
 
 def compare_plans(left: DiversityPlan, right: DiversityPlan) -> PairMetrics:
-    left_takes = list(left.body_signature)
-    right_takes = list(right.body_signature)
+    left_takes = list(left.take_signature)
+    right_takes = list(right.take_signature)
+    left_assets = list(left.asset_signature)
+    right_assets = list(right.asset_signature)
+    left_windows = list(left.window_signature)
+    right_windows = list(right.window_signature)
     left_folders = list(left.folder_signature)
     right_folders = list(right.folder_signature)
     positions = min(len(left_takes), len(right_takes))
     if positions == 0:
-        return PairMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 1.0)
+        return PairMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 1.0)
 
     same_takes = sum(left_takes[index] == right_takes[index] for index in range(positions))
+    same_assets = sum(left_assets[index] == right_assets[index] for index in range(positions))
+    same_windows = sum(left_windows[index] == right_windows[index] for index in range(positions))
     same_folders = sum(left_folders[index] == right_folders[index] for index in range(positions))
-    prefix = _common_prefix(left_takes, right_takes)
-    run = _longest_run(left_takes, right_takes)
+    take_prefix = _common_prefix(left_takes, right_takes)
+    asset_prefix = _common_prefix(left_assets, right_assets)
+    window_prefix = _common_prefix(left_windows, right_windows)
+    take_run = _longest_run(left_takes, right_takes)
+    asset_run = _longest_run(left_assets, right_assets)
+    window_run = _longest_run(left_windows, right_windows)
     take_overlap = _overlap(left_takes, right_takes)
+    asset_overlap = _overlap(left_assets, right_assets)
+    window_overlap = _overlap(left_windows, right_windows)
     folder_overlap = _overlap(left_folders, right_folders)
     folder_transition_overlap = _overlap(transitions(left_folders), transitions(right_folders))
     take_transition_overlap = _overlap(transitions(left_takes), transitions(right_takes))
+    asset_transition_overlap = _overlap(transitions(left_assets), transitions(right_assets))
+    window_transition_overlap = _overlap(transitions(left_windows), transitions(right_windows))
     changed_thirds = _changed_thirds(left_takes, right_takes)
 
     similarity = min(
         1.0,
-        0.28 * same_takes / positions
-        + 0.16 * same_folders / positions
-        + 0.16 * prefix / positions
-        + 0.10 * run / positions
-        + 0.10 * take_overlap / max(len(left_takes), len(right_takes), 1)
-        + 0.04 * folder_overlap / max(len(left_folders), len(right_folders), 1)
-        + 0.08
+        0.26 * same_takes / positions
+        + 0.30 * same_assets / positions
+        + 0.05 * same_windows / positions
+        + 0.03 * same_folders / positions
+        + 0.09 * take_prefix / positions
+        + 0.12 * asset_prefix / positions
+        + 0.02 * window_prefix / positions
+        + 0.05 * take_run / positions
+        + 0.06 * asset_run / positions
+        + 0.02 * window_run / positions
+        + 0.09 * take_overlap / max(len(left_takes), len(right_takes), 1)
+        + 0.09 * asset_overlap / max(len(left_assets), len(right_assets), 1)
+        + 0.02 * window_overlap / max(len(left_windows), len(right_windows), 1)
+        + 0.03 * folder_overlap / max(len(left_folders), len(right_folders), 1)
+        + 0.03
         * folder_transition_overlap
         / max(len(transitions(left_folders)), len(transitions(right_folders)), 1)
-        + 0.06
+        + 0.04
         * take_transition_overlap
         / max(len(transitions(left_takes)), len(transitions(right_takes)), 1)
+        + 0.05
+        * asset_transition_overlap
+        / max(len(transitions(left_assets)), len(transitions(right_assets)), 1)
+        + 0.01
+        * window_transition_overlap
+        / max(len(transitions(left_windows)), len(transitions(right_windows)), 1)
         + 0.02 * (changed_thirds <= 1 and left_takes != right_takes),
     )
     return PairMetrics(
         positions,
         same_takes,
+        same_assets,
+        same_windows,
         same_folders,
-        prefix,
-        run,
+        take_prefix,
+        asset_prefix,
+        window_prefix,
+        take_run,
+        asset_run,
+        window_run,
         take_overlap,
+        asset_overlap,
+        window_overlap,
         folder_overlap,
         folder_transition_overlap,
         take_transition_overlap,
+        asset_transition_overlap,
+        window_transition_overlap,
         changed_thirds,
         similarity,
         max(0.0, 1.0 - similarity),
@@ -63,8 +101,10 @@ def assess_pair(
     policy: DiversityPolicy,
 ) -> tuple[str | None, PairMetrics]:
     metrics = compare_plans(left, right)
-    if left.body_signature == right.body_signature:
-        return "exact_body_duplicate", metrics
+    if left.take_signature == right.take_signature:
+        return "exact_take_duplicate", metrics
+    if left.asset_signature == right.asset_signature:
+        return "exact_asset_duplicate", metrics
     positions = metrics.compared_positions
     if positions == 0:
         return None, metrics
@@ -74,8 +114,12 @@ def assess_pair(
         return "single_position_change", metrics
     if metrics.same_take_positions / positions > policy.max_positional_take_match_ratio:
         return "positional_take_match", metrics
-    if metrics.common_prefix_length / positions > policy.max_common_prefix_ratio:
+    if metrics.same_asset_positions / positions > policy.max_positional_take_match_ratio:
+        return "positional_asset_match", metrics
+    if metrics.common_take_prefix_length / positions > policy.max_common_prefix_ratio:
         return "common_prefix", metrics
+    if metrics.common_asset_prefix_length / positions > policy.max_common_prefix_ratio:
+        return "asset_common_prefix", metrics
     if (
         positions >= 3
         and metrics.changed_thirds < policy.min_changed_thirds

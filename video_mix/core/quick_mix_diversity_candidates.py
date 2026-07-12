@@ -90,6 +90,7 @@ def enumerate_candidates(
     if target_duration_ms % nominal:
         return []
     segment_count = target_duration_ms // nominal
+    enforce_unique_materials = _can_enforce_unique_materials(grouped, segment_count)
     if segment_count <= 0 or segment_count > len(grouped):
         return []
     if any(
@@ -107,6 +108,8 @@ def enumerate_candidates(
     result: list[DiversityPlan] = []
     for order in itertools.permutations(grouped, segment_count):
         for selected_sources in itertools.product(*(grouped[group_id] for group_id in order)):
+            if enforce_unique_materials and not _sources_are_materially_unique(selected_sources):
+                continue
             result.append(
                 DiversityPlan(
                     0,
@@ -130,18 +133,27 @@ def sample_candidates(
 ) -> list[DiversityPlan]:
     base_seed = seed if seed is not None else random.SystemRandom().randrange(2**63)
     group_ids = list(grouped)
+    nominal = nominal_duration(grouped, target_duration_ms)
+    planned_segments = max(1, math.ceil(target_duration_ms / nominal))
+    enforce_unique_materials = _can_enforce_unique_materials(grouped, planned_segments)
     result: list[DiversityPlan] = []
-    for candidate_index in range(budget):
+    candidate_index = 0
+    attempt_index = 0
+    maximum_attempts = max(budget * 8, budget + 1)
+    while len(result) < budget and attempt_index < maximum_attempts:
+        attempt_index += 1
         rng = random.Random((base_seed + 1) * 1_000_003 + candidate_index * 97_409)
         remaining = target_duration_ms
         segments: list[DiversitySegment] = []
         source_orders: dict[str, list[QuickMixSource]] = {}
         source_positions: Counter[str] = Counter()
         source_uses: Counter[str] = Counter()
+        used_base_source_ids: set[str] = set()
+        used_source_groups: set[str] = set()
         last_source: dict[str, str] = {}
         last_folder: str | None = None
 
-        while remaining > 0:
+        while remaining > 0 and len(segments) < planned_segments:
             cycle = list(group_ids)
             rng.shuffle(cycle)
             if len(cycle) > 1 and cycle[0] == last_folder:
@@ -174,8 +186,13 @@ def sample_candidates(
                     source_orders[folder_id] = order
                     source_positions[folder_id] = 0
                     position = 0
-                source = order[position]
-                source_positions[folder_id] += 1
+                source, next_position = _choose_source_for_plan_step(
+                    order,
+                    position,
+                    used_base_source_ids=used_base_source_ids,
+                    used_source_groups=used_source_groups,
+                )
+                source_positions[folder_id] = next_position
                 last_source[folder_id] = source.source_id
                 duration = preferred_quick_mix_segment_ms(source, remaining)
                 start = sample_start(
@@ -187,9 +204,15 @@ def sample_candidates(
                 )
                 segments.append(segment(source, duration, start))
                 source_uses[source.source_id] += 1
+                used_base_source_ids.add(source.unique_base_id)
+                used_source_groups.add(source.source_group)
                 remaining -= duration
                 last_folder = folder_id
+        if enforce_unique_materials and not _segments_are_materially_unique(segments):
+            candidate_index += 1
+            continue
         result.append(DiversityPlan(0, target_duration_ms, tuple(segments)))
+        candidate_index += 1
     return result
 
 
@@ -237,3 +260,47 @@ def segment(
         source_start_ms,
         duration_ms,
     )
+
+
+def _sources_are_materially_unique(sources: Sequence[QuickMixSource]) -> bool:
+    base_ids = [source.unique_base_id for source in sources]
+    source_groups = [source.source_group for source in sources]
+    return len(base_ids) == len(set(base_ids)) and len(source_groups) == len(set(source_groups))
+
+
+def _segments_are_materially_unique(segments: Sequence[DiversitySegment]) -> bool:
+    base_ids = [segment.base_source_id for segment in segments]
+    source_groups = [segment.source_group for segment in segments]
+    return len(base_ids) == len(set(base_ids)) and len(source_groups) == len(set(source_groups))
+
+
+def _can_enforce_unique_materials(
+    grouped: dict[str, list[QuickMixSource]],
+    segment_count: int,
+) -> bool:
+    sources = [source for items in grouped.values() for source in items]
+    unique_asset_count = len({source.unique_base_id for source in sources})
+    unique_group_count = len({source.source_group for source in sources})
+    return segment_count <= unique_asset_count and segment_count <= unique_group_count
+
+
+def _choose_source_for_plan_step(
+    order: Sequence[QuickMixSource],
+    position: int,
+    *,
+    used_base_source_ids: set[str],
+    used_source_groups: set[str],
+) -> tuple[QuickMixSource, int]:
+    indexed_sources = list(enumerate(order[position:], start=position))
+    indexed_sources.extend((index, source) for index, source in enumerate(order[:position]))
+    stages = (
+        lambda source: source.unique_base_id not in used_base_source_ids and source.source_group not in used_source_groups,
+        lambda source: source.unique_base_id not in used_base_source_ids,
+        lambda source: source.source_group not in used_source_groups,
+        lambda _source: True,
+    )
+    for predicate in stages:
+        for index, source in indexed_sources:
+            if predicate(source):
+                return source, index + 1
+    return order[position], position + 1
