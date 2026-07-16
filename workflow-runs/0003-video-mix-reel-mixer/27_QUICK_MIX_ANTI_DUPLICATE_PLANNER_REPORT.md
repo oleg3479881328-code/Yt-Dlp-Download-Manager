@@ -1,132 +1,219 @@
-# Quick Mix Anti-Duplicate Planner Report
+# Quick Mix Anti-Duplicate Follow-up Report
 
-Status: integrated into the actual local `/video-mix` working contour, validated on tests and real media, ready for review.
+Status: review-ready
 
-Active local base branch:
-- `codex/issue-41-source-materials-loading`
+PR contour:
+- PR `#57`
+- branch: `agent/quick-mix-max-diversity`
+- task source: PR comment `#4949617249`
+- scope: close two confirmed defects without changing the broader max-diversity architecture
 
-Integration branch:
-- `assistant/quick-mix-anti-duplicates-integration`
-
-Source PR preserved separately:
-- `#54 Add Quick Mix anti-duplicate planner core`
-
-Scope kept bounded:
-- No merge into `master`.
-- No change to PR `#54` head branch.
-- Accepted Quick Mix anti-duplicate backend fix was transferred into the real local `/video-mix` contour.
-- Existing Timeline / Project Materials / captions / orientation / dashboard/API contour was preserved by integrating on top of the actually running local branch state.
-
-What is integrated:
-- `video_mix/core/quick_mix_planner.py`
-  - normalized source-group anti-duplicate planning;
-  - explicit warning path when unique material is exhausted.
+Changed files in this pass:
+- `video_mix/core/quick_mix_diversity_models.py`
+- `video_mix/core/quick_mix_diversity_metrics.py`
+- `video_mix/core/quick_mix_diversity_selection.py`
+- `video_mix/core/quick_mix_diversity_candidates.py`
 - `video_mix/service.py`
-  - planner wiring inside `quick_mix_source_materials()`;
-  - `reports/quick_mix_plan.json` generation;
-  - warning metadata in report/API payloads;
-  - legacy signature protection for already-seen combinations.
-- `video_mix/core/media_probe.py`
-  - ffprobe decode/probe fix preserved in the integration contour so real media durations reach planning correctly.
+- `tests/test_quick_mix_diversity.py`
 - `tests/test_video_mix_pipeline.py`
-  - regression coverage for duration backfill.
-- `tests/test_video_mix_dashboard_api.py`
-  - API payload coverage for warning fields and plan path.
+- `workflow-runs/0003-video-mix-reel-mixer/27_QUICK_MIX_ANTI_DUPLICATE_PLANNER_REPORT.md`
 
-Validation run on integration worktree:
+## 1. Three-level similarity and hard rejection
+
+Implemented comparison levels:
+- Take-level: `source_id`
+- Asset-level: `base_source_id`
+- Window-level: `source_id@start:end`
+
+Implemented metric split:
+- positional matches:
+  - `same_take_positions`
+  - `same_asset_positions`
+  - `same_window_positions`
+- prefix overlap:
+  - `common_take_prefix_length`
+  - `common_asset_prefix_length`
+  - `common_window_prefix_length`
+- longest runs:
+  - `longest_identical_take_run`
+  - `longest_identical_asset_run`
+  - `longest_identical_window_run`
+- overlaps:
+  - `take_overlap`
+  - `asset_overlap`
+  - `window_overlap`
+- transitions:
+  - `take_transition_overlap`
+  - `asset_transition_overlap`
+  - `window_transition_overlap`
+
+Hard rejection now fires on Take-level and Asset-level before window-only differences can mask duplicates:
+- `exact_take_duplicate`
+- `exact_asset_duplicate`
+- `single_position_change`
+- `positional_take_match`
+- `positional_asset_match`
+- `common_prefix`
+- `asset_common_prefix`
+
+Window-level remains only an extra diversity signal inside already-different Take / asset plans.
+
+Also tightened candidate generation:
+- dedupe key now uses `take_signature`, not window-only signature
+- source sampling prefers materially unique `base_source_id` and `source_group`
+- when the dataset can support it, repeated asset/group reuse inside one plan is rejected during candidate build
+
+## 2. Full generation manifest
+
+`outputs[].segments` now stores the real full sequence for every output in both:
+- generation-scoped `quick_mix_generations/.../reports/quick_mix_plan.json`
+- compatibility `reports/quick_mix_plan.json`
+
+Each segment now records:
+- `segment_kind`
+- `asset_id`
+- `base_source_id`
+- `source_id`
+- `source_group`
+- `source_path`
+- `source_start_ms`
+- `duration_ms`
+- `full_timeline_position`
+- `folder_id`
+- `media_type`
+
+`body_visual_signature` still stays body-only by design.
+
+## Regression tests added / updated
+
+`tests/test_quick_mix_diversity.py`
+- same `source_id` sequence with different windows -> `exact_take_duplicate`
+- 4 of 5 same Take positions with different windows -> `single_position_change`
+- same asset sequence with different Take IDs / windows -> `exact_asset_duplicate`
+- truly different Take sequence is farther than same Take sequence with shifted windows
+
+`tests/test_video_mix_pipeline.py`
+- compatibility + generation-scoped manifest contain `opening -> body -> closing`
+- body signature remains body-only
+- opening / closing sources stay absent from body segments
+- segment duration sum equals `generated_duration_ms`
+- generation-scoped and compatibility output plans are identical
+- prior-plan rejection remains independent from different music file / `music_start_ms`
+
+## Validation commands
 
 ```powershell
-python -m pytest tests/test_quick_mix_planner.py tests/test_video_mix_pipeline.py tests/test_video_mix_dashboard_api.py tests/test_video_mix_zip_intake.py -q
-python -m ruff check video_mix/core/quick_mix_planner.py video_mix/core/media_probe.py video_mix/service.py tests/test_quick_mix_planner.py tests/test_video_mix_pipeline.py tests/test_video_mix_dashboard_api.py
+python -m pytest tests/test_quick_mix_planner.py tests/test_quick_mix_diversity.py tests/test_quick_mix_diversity_adapter.py tests/test_quick_mix_generation.py tests/test_video_mix_pipeline.py tests/test_video_mix_dashboard_api.py tests/test_video_mix_zip_intake.py -q
+python -m ruff check app video_mix tests frontend-tests
+node --test frontend-tests/video-mix-dashboard.test.mjs
 node --check app/static/video-mix-dashboard.js
 ```
 
-Observed results:
-- `pytest`: `87 passed, 1 warning`
-- warning source: duplicate-name fixture inside `tests/test_video_mix_zip_intake.py`
+Observed:
+- `pytest`: `109 passed, 1 warning`
+- warning source: duplicate ZIP entry fixture in `tests/test_video_mix_zip_intake.py`
 - `ruff`: clean
+- frontend node tests: `6 passed`
 - `node --check`: clean
 
-Real-media browser/server smoke used for final proof:
-- integration server:
-  - `http://127.0.0.1:8766/video-mix?lang=ru`
-- source folder:
-  - `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager\Фотографы_video_mix_work\imports\263dd0910e3241e4919fbe746611f383_Фотографы_acafe075`
-- smoke work dir:
-  - `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-pr54-integration\tmp\pr54_integration_smoke_wide`
-- request:
-  - `duration_seconds = 6`
-  - `output_count = 2`
-  - `episode_duration_min_seconds = 1.5`
-  - `episode_duration_max_seconds = 2.0`
+## 100-output plan-only proof
 
-Smoke results:
-- scan: `172 total / 27 supported video / 0 photo / 145 ignored dirs`
-- quick mix: `generated_count = 2`
-- `quick_mix_warning_count = 0`
-- `quick_mix_plan_path = reports/quick_mix_plan.json`
-- `reports/quick_mix_plan.json` present
-- warning fields present in payload and report model
+Dataset:
+- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager\Фотографы_video_mix_work\imports\263dd0910e3241e4919fbe746611f383_Фотографы_acafe075`
 
-ffprobe results:
-- `exports/quick_mix_001.mp4` requested `6.0 s`, actual `6.066016 s`
-- `exports/quick_mix_002.mp4` requested `6.0 s`, actual `6.033008 s`
+Requested / achieved:
+- requested outputs: `100`
+- achieved outputs: `100`
+- warnings: `0`
 
-Anti-duplicate proof from `quick_mix_plan.json`:
-- output 1 normalized source groups:
-  - `whatsapp video 2026-07-03 at 10.21.53 pm.mp4`
-  - `whatsapp video 2026-07-03 at 10.21.54 pm.mp4`
-  - `whatsapp video 2026-07-03 at 10.21.52 pm.mp4`
-  - `whatsapp video 2026-07-03 at 10.18.31 pm.mp4`
-- output 2 normalized source groups:
-  - `whatsapp video 2026-07-03 at 10.21.48 pm.mp4`
-  - `новое видео.mp4`
-  - `whatsapp video 2026-07-03 at 10.21.53 pm.mp4`
-  - `whatsapp video 2026-07-03 at 10.21.49 pm.mp4`
-- no duplicated `normalized_source_group` inside either output in the final proof smoke.
+Distances:
+- minimum pairwise distance: `0.5700000000000001`
+- average pairwise distance: `0.9411861952861953`
+- maximum pairwise distance: `1.0`
+- nearest-neighbour min: `0.5700000000000001`
+- nearest-neighbour max: `0.695`
 
-Important note from earlier narrow-folder smoke:
-- a 7-file subset can still trigger relaxation warnings because unique groups are exhausted too early.
-- the final acceptance smoke above used the broader 27-video photographers dataset requested in PR review context and produced `0` warnings.
+Selected-plan violation checks:
+- pairwise violation count: `0`
+- Take-level violation count: `0`
+- Asset-level violation count: `0`
 
-Changed files in integration pass:
-- `app/main.py`
-- `app/static/app.js`
-- `app/static/styles.css`
-- `app/static/video-mix-dashboard.js`
-- `app/storage.py`
-- `app/templates/index.html`
-- `app/templates/video_mix_dashboard.html`
-- `app/video_mix_dashboard.py`
-- `app/worker.py`
-- `app/yt_service.py`
-- `chrome_extension/background.js`
-- `chrome_extension/options.html`
-- `chrome_extension/options.js`
-- `docs/README.md`
-- `frontend-tests/video-mix-dashboard.test.mjs`
-- `native_host/com.oleg.ytdlp.json`
-- `native_host/ytdlp_host.py`
-- `requirements.txt`
-- `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md`
-- `subtitle_studio/.gitignore`
-- `subtitle_studio/README.md`
-- `subtitle_studio/render-props.json`
-- `subtitle_studio/src/Root.tsx`
-- `tests/test_native_host_upload_limits.py`
-- `tests/test_segment_api.py`
-- `tests/test_segment_ydl_options.py`
-- `tests/test_video_mix_dashboard_api.py`
-- `tests/test_video_mix_pipeline.py`
-- `tests/test_video_mix_zip_intake.py`
-- `video_mix/core/asset_scan.py`
-- `video_mix/core/media_probe.py`
-- `video_mix/core/zip_intake.py`
-- `video_mix/service.py`
-- `workflow-runs/0003-video-mix-reel-mixer/27_QUICK_MIX_ANTI_DUPLICATE_PLANNER_REPORT.md`
+Rejected counts by reason from the selected-set recheck:
+- none observed in the final selected 100-plan set
 
-Blockers:
-- None.
+Usage distribution:
+- Take usage min/max: `1 / 23`
+- Asset usage min/max: `5 / 23`
+- Folder usage min/max: `23 / 73`
+
+Interpretation:
+- the selected set contains no duplicate Take-level sequences
+- changing only start offsets no longer upgrades the same Take plan into a far plan
+- asset-level similarity now stays strong even when Take/window IDs differ
+
+## Real Windows smoke: 10 MP4
+
+Smoke work dir:
+- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-pr57\tmp\pr57_comment_4949617249_validation_rerun\smoke_work`
+
+Request contour:
+- duration source: manual
+- requested duration: `6.0s`
+- actual generated timeline target with pinned ending: `8.089s`
+- body episode window: `1.5s .. 2.0s`
+- output count: `10`
+- music: none
+- opening pinned: yes
+- closing pinned: yes
+- `use_closing_duration = true`
+
+Real render result:
+- generated outputs: `10 / 10`
+- generation elapsed: `26835 ms`
+- videos in dataset: `28`
+- photos in dataset: `0`
+- warnings: `0`
+
+`ffprobe` durations:
+- `quick_mix_001.mp4`: requested `8.089s`, actual `8.066667s`
+- `quick_mix_002.mp4`: requested `8.089s`, actual `8.066667s`
+- `quick_mix_003.mp4`: requested `8.089s`, actual `8.065365s`
+- `quick_mix_004.mp4`: requested `8.089s`, actual `8.066667s`
+- `quick_mix_005.mp4`: requested `8.089s`, actual `8.066667s`
+- `quick_mix_006.mp4`: requested `8.089s`, actual `8.033333s`
+- `quick_mix_007.mp4`: requested `8.089s`, actual `8.066667s`
+- `quick_mix_008.mp4`: requested `8.089s`, actual `8.033333s`
+- `quick_mix_009.mp4`: requested `8.089s`, actual `8.100000s`
+- `quick_mix_010.mp4`: requested `8.089s`, actual `8.066667s`
+
+## Full manifest proof
+
+Compatibility vs generation-scoped:
+- first output identical in both manifests: `true`
+
+Observed segment kinds for first rendered output:
+- `opening`
+- `body`
+- `body`
+- `closing`
+
+Body-only signature:
+- `asset_1d41cae04044_take_001@6000:9000`
+- `asset_5d2ba10596b9_take_002@15000:16000`
+
+Duration consistency:
+- `generated_duration_ms = 8089`
+- `sum(outputs[0].segments[].duration_ms) = 8089`
+
+Body manifest proof:
+- opening absent from body segments: `true`
+- closing absent from body segments: `true`
+
+## Notes / limitations
+
+- This fix deliberately does not add visual-content analysis; it only corrects structural anti-duplicate logic across Take / asset / window levels.
+- The validation dataset is video-only (`0` photos), so photo-specific diversity was not expanded in this pass.
+- The selected-set recheck produced zero final-policy violations; therefore the new rejection categories are demonstrated by regression tests rather than by non-zero selected-set counts in the 100-plan audit.
 
 Ready for review:
 - Yes
