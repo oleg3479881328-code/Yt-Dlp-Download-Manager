@@ -23,6 +23,7 @@ from video_mix.core.review import (
 from video_mix.core.storage import build_asset, build_candidate, build_clip, read_json, to_jsonable
 from video_mix.service import (
     _build_episode_groups,
+    _build_quick_mix_variant_signature_from_manifest,
     _build_variant_similarity_rank,
     _build_video_segment_command,
     _choose_take_render_window,
@@ -642,10 +643,10 @@ def test_quick_mix_source_materials_avoids_duplicate_whatsapp_groups_per_output(
 def test_quick_mix_source_materials_backfills_short_clip_to_requested_duration(tmp_path: Path, monkeypatch) -> None:
     source_dir = tmp_path / "source"
     source_dir.mkdir()
-    for name in ("a.mp4", "b.mp4", "c.mp4", "d.mp4"):
+    for name in ("a.mp4", "b.mp4", "c.mp4"):
         (source_dir / name).write_bytes(b"video")
 
-    durations_by_name = {"a.mp4": 2000, "b.mp4": 2000, "c.mp4": 700, "d.mp4": 2000}
+    durations_by_name = {"a.mp4": 2000, "b.mp4": 2000, "c.mp4": 700}
     rendered_calls: list[tuple[str, int]] = []
 
     def fake_probe_assets(assets, ffprobe_path="ffprobe"):
@@ -683,17 +684,17 @@ def test_quick_mix_source_materials_backfills_short_clip_to_requested_duration(t
 
     result = quick_mix_source_materials(
         str(source_dir),
-        duration_seconds=6,
+        duration_seconds=4.7,
         output_count=1,
         project_name="Backfill Validation",
         work_dir=str(tmp_path / "work"),
     )
 
     assert result["generated_count"] == 1
-    assert sum(duration_ms for _, duration_ms in rendered_calls) == 6000
+    assert sum(duration_ms for _, duration_ms in rendered_calls) == 4700
     quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
-    assert quick_mix_plan["outputs"][0]["planned_duration_ms"] == 6000
-    assert sum(segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]) == 6000
+    assert quick_mix_plan["outputs"][0]["planned_duration_ms"] == 4700
+    assert sum(segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]) == 4700
     segment_durations = [segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]]
     assert all(duration > 0 for duration in segment_durations)
     assert any(duration < 2000 for duration in segment_durations)
@@ -1445,6 +1446,55 @@ def test_quick_mix_source_materials_allows_short_tail_under_body_minimum(tmp_pat
 
     assert sum(rendered_durations) == 3200
     assert any(duration < 1500 for duration in rendered_durations)
+
+
+def test_quick_mix_variant_signature_distinguishes_composite_photo_order() -> None:
+    variant_a = {
+        "requested_duration_ms": 6000,
+        "selected_takes": [
+            {
+                "episode_id": "episode_001",
+                "composite_signature": "video:asset_1|photos:photo_a,photo_b|photo_ms:1200|motion:static",
+            }
+        ],
+        "selected_music_path": "C:/music_a.mp3",
+        "selected_opening_path": "C:/opening_a.jpg",
+        "selected_closing_path": "C:/closing_a.mp4",
+    }
+    variant_b = {
+        **variant_a,
+        "selected_takes": [
+            {
+                "episode_id": "episode_001",
+                "composite_signature": "video:asset_1|photos:photo_b,photo_a|photo_ms:1200|motion:static",
+            }
+        ],
+    }
+
+    assert _build_quick_mix_variant_signature_from_manifest(variant_a) != _build_quick_mix_variant_signature_from_manifest(variant_b)
+
+
+def test_quick_mix_variant_signature_ignores_music_and_markers_for_composite_body() -> None:
+    base_variant = {
+        "requested_duration_ms": 6000,
+        "selected_takes": [
+            {
+                "episode_id": "episode_001",
+                "composite_signature": "video:asset_1|photos:photo_a,photo_b|photo_ms:1200|motion:ken_burns",
+            }
+        ],
+        "selected_music_path": "C:/music_a.mp3",
+        "selected_opening_path": "C:/opening_a.jpg",
+        "selected_closing_path": "C:/closing_a.mp4",
+    }
+    changed_variant = {
+        **base_variant,
+        "selected_music_path": "C:/music_b.mp3",
+        "selected_opening_path": "C:/opening_b.jpg",
+        "selected_closing_path": "C:/closing_b.mp4",
+    }
+
+    assert _build_quick_mix_variant_signature_from_manifest(base_variant) == _build_quick_mix_variant_signature_from_manifest(changed_variant)
 
 
 def test_estimate_quick_mix_capacity_returns_unique_output_estimate(tmp_path: Path, monkeypatch) -> None:

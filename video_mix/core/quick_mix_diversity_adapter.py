@@ -60,7 +60,7 @@ def build_episode_group_diversity_plan(
 
             start_ms = max(0, int(raw_take.get("start_ms") or 0))
             end_ms = max(start_ms, int(raw_take.get("end_ms") or start_ms))
-            available_ms = max(0, end_ms - start_ms)
+            available_ms = max(0, int(raw_take.get("duration_ms") or 0) or (end_ms - start_ms))
             if available_ms <= 0:
                 continue
             media_type = getattr(
@@ -82,6 +82,10 @@ def build_episode_group_diversity_plan(
                     "episode_label": episode_label,
                     "take_index": int(raw_take.get("take_index") or 0),
                     "marker_split": bool(raw_take.get("marker_split")),
+                    "take_type": str(raw_take.get("take_type") or "asset_take"),
+                    "atomic_take": bool(raw_take.get("atomic_take")),
+                    "atomic_duration_ms": available_ms,
+                    "composite_signature": str(raw_take.get("composite_signature") or ""),
                 },
             )
             sources.append(source)
@@ -157,6 +161,12 @@ def render_segments_for_plan(
                 "Planned source_id is missing from the production take lookup: "
                 f"{segment.source_id}"
             )
+        source = adapter.source_by_source_id.get(segment.source_id)
+        if source is None:
+            raise KeyError(
+                "Planned source_id is missing from the production source lookup: "
+                f"{segment.source_id}"
+            )
         asset = raw_take.get("asset")
         if asset is None:
             raise ValueError(
@@ -171,6 +181,9 @@ def render_segments_for_plan(
                 "segment_kind": "body",
                 "source_id": segment.source_id,
                 "folder_id": segment.folder_id,
+                "take_type": str(source.metadata.get("take_type") or "asset_take"),
+                "atomic_take": bool(source.metadata.get("atomic_take")),
+                "raw_take": raw_take,
             }
         )
     return result
@@ -192,6 +205,7 @@ def selected_take_manifest_for_plan(
                 "take_id": source.source_id,
                 "take_index": int(source.metadata.get("take_index") or 0),
                 "marker_split": bool(source.metadata.get("marker_split")),
+                "take_type": str(source.metadata.get("take_type") or "asset_take"),
                 "asset_id": str(getattr(asset, "asset_id", "") or ""),
                 "media_type": source.media_type,
                 "normalized_source_group": source.source_group,
@@ -201,6 +215,7 @@ def selected_take_manifest_for_plan(
                 + int(source.duration_ms or segment.duration_ms),
                 "render_start_ms": segment.source_start_ms,
                 "render_end_ms": segment.source_start_ms + segment.duration_ms,
+                "composite_signature": str(source.metadata.get("composite_signature") or ""),
             }
         )
     return result

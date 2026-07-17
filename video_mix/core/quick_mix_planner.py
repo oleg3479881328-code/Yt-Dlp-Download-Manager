@@ -72,6 +72,9 @@ def normalize_quick_mix_source_group(path: Path | str) -> str:
 
 
 def preferred_quick_mix_segment_ms(source: QuickMixSource, remaining_ms: int) -> int:
+    if bool(source.metadata.get("atomic_take")):
+        atomic_duration_ms = int(source.metadata.get("atomic_duration_ms") or source.duration_ms or 0)
+        return min(remaining_ms, atomic_duration_ms)
     if source.media_type == "photo":
         return min(remaining_ms, 2000 if remaining_ms > 2000 else remaining_ms)
     if not source.duration_ms:
@@ -215,7 +218,10 @@ def plan_quick_mix_segment(
     if segment_ms <= 0:
         raise ValueError(f"Could not determine a usable segment duration for source: {source.path}")
 
-    if source.media_type == "video" and source.duration_ms:
+    if bool(source.metadata.get("atomic_take")):
+        relative_start_ms = 0
+        start_ms = source.source_start_ms
+    elif source.media_type == "video" and source.duration_ms:
         max_start = max(0, source.duration_ms - segment_ms)
         cursor = source_offsets.get(source.source_id, 0)
         relative_start_ms = min(cursor, max_start)

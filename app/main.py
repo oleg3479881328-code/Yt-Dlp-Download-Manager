@@ -234,8 +234,13 @@ class VideoMixProjectMaterialTakeUpdateRequest(BaseModel):
     work_dir: str
     episode_id: str
     take_id: str
-    source_start_ms: int = Field(ge=0)
-    source_end_ms: int = Field(gt=0)
+    take_type: str = ""
+    source_start_ms: int | None = Field(default=None, ge=0)
+    source_end_ms: int | None = Field(default=None, gt=0)
+    video_asset_id: str = ""
+    photo_asset_ids: list[str] = Field(default_factory=list)
+    photo_duration_ms: int | None = Field(default=None, ge=100)
+    photo_motion_mode: str = ""
 
 
 class VideoMixProjectMaterialTakeReorderRequest(BaseModel):
@@ -508,6 +513,11 @@ async def update_video_mix_project_material_take(payload: VideoMixProjectMateria
         payload.take_id,
         payload.source_start_ms,
         payload.source_end_ms,
+        take_type=payload.take_type,
+        video_asset_id=payload.video_asset_id,
+        photo_asset_ids=payload.photo_asset_ids,
+        photo_duration_ms=payload.photo_duration_ms,
+        photo_motion_mode=payload.photo_motion_mode,
     )
     return {"ok": True, "dashboard": dashboard}
 
