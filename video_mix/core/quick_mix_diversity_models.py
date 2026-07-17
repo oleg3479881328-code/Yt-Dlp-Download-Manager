@@ -45,10 +45,19 @@ class DiversitySegment:
     media_type: str
     source_start_ms: int
     duration_ms: int
+    content_identity: str = ""
 
     @property
     def window_id(self) -> str:
         return f"{self.source_id}@{self.source_start_ms}:{self.source_start_ms + self.duration_ms}"
+
+    @property
+    def material_identity(self) -> str:
+        return self.content_identity or self.base_source_id
+
+    @property
+    def body_identity(self) -> str:
+        return self.content_identity or self.window_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +72,7 @@ class DiversityPlan:
 
     @property
     def body_signature(self) -> tuple[str, ...]:
-        return self.window_signature
+        return tuple(segment.body_identity for segment in self.segments)
 
     @property
     def take_signature(self) -> tuple[str, ...]:
@@ -71,7 +80,7 @@ class DiversityPlan:
 
     @property
     def asset_signature(self) -> tuple[str, ...]:
-        return tuple(segment.base_source_id for segment in self.segments)
+        return tuple(segment.material_identity for segment in self.segments)
 
     @property
     def window_signature(self) -> tuple[str, ...]:

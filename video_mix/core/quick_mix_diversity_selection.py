@@ -21,7 +21,11 @@ from .quick_mix_diversity_models import (
     DiversityPolicy,
     DiversityReport,
 )
-from .quick_mix_planner import QuickMixSource
+from .quick_mix_planner import (
+    QUICK_MIX_ATOMIC_TAKE_EXHAUSTED,
+    QuickMixSource,
+    preferred_quick_mix_segment_ms,
+)
 
 
 def build_diverse_batch(
@@ -51,9 +55,36 @@ def build_diverse_batch(
         if source.source_id not in blocked_ids
         and source.unique_base_id not in blocked_ids
         and source.source_group not in blocked_groups
+        and preferred_quick_mix_segment_ms(source, target_duration_ms) > 0
     ]
     if not eligible:
-        raise ValueError("No eligible Quick Mix sources remain after exclusions")
+        warning_code = (
+            QUICK_MIX_ATOMIC_TAKE_EXHAUSTED
+            if any(bool(source.metadata.get("atomic_take")) for source in sources)
+            else QUICK_MIX_DIVERSITY_EXHAUSTED
+        )
+        warnings = (
+            {
+                "code": warning_code,
+                "requested_output_count": output_count,
+                "achieved_output_count": 0,
+                "target_duration_ms": target_duration_ms,
+                "blocked_source_ids": sorted(
+                    source.source_id for source in sources if bool(source.metadata.get("atomic_take"))
+                ),
+            },
+        )
+        report = _report(
+            (),
+            "empty",
+            0,
+            0,
+            0,
+            0,
+            output_count,
+            {warning_code: 1},
+        )
+        return DiversityBatch((), warnings, report)
 
     grouped = group_sources(eligible)
     estimated_space = estimate_search_space(grouped, target_duration_ms)
@@ -85,7 +116,7 @@ def build_diverse_batch(
                 budget,
                 seed,
             )
-        unique = {candidate.take_signature: candidate for candidate in candidates}
+        unique = {candidate.body_signature: candidate for candidate in candidates}
         candidate_count = len(candidates)
         duplicate_count = candidate_count - len(unique)
         selected, rejected = _select_farthest(
@@ -142,7 +173,7 @@ class _Usage:
     def add(self, plan: DiversityPlan) -> None:
         for index, segment in enumerate(plan.segments):
             self.sources[segment.source_id] += 1
-            self.assets[segment.base_source_id] += 1
+            self.assets[segment.material_identity] += 1
             self.positions[f"{index}:{segment.folder_id}"] += 1
         self.transitions.update(transitions(plan.folder_signature))
 
@@ -152,7 +183,7 @@ class _Usage:
             for index, segment in enumerate(plan.segments)
             for value in (
                 self.sources[segment.source_id],
-                self.assets[segment.base_source_id],
+                self.assets[segment.material_identity],
                 self.positions[f"{index}:{segment.folder_id}"],
             )
         ]
@@ -248,7 +279,7 @@ def _report(
             distances_by_output[right.output_index].append(distance)
         for position, segment in enumerate(left.segments, 1):
             sources[segment.source_id] += 1
-            assets[segment.base_source_id] += 1
+            assets[segment.material_identity] += 1
             folders[segment.folder_id] += 1
             positions[f"{position}:{segment.folder_id}"] += 1
         transition_counts.update(transitions(left.folder_signature))

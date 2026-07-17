@@ -8,6 +8,7 @@ from video_mix.core.quick_mix_diversity_adapter import (
     render_segments_for_plan,
     selected_take_manifest_for_plan,
 )
+from video_mix.core.quick_mix_planner import QUICK_MIX_ATOMIC_TAKE_EXHAUSTED
 
 
 def asset(asset_id: str, folder: str, name: str):
@@ -147,3 +148,43 @@ def test_adapter_builds_existing_service_render_and_take_manifests() -> None:
     assert [item["render_start_ms"] for item in take_manifest] == [
         segment.source_start_ms for segment in plan.segments
     ]
+
+
+def test_adapter_returns_atomic_exhaustion_warning_when_only_composite_does_not_fit() -> None:
+    composite_asset = asset("asset_composite", "episode_001", "composite.mp4")
+    result = build_episode_group_diversity_plan(
+        [
+            {
+                "episode_id": "episode_001",
+                "episode_label": "Episode 1",
+                "takes": [
+                    {
+                        "take_id": "composite_take_001",
+                        "take_index": 1,
+                        "asset": composite_asset,
+                        "start_ms": 0,
+                        "end_ms": 5400,
+                        "duration_ms": 5400,
+                        "marker_split": False,
+                        "take_type": "video_photo_composite",
+                        "atomic_take": True,
+                        "composite_signature": "composite:abc",
+                    }
+                ],
+            }
+        ],
+        target_duration_ms=2000,
+        output_count=1,
+        seed=17,
+        policy=DiversityPolicy(
+            exact_enumeration_limit=10,
+            max_candidate_pool=10,
+            minimum_candidates_per_output=1,
+        ),
+    )
+
+    assert result.batch.plans == ()
+    assert result.batch.warnings
+    assert result.batch.warnings[0]["code"] == QUICK_MIX_ATOMIC_TAKE_EXHAUSTED
+    assert result.batch.warnings[0]["achieved_output_count"] == 0
+    assert result.batch.report.achieved_output_count == 0

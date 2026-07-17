@@ -1,236 +1,296 @@
-# Composite Video + Photo Take Execution Report
+# Composite Video Photo Take Execution Report
 
 Status: review-ready
 
 Task source:
 - GitHub Issue `#58`
-- branch: `codex/issue-58-composite-takes`
-- target base branch: `codex/issue-41-source-materials-loading`
+- PR `#60`
+- owner review comment:
+  - `https://github.com/oleg3479881328-code/Yt-Dlp-Download-Manager/pull/60#issuecomment-5002828852`
 
-## 1. Scope delivered
+Branch:
+- `codex/issue-58-composite-takes`
 
-Implemented a new editable composite Take type for VIDEO MIX:
+Base branch:
+- `codex/issue-41-source-materials-loading`
 
-```json
-{
-  "take_type": "video_photo_composite",
-  "video_asset_id": "...",
-  "photo_asset_ids": ["...", "..."],
-  "photo_duration_ms": 1200,
-  "photo_motion_mode": "static"
-}
-```
+## 1. Scope of this follow-up pass
 
-Delivered behavior:
-- one full selected video Take as the base
-- manually ordered photos appended only after the full video
-- shared photo duration for the full photo tail
-- motion mode per composite Take:
-  - `static`
-  - `ken_burns`
-- persistent editable composite structure in `project_materials_state.json`
-- Quick Mix treats the composite as one atomic body Take
-- body uniqueness includes:
-  - selected video asset
-  - ordered photo asset IDs
-  - shared photo duration
-  - motion mode
-- music / opening / closing are excluded from body uniqueness
-- opening / closing are not injected into the middle of the composite body Take
+This pass fixes two critical composite Quick Mix problems on top of the existing `video_photo_composite` PR:
 
-## 2. Changed files
+1. atomic composite planning
+2. canonical composite content identity across generation history and max-diversity
 
-- `app/main.py`
-- `app/static/styles.css`
-- `app/static/video-mix-dashboard.js`
-- `app/templates/video_mix_dashboard.html`
-- `app/video_mix_dashboard.py`
-- `tests/test_video_mix_dashboard_api.py`
-- `tests/test_video_mix_pipeline.py`
-- `video_mix/core/quick_mix_diversity_adapter.py`
-- `video_mix/core/quick_mix_planner.py`
-- `video_mix/service.py`
-- `workflow-runs/0003-video-mix-reel-mixer/28_COMPOSITE_VIDEO_PHOTO_TAKE_EXECUTION_REPORT.md`
+No work from Issue `#59` was started.
 
-## 3. Data model and persistence
+## 2. Delivered behavior
 
-Backend now persists and reloads both:
-- simple asset Take: `asset_take`
-- composite Take: `video_photo_composite`
+### 2.1 Atomic composite planning
 
-Composite persistence stores:
-- base video asset ID
-- ordered photo asset IDs
-- shared photo duration
-- shared motion mode
+`video_photo_composite` is now treated as a strictly atomic body unit:
 
-Composite reload behavior:
-- invalid composite entries are rejected if video/photo assets are missing
-- conversion back from composite to simple Take is supported
-- duration for composite Take is recomputed as:
+- planner never creates a partial composite segment
+- composite body segment always has:
+  - `source_start_ms = 0`
+  - `duration_ms = atomic_duration_ms`
+- composite is selected only when the full unit fits inside the available body duration
+- when it does not fit, planner selects another eligible Take if one exists
+- when no eligible fallback exists, the flow returns explicit exhaustion instead of partial planning or hidden overshoot
+
+### 2.2 Stable composite content identity
+
+Composite body uniqueness now uses canonical content identity built from:
+
+- `video_asset_id`
+- ordered `photo_asset_ids`
+- `photo_duration_ms`
+- `photo_motion_mode`
+
+Format:
 
 ```text
-full video duration + photo_count × photo_duration_ms
+composite:<sha256(canonical-json)>
 ```
 
-## 4. UI flow
+Canonical JSON is generated from a stable payload with sorted keys and preserved photo order.
 
-Composite creation stays inside the existing Episode / Take editor flow:
+Effects:
 
-1. choose Episode
-2. assign a base video asset into the Episode
-3. open the existing Take editor
-4. switch Take type to `Видео + фото`
-5. choose base video
-6. add photos from Project Materials
-7. reorder photos manually
-8. remove photos manually
-9. set shared photo duration
-10. choose `Static` or `Ken Burns`
-11. save the Take
+- different Take IDs with identical composite content are treated as the same body content
+- changing photo order changes identity
+- changing `photo_duration_ms` changes identity
+- changing `static` <-> `ken_burns` changes identity
+- music / opening / closing still do not participate in body uniqueness
 
-Visible composite summary now carries:
-- video file name
-- photo count
-- shared photo duration
-- photo motion mode
+## 3. Changed files
 
-## 5. Quick Mix / render integration
+- `tests/test_quick_mix_diversity.py`
+- `tests/test_quick_mix_diversity_adapter.py`
+- `tests/test_quick_mix_generation.py`
+- `tests/test_quick_mix_planner.py`
+- `tests/test_video_mix_pipeline.py`
+- `video_mix/core/quick_mix_diversity_adapter.py`
+- `video_mix/core/quick_mix_diversity_candidates.py`
+- `video_mix/core/quick_mix_diversity_models.py`
+- `video_mix/core/quick_mix_diversity_selection.py`
+- `video_mix/core/quick_mix_generation.py`
+- `video_mix/core/quick_mix_planner.py`
+- `video_mix/service.py`
 
-Quick Mix integration changes:
-- composite Take is exported into episode groups as one atomic Take
-- planner uses the full composite duration instead of slicing it into ordinary body windows
-- render path creates:
-  - full video segment first
-  - then one rendered segment per photo in saved order
-  - then concatenates them into one composite body segment
+## 4. Implementation details
 
-Photo render modes:
-- `static` produces repeated still frames for the selected duration
-- `ken_burns` applies FFmpeg `zoompan`-based motion with safe normalization into the existing vertical output pipeline
+### 4.1 Planner
 
-Uniqueness integration:
-- composite body signature uses:
-  - `video_asset_id`
-  - ordered `photo_asset_ids`
-  - `photo_duration_ms`
-  - `photo_motion_mode`
-- opening / closing / music are still excluded from body signature generation
+`preferred_quick_mix_segment_ms(...)` now returns:
 
-## 6. Regression coverage
+- full atomic duration for atomic composite that fits
+- `0` for atomic composite that does not fit
 
-Added / updated regression coverage for:
-- composite Take creation and persistence
-- ordered photo list retention
-- conversion composite -> simple Take
-- signature change when photo order changes
-- body signature ignoring music / markers for composite body uniqueness
-- short-tail Quick Mix duration backfill still honoring requested output duration
+This removes the old partial behavior equivalent to:
 
-## 7. Validation commands
+```python
+min(remaining_ms, atomic_duration_ms)
+```
 
-Executed:
+`plan_quick_mix_segment(...)` now pins atomic composite windows to:
+
+- `relative_source_start_ms = 0`
+- `source_start_ms = source.source_start_ms`
+- `duration_ms = atomic_duration_ms`
+
+### 4.2 Exhaustion behavior
+
+When only non-fitting atomic composite content remains:
+
+- planner-level flow returns `quick_mix_atomic_take_exhausted`
+- diversity adapter flow returns empty batch plus explicit exhaustion warning
+- no partial composite segment is emitted
+- no MP4 overshoot is planned
+
+### 4.3 History / max-diversity restoration
+
+Generation manifests now persist composite `content_identity`.
+
+`load_prior_diversity_plans()` restores that identity into prior body signatures, so cross-generation max-diversity compares composite body content by canonical identity instead of only by Take ID or render window.
+
+## 5. Regression coverage
+
+Added or extended regression coverage for:
+
+1. non-fitting `5400 ms` composite is not planned as a `2000 ms` partial segment
+2. atomic composite segment keeps full duration
+3. planner chooses another Take when composite does not fit
+4. planner returns exhaustion when no fallback exists
+5. generated plan preserves composite full duration and content identity
+6. identical composite content under different Take IDs is rejected as duplicate body content
+7. changed composite identity is not rejected as the same body content
+8. generation manifest stores `content_identity`
+9. prior generation history restores `content_identity`
+10. second generation sees prior composite identity in max-diversity history
+
+## 6. Validation commands
+
+Executed on Windows in the issue worktree:
 
 ```powershell
 pytest -q
 ruff check app tests video_mix
 node --test frontend-tests\video-mix-dashboard.test.mjs
 node --check app\static\video-mix-dashboard.js
-Invoke-WebRequest "http://127.0.0.1:8765/video-mix?lang=ru"
-Invoke-WebRequest "http://127.0.0.1:8765/api/video-mix/dashboard?work_dir=C%3A%5CUsers%5Coleg3%5COneDrive%5CDocuments%5CYt-Dlp-Download-Manager-issue58%5Ctmp%5Cissue58_smoke%5Cwork_static"
 ```
 
 Observed:
-- `pytest -q` -> `140 passed, 1 warning`
+
+- `pytest -q` -> `148 passed, 1 warning`
 - `ruff check app tests video_mix` -> clean
 - `node --test frontend-tests\video-mix-dashboard.test.mjs` -> `6 passed`
 - `node --check app\static\video-mix-dashboard.js` -> clean
-- `/video-mix` -> HTTP `200`
-- `/api/video-mix/dashboard` on smoke work_dir -> HTTP `200`
 
-Note:
-- repository-wide `ruff check` still reports pre-existing archive issues under `workflow-runs/0003-video-mix-reel-mixer/draft-code/`
-- the implementation paths touched for Issue `#58` are clean
+Pytest warning:
 
-## 8. Real media smoke
+- `tests/test_video_mix_zip_intake.py::test_zip_rejects_duplicate_normalized_destinations`
+- underlying Python `zipfile` duplicate-name warning only
 
-Synthetic but real local FFmpeg/ffprobe media pack:
-- one generated vertical MP4 base video
-- two generated vertical JPG photos
+## 7. Local HTTP smoke
 
-Smoke root:
-- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_smoke`
+Verified with temporary local uvicorn run:
 
-### Static composite
+- `/video-mix?lang=ru` -> HTTP `200`
+- `/` -> HTTP `200`
 
-Work dir:
-- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_smoke\work_static`
+## 8. Real-media smoke
+
+Smoke summary root:
+
+- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_atomic_smoke_rerun2`
+
+Summary artifact:
+
+- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_atomic_smoke_rerun2\summary.json`
+
+### 8.1 Static composite
 
 Output:
-- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_smoke\work_static\quick_mix_generations\quick_mix_20260717T031947354991Z\exports\quick_mix_001.mp4`
+
+- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_atomic_smoke_rerun2\work_static\quick_mix_generations\quick_mix_20260717T125029561557Z\exports\quick_mix_001.mp4`
 
 Requested duration:
+
 - `5.4s`
 
 Actual `ffprobe` duration:
-- `5.4s`
 
-Saved summary:
-- `video_file_name = base_video.mp4`
-- `photo_count = 2`
-- `photo_duration_ms = 1200`
-- `photo_motion_mode = static`
+- `5.400000`
 
-Visual-order probes:
-- `t=0.5s` center RGB -> `[0, 0, 254]` (blue video)
-- `t=3.2s` center RGB -> `[254, 0, 0]` (first red photo)
-- `t=4.5s` center RGB -> `[0, 128, 0]` (second green photo)
+Plan evidence:
 
-Static proof inside first photo segment:
-- frame md5 at `3.15s` -> `da5918fbc11fb4eeb117bd8cb9fae685`
-- frame md5 at `4.05s` -> `da5918fbc11fb4eeb117bd8cb9fae685`
+- `selected_take_ids = ["composite_take_a"]`
+- `body_visual_signature = ["composite:770de51874cedd4df84667e07d9886c7cc578bfb9cb564b739c66462ac1143e6"]`
+- `generated_duration_ms = 5400`
 
-### Ken Burns composite
+Visual order probes:
 
-Work dir:
-- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_smoke\work_ken_burns`
+- `t=0.5s` -> blue video frame
+- `t=3.2s` -> first red photo frame
+- `t=4.5s` -> second green photo frame
+
+### 8.2 Ken Burns composite
 
 Output:
-- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_smoke\work_ken_burns\quick_mix_generations\quick_mix_20260717T031950671458Z\exports\quick_mix_001.mp4`
+
+- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_atomic_smoke_rerun2\work_ken_burns\quick_mix_generations\quick_mix_20260717T125031340318Z\exports\quick_mix_001.mp4`
 
 Requested duration:
+
 - `5.4s`
 
 Actual `ffprobe` duration:
-- `5.4s`
 
-Saved summary:
-- `video_file_name = base_video.mp4`
-- `photo_count = 2`
-- `photo_duration_ms = 1200`
-- `photo_motion_mode = ken_burns`
+- `5.400000`
 
-Visual-order probes:
-- `t=0.5s` center RGB -> `[0, 0, 254]` (blue video)
-- `t=3.2s` center RGB -> `[254, 0, 0]` (first red photo)
-- `t=4.5s` center RGB -> `[0, 128, 0]` (second green photo)
+Plan evidence:
 
-Ken Burns proof inside first photo segment:
-- frame md5 at `3.15s` -> `4a53f17cdc18486eedfce41c5e5ae11e`
-- frame md5 at `4.05s` -> `73833364d07a519ccbb09bff3a1f63f4`
+- `selected_take_ids = ["composite_take_a"]`
+- `body_visual_signature = ["composite:db3669c33de394b1731d1fe2864eb4d4f20beba7e9cbef0e9fb6a507d1226005"]`
+- `generated_duration_ms = 5400`
+
+Visual order probes:
+
+- `t=0.5s` -> blue video frame
+- `t=3.2s` -> first red photo frame
+- `t=4.5s` -> second green photo frame
+
+### 8.3 Short-fallback proof: no partial composite
+
+Output:
+
+- `C:\Users\oleg3\OneDrive\Documents\Yt-Dlp-Download-Manager-issue58\tmp\issue58_atomic_smoke_rerun2\work_short_fallback\quick_mix_generations\quick_mix_20260717T125033199260Z\exports\quick_mix_001.mp4`
+
+Requested duration:
+
+- `2.0s`
+
+Actual `ffprobe` duration:
+
+- `2.000000`
+
+Selected body:
+
+- `selected_take_ids = ["fallback_short_take"]`
 
 Interpretation:
-- `static` keeps the repeated photo frame visually identical across the same photo interval
-- `ken_burns` changes decoded frames over time inside the photo interval
 
-## 9. Limits / non-goals preserved
+- non-fitting `5400 ms` composite was not partially planned
+- planner selected non-composite fallback content instead
 
-Not added in this pass:
-- random photo selection
-- per-photo individual duration
-- base video trim UI
-- photo transitions beyond technical concat-safe rendering
-- external cloud render / AI media analysis
+### 8.4 Atomic exhaustion proof
+
+Atomic exhaustion scenario produced:
+
+- `generated_count = 0`
+- warning codes include:
+  - `quick_mix_atomic_take_exhausted`
+  - `quick_mix_diversity_exhausted`
+
+Atomic warning payload includes:
+
+- `requested_output_count = 1`
+- `achieved_output_count = 0`
+- `target_duration_ms = 2000`
+- `blocked_source_ids = ["composite_take_a"]`
+
+Interpretation:
+
+- when only non-fitting atomic composite remains, the system now returns explicit exhaustion instead of partial segment or overshoot
+
+### 8.5 Cross-generation duplicate detection proof
+
+History scenario:
+
+- first generation selected:
+  - `selected_take_ids = ["composite_take_b"]`
+  - `body_visual_signature = ["composite:770de51874cedd4df84667e07d9886c7cc578bfb9cb564b739c66462ac1143e6"]`
+- second generation achieved:
+  - `generated_count = 0`
+- second-generation warning reasons include:
+  - `exact_take_duplicate = 1`
+
+Interpretation:
+
+- restored generation history recognized already-used composite body content
+- second run did not silently reuse the same composite content
+
+## 9. Boundaries preserved
+
+Still not changed in this pass:
+
+- no Issue `#59` work
+- no random photo selection
+- no per-photo individual duration
+- no base-video trimming UI
+- no rendered-output trimming as a workaround for planner mismatch
+- no force-push
+- no merge
 
 ## 10. Ready for review
 

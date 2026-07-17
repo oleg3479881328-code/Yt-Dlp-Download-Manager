@@ -86,6 +86,11 @@ def build_episode_group_diversity_plan(
                     "atomic_take": bool(raw_take.get("atomic_take")),
                     "atomic_duration_ms": available_ms,
                     "composite_signature": str(raw_take.get("composite_signature") or ""),
+                    "content_identity": str(
+                        raw_take.get("content_identity")
+                        or raw_take.get("composite_signature")
+                        or ""
+                    ),
                 },
             )
             sources.append(source)
@@ -183,6 +188,11 @@ def render_segments_for_plan(
                 "folder_id": segment.folder_id,
                 "take_type": str(source.metadata.get("take_type") or "asset_take"),
                 "atomic_take": bool(source.metadata.get("atomic_take")),
+                "content_identity": str(
+                    source.metadata.get("content_identity")
+                    or source.metadata.get("composite_signature")
+                    or ""
+                ),
                 "raw_take": raw_take,
             }
         )
@@ -216,6 +226,11 @@ def selected_take_manifest_for_plan(
                 "render_start_ms": segment.source_start_ms,
                 "render_end_ms": segment.source_start_ms + segment.duration_ms,
                 "composite_signature": str(source.metadata.get("composite_signature") or ""),
+                "content_identity": str(
+                    source.metadata.get("content_identity")
+                    or source.metadata.get("composite_signature")
+                    or ""
+                ),
             }
         )
     return result

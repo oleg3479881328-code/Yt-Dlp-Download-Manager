@@ -75,6 +75,7 @@ def test_prior_diversity_plans_load_from_generation_manifests(tmp_path) -> None:
                             "segment_kind": "body",
                             "source_id": "take_a",
                             "base_source_id": "asset_a",
+                            "content_identity": "composite:demo",
                             "source_group": "a.mp4",
                             "folder_id": "folder_a",
                             "source_path": "folder_a/a.mp4",
@@ -102,4 +103,5 @@ def test_prior_diversity_plans_load_from_generation_manifests(tmp_path) -> None:
     )
     plans = load_prior_diversity_plans(tmp_path)
     assert len(plans) == 1
-    assert plans[0].body_signature == ("take_a@1000:3000",)
+    assert plans[0].body_signature == ("composite:demo",)
+    assert plans[0].asset_signature == ("composite:demo",)

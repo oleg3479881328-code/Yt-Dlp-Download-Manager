@@ -10,7 +10,7 @@ import tempfile
 import time
 from collections import deque
 from dataclasses import replace
-from hashlib import sha1
+from hashlib import sha1, sha256
 from pathlib import Path
 
 from .core.asset_scan import detect_media_type, scan_project_assets, should_skip_project_path, stable_id
@@ -804,15 +804,28 @@ def _project_materials_state_file(work_dir: Path) -> Path:
     return work_file(work_dir, "project_materials_state.json")
 
 
-def _composite_take_signature(raw_take: dict[str, object]) -> str:
-    payload = {
+def _composite_take_payload(raw_take: dict[str, object]) -> dict[str, object]:
+    return {
         "take_type": PROJECT_MATERIAL_COMPOSITE_TAKE,
         "video_asset_id": str(raw_take.get("video_asset_id") or ""),
-        "photo_asset_ids": [str(item or "") for item in raw_take.get("photo_asset_ids") or []],
+        "photo_asset_ids": [
+            str(item or "").strip()
+            for item in raw_take.get("photo_asset_ids") or []
+            if str(item or "").strip()
+        ],
         "photo_duration_ms": int(raw_take.get("photo_duration_ms") or 0),
         "photo_motion_mode": str(raw_take.get("photo_motion_mode") or "static"),
     }
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def _composite_take_signature(raw_take: dict[str, object]) -> str:
+    canonical_json = json.dumps(
+        _composite_take_payload(raw_take),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"composite:{sha256(canonical_json.encode('utf-8')).hexdigest()}"
 
 
 def _build_episode_groups_from_project_materials_state(
@@ -1142,8 +1155,13 @@ def _build_quick_mix_variant_signature(
     source_groups = []
     for take in selected_takes:
         composite_signature = str(take.get("composite_signature") or "")
-        if composite_signature:
-            body_units.append(composite_signature)
+        content_identity = str(
+            take.get("content_identity")
+            or composite_signature
+            or ""
+        )
+        if content_identity:
+            body_units.append(content_identity)
         else:
             body_units.append(
                 {
@@ -1194,8 +1212,16 @@ def _build_quick_mix_variant_signature_from_manifest(variant: dict[str, object])
         "target_duration_ms": int(variant.get("target_duration_ms") or 0),
         "body_units": [
             (
-                str(take.get("composite_signature") or "")
-                if str(take.get("composite_signature") or "")
+                str(
+                    take.get("content_identity")
+                    or take.get("composite_signature")
+                    or ""
+                )
+                if str(
+                    take.get("content_identity")
+                    or take.get("composite_signature")
+                    or ""
+                )
                 else {
                     "take_id": str(take.get("take_id", "")),
                     "render_start_ms": int(take.get("render_start_ms") or 0),
@@ -1526,11 +1552,13 @@ def _build_full_quick_mix_manifest_segments(
             if asset_path
             else ""
         )
+        content_identity = str(segment_plan.get("content_identity") or "")
+        base_source_id = content_identity or asset_id
         result.append(
             {
                 "segment_kind": str(segment_plan.get("segment_kind") or "body"),
                 "asset_id": asset_id,
-                "base_source_id": asset_id,
+                "base_source_id": base_source_id,
                 "source_id": str(segment_plan.get("source_id") or ""),
                 "source_group": source_group,
                 "source_path": source_path,
@@ -1538,6 +1566,7 @@ def _build_full_quick_mix_manifest_segments(
                 "duration_ms": int(segment_plan.get("duration_ms") or 0),
                 "full_timeline_position": position_index,
                 "folder_id": str(segment_plan.get("folder_id") or ""),
+                "content_identity": content_identity,
                 "media_type": str(
                     getattr(getattr(asset, "media_type", ""), "value", "")
                     or getattr(asset, "media_type", "")

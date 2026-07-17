@@ -34,9 +34,11 @@ def manual_plan(
     *source_ids: str,
     starts_ms: tuple[int, ...] | None = None,
     base_source_ids: tuple[str, ...] | None = None,
+    content_identities: tuple[str, ...] | None = None,
 ) -> DiversityPlan:
     starts = starts_ms or tuple(0 for _ in source_ids)
     bases = base_source_ids or source_ids
+    identities = content_identities or tuple("" for _ in source_ids)
     return DiversityPlan(
         1,
         len(source_ids) * 2000,
@@ -50,6 +52,7 @@ def manual_plan(
                 "photo",
                 starts[index],
                 2000,
+                identities[index],
             )
             for index, source_id in enumerate(source_ids)
         ),
@@ -138,6 +141,36 @@ def test_same_asset_sequence_with_different_take_ids_is_rejected() -> None:
     )
     assert rejection_reason(left, right, DiversityPolicy()) == "exact_asset_duplicate"
     assert compare_plans(left, right).distance < 0.30
+
+
+def test_same_composite_content_under_different_take_ids_is_rejected() -> None:
+    left = manual_plan(
+        "TAKE_A",
+        base_source_ids=("asset_a",),
+        content_identities=("composite:abc",),
+    )
+    right = manual_plan(
+        "TAKE_B",
+        base_source_ids=("asset_a",),
+        content_identities=("composite:abc",),
+    )
+
+    assert rejection_reason(left, right, DiversityPolicy()) == "exact_asset_duplicate"
+
+
+def test_changed_composite_content_identity_is_not_rejected_as_exact_duplicate() -> None:
+    left = manual_plan(
+        "TAKE_A",
+        base_source_ids=("asset_a",),
+        content_identities=("composite:abc",),
+    )
+    right = manual_plan(
+        "TAKE_B",
+        base_source_ids=("asset_a",),
+        content_identities=("composite:def",),
+    )
+
+    assert rejection_reason(left, right, DiversityPolicy()) is None
 
 
 def test_truly_different_take_sequence_is_farther_than_same_takes_new_windows() -> None:
