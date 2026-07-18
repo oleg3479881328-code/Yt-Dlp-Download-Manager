@@ -25,6 +25,11 @@ from video_mix.core.storage import (
     work_file,
     write_json,
 )
+from video_mix.proxy_pipeline import (
+    PROXY_FAILED,
+    PROXY_STALE,
+    proxy_queue_manager,
+)
 from video_mix.service import scan_source_materials
 
 ALLOWED_FILE_PREFIXES = (
@@ -890,6 +895,56 @@ def build_project_files_payload(raw_work_dir: str) -> dict[str, Any]:
     }
 
 
+def build_video_proxies_payload(raw_work_dir: str, *, ffprobe_path: str = "ffprobe") -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    return proxy_queue_manager.dashboard_payload(work_dir, ffprobe_path=ffprobe_path)
+
+
+def create_missing_video_proxies(raw_work_dir: str, *, ffmpeg_path: str = "ffmpeg", ffprobe_path: str = "ffprobe") -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    return proxy_queue_manager.enqueue_missing_or_stale(work_dir, ffmpeg_path=ffmpeg_path, ffprobe_path=ffprobe_path)
+
+
+def rebuild_stale_video_proxies(raw_work_dir: str, *, ffmpeg_path: str = "ffmpeg", ffprobe_path: str = "ffprobe") -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    return proxy_queue_manager.enqueue_missing_or_stale(
+        work_dir,
+        ffmpeg_path=ffmpeg_path,
+        ffprobe_path=ffprobe_path,
+        only_statuses={PROXY_STALE},
+    )
+
+
+def retry_failed_video_proxies(raw_work_dir: str, *, ffmpeg_path: str = "ffmpeg", ffprobe_path: str = "ffprobe") -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    return proxy_queue_manager.enqueue_missing_or_stale(
+        work_dir,
+        ffmpeg_path=ffmpeg_path,
+        ffprobe_path=ffprobe_path,
+        only_statuses={PROXY_FAILED},
+    )
+
+
+def rebuild_single_video_proxy(raw_work_dir: str, asset_id: str, *, ffmpeg_path: str = "ffmpeg", ffprobe_path: str = "ffprobe") -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    return proxy_queue_manager.enqueue_asset(work_dir, asset_id, ffmpeg_path=ffmpeg_path, ffprobe_path=ffprobe_path)
+
+
+def cancel_video_proxy_job(raw_work_dir: str, asset_id: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    return proxy_queue_manager.cancel(work_dir, asset_id)
+
+
+def delete_video_proxy(raw_work_dir: str, asset_id: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    return proxy_queue_manager.delete_proxy(work_dir, asset_id)
+
+
+def cleanup_video_proxy_partials(raw_work_dir: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    return proxy_queue_manager.cleanup_partial_files(work_dir)
+
+
 def _unique_destination_path(target_dir: Path, filename: str) -> Path:
     candidate = target_dir / Path(filename).name
     if not candidate.exists():
@@ -1085,6 +1140,7 @@ def build_dashboard_payload(raw_work_dir: str) -> dict[str, Any]:
         "quick_mix": quick_mix,
         "zip_import": zip_import,
         "project_files": build_project_files_payload(str(work_dir)),
+        "video_proxies": build_video_proxies_payload(str(work_dir)),
         "candidates": [
             _build_candidate_card(work_dir, candidate, clip_lookup, asset_lookup)
             for candidate in candidates

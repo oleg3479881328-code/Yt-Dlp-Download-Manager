@@ -200,6 +200,21 @@ def test_video_mix_dashboard_reads_candidate_cards(tmp_path: Path) -> None:
     assert payload["candidates"][0]["source_filenames"] == ["rings_detail.mp4"]
     assert payload["project_files"]["file_count"] == 1
     assert payload["project_files"]["files"][0]["relative_path"] == "rings_detail.mp4"
+    assert payload["video_proxies"]["summary"]["total"] == 1
+    assert payload["video_proxies"]["summary"]["missing"] == 1
+
+
+def test_video_mix_proxies_endpoint_returns_missing_proxy_summary(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+
+    response = client.get("/api/video-mix/proxies", params={"work_dir": str(work_dir)})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["total"] == 1
+    assert payload["summary"]["missing"] == 1
+    assert payload["items"][0]["asset_id"] == "asset_1"
+    assert payload["items"][0]["proxy_absolute_path"] == ""
 
 
 def test_video_mix_project_files_endpoint_lists_source_files(tmp_path: Path) -> None:

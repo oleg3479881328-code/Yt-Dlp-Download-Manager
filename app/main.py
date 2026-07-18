@@ -36,15 +36,23 @@ from .video_mix_dashboard import (
     assign_project_material,
     build_project_files_payload,
     build_project_materials_payload,
+    build_video_proxies_payload,
     bulk_update_candidate_status,
+    cancel_video_proxy_job,
+    cleanup_video_proxy_partials,
+    create_missing_video_proxies,
+    delete_video_proxy,
     export_approved_candidates,
     open_dashboard_target,
     pick_dashboard_work_dir,
     pick_source_materials_dir,
     pick_source_media_file,
+    rebuild_single_video_proxy,
+    rebuild_stale_video_proxies,
     remove_project_file,
     reorder_project_material_takes,
     resolve_relative_work_path,
+    retry_failed_video_proxies,
     unassign_project_material,
     update_project_material_take,
 )
@@ -247,6 +255,19 @@ class VideoMixProjectMaterialTakeReorderRequest(BaseModel):
     work_dir: str
     episode_id: str
     ordered_take_ids: list[str] = Field(default_factory=list)
+
+
+class VideoMixProxyQueueRequest(BaseModel):
+    work_dir: str
+    ffmpeg: str = "ffmpeg"
+    ffprobe: str = "ffprobe"
+
+
+class VideoMixProxyAssetRequest(BaseModel):
+    work_dir: str
+    asset_id: str
+    ffmpeg: str = "ffmpeg"
+    ffprobe: str = "ffprobe"
 
 
 @asynccontextmanager
@@ -526,6 +547,63 @@ async def update_video_mix_project_material_take(payload: VideoMixProjectMateria
 async def reorder_video_mix_project_material_takes(payload: VideoMixProjectMaterialTakeReorderRequest) -> dict[str, Any]:
     dashboard = reorder_project_material_takes(payload.work_dir, payload.episode_id, payload.ordered_take_ids)
     return {"ok": True, "dashboard": dashboard}
+
+
+@app.get("/api/video-mix/proxies")
+async def video_mix_video_proxies(work_dir: str, ffprobe: str = "ffprobe") -> dict[str, Any]:
+    return build_video_proxies_payload(work_dir, ffprobe_path=ffprobe)
+
+
+@app.post("/api/video-mix/proxies/create-missing")
+async def video_mix_create_missing_proxies(payload: VideoMixProxyQueueRequest) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "video_proxies": create_missing_video_proxies(payload.work_dir, ffmpeg_path=payload.ffmpeg, ffprobe_path=payload.ffprobe),
+    }
+
+
+@app.post("/api/video-mix/proxies/rebuild-stale")
+async def video_mix_rebuild_stale_proxies(payload: VideoMixProxyQueueRequest) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "video_proxies": rebuild_stale_video_proxies(payload.work_dir, ffmpeg_path=payload.ffmpeg, ffprobe_path=payload.ffprobe),
+    }
+
+
+@app.post("/api/video-mix/proxies/retry-failed")
+async def video_mix_retry_failed_proxies(payload: VideoMixProxyQueueRequest) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "video_proxies": retry_failed_video_proxies(payload.work_dir, ffmpeg_path=payload.ffmpeg, ffprobe_path=payload.ffprobe),
+    }
+
+
+@app.post("/api/video-mix/proxies/rebuild-one")
+async def video_mix_rebuild_one_proxy(payload: VideoMixProxyAssetRequest) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "video_proxies": rebuild_single_video_proxy(
+            payload.work_dir,
+            payload.asset_id,
+            ffmpeg_path=payload.ffmpeg,
+            ffprobe_path=payload.ffprobe,
+        ),
+    }
+
+
+@app.post("/api/video-mix/proxies/cancel")
+async def video_mix_cancel_proxy_job(payload: VideoMixProxyAssetRequest) -> dict[str, Any]:
+    return {"ok": True, "video_proxies": cancel_video_proxy_job(payload.work_dir, payload.asset_id)}
+
+
+@app.post("/api/video-mix/proxies/delete")
+async def video_mix_delete_proxy(payload: VideoMixProxyAssetRequest) -> dict[str, Any]:
+    return {"ok": True, "video_proxies": delete_video_proxy(payload.work_dir, payload.asset_id)}
+
+
+@app.post("/api/video-mix/proxies/cleanup")
+async def video_mix_cleanup_proxy_partials(payload: VideoMixProxyQueueRequest) -> dict[str, Any]:
+    return {"ok": True, **cleanup_video_proxy_partials(payload.work_dir)}
 
 
 @app.post("/api/video-mix/candidates/bulk/approve")
