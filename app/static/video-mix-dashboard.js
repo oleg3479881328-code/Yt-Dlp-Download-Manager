@@ -5,8 +5,22 @@ const DEFAULT_FILTERS = Object.freeze({
   sort: "score_desc",
 });
 
+const DEFAULT_WORKSPACE = "menu";
+const WORKSPACES = Object.freeze([
+  "menu",
+  "quick-mix",
+  "episodes",
+  "take-editor",
+  "materials",
+  "timeline",
+  "music",
+  "opening-closing",
+  "results",
+]);
+
 export function buildEmptyProjectWorkspaceState(debugLogs = []) {
   return {
+    activeWorkspace: DEFAULT_WORKSPACE,
     dashboard: null,
     workDir: "",
     loadState: { key: "load_waiting", className: "status-queued", params: {} },
@@ -51,6 +65,7 @@ const DASHBOARD_LOCALE_STORAGE_KEY = "videoMixDashboardLocale";
 let dashboardInitialized = false;
 let activityTimerId = null;
 let quickMixEstimateDebounceId = null;
+let lastObservedLocationSearch = "";
 
 const TRANSLATIONS = {
   ru: {
@@ -222,6 +237,22 @@ const TRANSLATIONS = {
     quickmix_closing_used: "Финальный медиа-кадр",
     hero_title: "Локальный дашборд для Quick Mix, ревью и экспорта",
     hero_copy: "Выберите исходные материалы, запустите Быстрый микс для прямой генерации MP4 или загрузите готовый VIDEO MIX work_dir для обычного ревью, approve/reject и экспорта.",
+    menu_title: "Разделы",
+    menu_help: "Откройте только тот блок, с которым работаете сейчас.",
+    menu_quickmix: "Quick Mix",
+    menu_episodes: "Episodes",
+    menu_take_editor: "Take Editor",
+    menu_materials: "Project Materials",
+    menu_timeline: "Timeline",
+    menu_music: "Music",
+    menu_opening_closing: "Opening / Closing",
+    menu_results: "Results",
+    workspace_back: "К разделам",
+    music_workspace_title: "Музыка",
+    opening_closing_workspace_title: "Начало / финал",
+    results_workspace_title: "Результаты",
+    results_workspace_help: "Итоги Quick Mix, экспорты и вспомогательные действия.",
+    details_toggle: "Подробнее",
     open_review: "Открыть review.html",
     open_exports: "Открыть exports",
     open_workdir: "Открыть work_dir",
@@ -566,6 +597,22 @@ const TRANSLATIONS = {
     quickmix_closing_used: "Closing media",
     hero_title: "Local dashboard for Quick Mix, review, and export",
     hero_copy: "Choose source materials for direct Quick Mix MP4 generation, or load an existing VIDEO MIX work_dir for review, approve/reject, and export.",
+    menu_title: "Sections",
+    menu_help: "Open only the block you need right now.",
+    menu_quickmix: "Quick Mix",
+    menu_episodes: "Episodes",
+    menu_take_editor: "Take Editor",
+    menu_materials: "Project Materials",
+    menu_timeline: "Timeline",
+    menu_music: "Music",
+    menu_opening_closing: "Opening / Closing",
+    menu_results: "Results",
+    workspace_back: "Back to menu",
+    music_workspace_title: "Music",
+    opening_closing_workspace_title: "Opening / Closing",
+    results_workspace_title: "Results",
+    results_workspace_help: "Quick Mix output, exports, and helper actions.",
+    details_toggle: "Details",
     open_review: "Open review.html",
     open_exports: "Open exports",
     open_workdir: "Open work_dir",
@@ -912,8 +959,7 @@ function showSelectedMediaModal(filePath, inputSelector) {
 }
 
 function closeTakeEditorModal() {
-  state.takeEditor = null;
-  qs("#vm-take-editor-modal")?.close();
+  setActiveWorkspace(DEFAULT_WORKSPACE, { clearTakeEditor: true });
 }
 
 function projectMaterialAssetById(assetId) {
@@ -1191,10 +1237,7 @@ function openTakeEditor(episodeId, takeId) {
   state.selectedMaterialEpisodeId = episodeId;
   state.takeEditor = buildTakeEditorState(episodeId, take);
   renderAll();
-  const dialog = qs("#vm-take-editor-modal");
-  if (dialog && !dialog.open) {
-    dialog.showModal();
-  }
+  setActiveWorkspace("take-editor");
 }
 
 async function saveTakeEditorChanges() {
@@ -1360,6 +1403,16 @@ export function resolveInitialLocale(searchValue = "", storedLocale = "") {
     return storedLocale;
   }
   return "ru";
+}
+
+export function normalizeWorkspace(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return WORKSPACES.includes(normalized) ? normalized : DEFAULT_WORKSPACE;
+}
+
+export function resolveInitialWorkspace(searchValue = "") {
+  const params = new URLSearchParams(String(searchValue || ""));
+  return normalizeWorkspace(params.get("workspace"));
 }
 
 export function translate(locale, key, params = {}) {
@@ -1701,14 +1754,60 @@ function persistLocale() {
   } catch {}
 }
 
-function syncLocaleToUrl() {
-  if (typeof window === "undefined") return;
+function buildDashboardUrl() {
   const params = new URLSearchParams(window.location.search);
   params.set("lang", state.locale);
+  params.set("workspace", normalizeWorkspace(state.activeWorkspace));
   if (state.workDir) {
     params.set("work_dir", state.workDir);
+  } else {
+    params.delete("work_dir");
   }
-  history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+  return `${window.location.pathname}?${params.toString()}`;
+}
+
+function syncLocaleToUrl(historyMode = "replace") {
+  if (typeof window === "undefined") return;
+  const url = buildDashboardUrl();
+  if (historyMode === "push") {
+    history.pushState({}, "", url);
+    return;
+  }
+  history.replaceState({}, "", url);
+}
+
+function closeTransientWorkspaceDialogs() {
+  ["#vm-pipeline-modal", "#vm-selected-media-modal", "#vm-candidates-modal"].forEach((selector) => {
+    const dialog = qs(selector);
+    if (dialog?.open) {
+      dialog.close();
+    }
+  });
+}
+
+function renderWorkspaceView() {
+  if (typeof document === "undefined") return;
+  document.querySelectorAll("[data-workspace]").forEach((element) => {
+    const isActive = element.getAttribute("data-workspace") === normalizeWorkspace(state.activeWorkspace);
+    element.hidden = !isActive;
+    element.classList.toggle("is-active", isActive);
+  });
+  document.body.dataset.videoMixWorkspace = normalizeWorkspace(state.activeWorkspace);
+}
+
+function setActiveWorkspace(workspace, { historyMode = "push", clearTakeEditor = false } = {}) {
+  const nextWorkspace = normalizeWorkspace(workspace);
+  state.activeWorkspace = nextWorkspace;
+  if (clearTakeEditor) {
+    state.takeEditor = null;
+  }
+  closeTransientWorkspaceDialogs();
+  syncLocaleToUrl(historyMode);
+  renderAll();
+}
+
+function restoreWorkspaceFromUrl() {
+  state.activeWorkspace = resolveInitialWorkspace(window.location.search);
 }
 
 function applyStaticTranslations() {
@@ -1718,6 +1817,16 @@ function applyStaticTranslations() {
 
   const textUpdates = [
     ["#vm-hero-title", "hero_title"],
+    ["#vm-menu-title", "menu_title"],
+    ["#vm-menu-help", "menu_help"],
+    ["#vm-menu-open-quickmix", "menu_quickmix"],
+    ["#vm-menu-open-episodes", "menu_episodes"],
+    ["#vm-menu-open-take-editor", "menu_take_editor"],
+    ["#vm-menu-open-materials", "menu_materials"],
+    ["#vm-menu-open-timeline", "menu_timeline"],
+    ["#vm-menu-open-music", "menu_music"],
+    ["#vm-menu-open-opening-closing", "menu_opening_closing"],
+    ["#vm-menu-open-results", "menu_results"],
     ["#vm-hero-copy", "hero_copy"],
     ["#vm-open-review", "open_review"],
     ["#vm-open-exports", "open_exports"],
@@ -1733,7 +1842,6 @@ function applyStaticTranslations() {
     ["#vm-open-project-materials-inline-btn", "materials_open_modal"],
     ["#vm-project-materials-title", "materials_stage_title"],
     ["#vm-project-materials-help", "materials_stage_help"],
-    ["#vm-close-project-materials-btn", "pipeline_close"],
     ["#vm-project-materials-filter-status-label", "materials_filter_status"],
     ["#vm-project-materials-filter-type-label", "materials_filter_type"],
     ["#vm-project-materials-search-label", "materials_search"],
@@ -1741,9 +1849,13 @@ function applyStaticTranslations() {
     ["#vm-timeline-help", "timeline_help"],
     ["#vm-take-editor-title", "take_editor_title"],
     ["#vm-take-editor-help", "take_editor_help"],
-    ["#vm-close-take-editor-btn", "pipeline_close"],
+    ["#vm-close-take-editor-btn", "workspace_back"],
     ["#vm-quickmix-title", "quickmix_title"],
     ["#vm-quickmix-help", "quickmix_help"],
+    ["#vm-music-workspace-title", "music_workspace_title"],
+    ["#vm-opening-closing-workspace-title", "opening_closing_workspace_title"],
+    ["#vm-results-workspace-title", "results_workspace_title"],
+    ["#vm-results-workspace-help", "results_workspace_help"],
     ["#vm-source-dir-label", "source_dir_label"],
     ["#vm-source-project-name-label", "source_project_name_label"],
     ["#vm-source-workdir-label", "source_workdir_label"],
@@ -1824,6 +1936,16 @@ function applyStaticTranslations() {
     const element = qs(selector);
     if (element) {
       element.textContent = t(key);
+    }
+  });
+
+  document.querySelectorAll("[data-workspace-menu]").forEach((button) => {
+    button.textContent = t("workspace_back");
+  });
+  ["#vm-details-toggle-source", "#vm-details-toggle-results"].forEach((selector) => {
+    const element = qs(selector);
+    if (element) {
+      element.textContent = t("details_toggle");
     }
   });
 
@@ -2733,21 +2855,24 @@ function renderProjectMeta() {
   const candidateToolbar = qs("#vm-candidate-toolbar");
   const selectionBar = qs("#vm-selection-bar");
   if (!state.dashboard) {
-    target.innerHTML = `<div class="empty">${escapeHtml(t("project_meta_empty"))}</div>`;
-    summaryTarget.innerHTML = "";
-    countChip.textContent = t("candidate_count", { count: 0 });
-    countChip.className = "status-chip status-idle";
-    actionsHelp.textContent = t("actions_help");
-    exportButton.textContent = t("export_approved");
-    candidatesTitle.textContent = t("candidates_title");
-    candidatesHelp.textContent = t("candidates_help");
-    candidateToolbar.hidden = false;
-    selectionBar.hidden = false;
+    if (target) target.innerHTML = `<div class="empty">${escapeHtml(t("project_meta_empty"))}</div>`;
+    if (summaryTarget) summaryTarget.innerHTML = "";
+    if (countChip) {
+      countChip.textContent = t("candidate_count", { count: 0 });
+      countChip.className = "status-chip status-idle";
+    }
+    if (actionsHelp) actionsHelp.textContent = t("actions_help");
+    if (exportButton) exportButton.textContent = t("export_approved");
+    if (candidatesTitle) candidatesTitle.textContent = t("candidates_title");
+    if (candidatesHelp) candidatesHelp.textContent = t("candidates_help");
+    if (candidateToolbar) candidateToolbar.hidden = false;
+    if (selectionBar) selectionBar.hidden = false;
     return;
   }
 
   const { project, work_dir: workDir, summary } = state.dashboard;
-  target.innerHTML = `
+  if (target) {
+    target.innerHTML = `
     <div class="video-mix-project-panel">
       <div><span>${escapeHtml(t("project_label"))}</span><strong>${escapeHtml(project.name)}</strong></div>
       <div><span>${escapeHtml(t("pack_label"))}</span><strong>${escapeHtml(project.industry_pack)}</strong></div>
@@ -2755,6 +2880,7 @@ function renderProjectMeta() {
       <div><span>work_dir</span><code>${escapeHtml(workDir)}</code></div>
     </div>
   `;
+  }
   const items = [
     [t("summary_assets"), summary.asset_count],
     [t("summary_clips"), summary.clip_count],
@@ -2763,33 +2889,39 @@ function renderProjectMeta() {
     [t("summary_exported"), summary.exported_candidate_count],
     [t("summary_rejected"), summary.status_totals.rejected || 0],
   ];
-  summaryTarget.innerHTML = items.map(([label, value]) => `
+  if (summaryTarget) {
+    summaryTarget.innerHTML = items.map(([label, value]) => `
     <div class="video-mix-summary-card">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}</strong>
     </div>
   `).join("");
+  }
 
   if (isQuickMix) {
-    countChip.textContent = t("quickmix_output_count", { count: outputPaths.length });
-    countChip.className = `status-chip ${outputPaths.length ? "status-completed" : "status-idle"}`;
-    actionsHelp.textContent = t("actions_help_quickmix");
-    exportButton.textContent = t("open_ready_videos");
-    candidatesTitle.textContent = t("quickmix_outputs_title");
-    candidatesHelp.textContent = t("quickmix_outputs_help");
-    candidateToolbar.hidden = true;
-    selectionBar.hidden = true;
+    if (countChip) {
+      countChip.textContent = t("quickmix_output_count", { count: outputPaths.length });
+      countChip.className = `status-chip ${outputPaths.length ? "status-completed" : "status-idle"}`;
+    }
+    if (actionsHelp) actionsHelp.textContent = t("actions_help_quickmix");
+    if (exportButton) exportButton.textContent = t("open_ready_videos");
+    if (candidatesTitle) candidatesTitle.textContent = t("quickmix_outputs_title");
+    if (candidatesHelp) candidatesHelp.textContent = t("quickmix_outputs_help");
+    if (candidateToolbar) candidateToolbar.hidden = true;
+    if (selectionBar) selectionBar.hidden = true;
     return;
   }
 
-  countChip.textContent = t("candidate_count", { count: summary.candidate_count });
-  countChip.className = `status-chip ${summary.candidate_count ? "status-completed" : "status-idle"}`;
-  actionsHelp.textContent = t("actions_help");
-  exportButton.textContent = t("export_approved");
-  candidatesTitle.textContent = t("candidates_title");
-  candidatesHelp.textContent = t("candidates_help");
-  candidateToolbar.hidden = false;
-  selectionBar.hidden = false;
+  if (countChip) {
+    countChip.textContent = t("candidate_count", { count: summary.candidate_count });
+    countChip.className = `status-chip ${summary.candidate_count ? "status-completed" : "status-idle"}`;
+  }
+  if (actionsHelp) actionsHelp.textContent = t("actions_help");
+  if (exportButton) exportButton.textContent = t("export_approved");
+  if (candidatesTitle) candidatesTitle.textContent = t("candidates_title");
+  if (candidatesHelp) candidatesHelp.textContent = t("candidates_help");
+  if (candidateToolbar) candidateToolbar.hidden = false;
+  if (selectionBar) selectionBar.hidden = false;
 }
 
 function renderPipeline() {
@@ -2983,6 +3115,7 @@ function renderExportsPanel(paths = []) {
 function renderAll() {
   cacheDraftNotes();
   syncLayoutMode();
+  renderWorkspaceView();
   syncSelectionToVisible();
   renderActivityPanel();
   renderQuickMixSelections();
@@ -3003,7 +3136,7 @@ function renderAll() {
 }
 
 function closeOpenDashboardDialogs() {
-  const dialogSelectors = ["#vm-pipeline-modal", "#vm-selected-media-modal", "#vm-take-editor-modal", "#vm-candidates-modal", "#vm-project-materials-modal"];
+  const dialogSelectors = ["#vm-pipeline-modal", "#vm-selected-media-modal", "#vm-candidates-modal"];
   dialogSelectors.forEach((selector) => {
     const dialog = qs(selector);
     if (dialog?.open) {
@@ -3035,12 +3168,15 @@ function resetProjectWorkspace() {
   qs("#vm-quickmix-music-native-input").value = "";
   qs("#vm-quickmix-opening-native-input").value = "";
   qs("#vm-quickmix-closing-native-input").value = "";
-  qs("#vm-project-files-native-input").value = "";
+  if (qs("#vm-project-files-native-input")) {
+    qs("#vm-project-files-native-input").value = "";
+  }
   writeQuickMixFileList("#vm-quickmix-music-input", []);
   writeQuickMixFileList("#vm-quickmix-opening-input", []);
   writeQuickMixFileList("#vm-quickmix-closing-input", []);
 
   Object.assign(state, buildEmptyProjectWorkspaceState(state.debugLogs));
+  state.activeWorkspace = DEFAULT_WORKSPACE;
   renderAll();
   setLocalizedLoadState("load_state_reset_done", "status-queued");
   syncLocaleToUrl();
@@ -3925,11 +4061,11 @@ function openProjectMaterialsModal() {
   }
   state.workDir = workDir;
   ensureSelectedMaterialEpisode();
-  qs("#vm-project-materials-modal")?.showModal();
+  setActiveWorkspace("materials");
 }
 
 function closeProjectMaterialsModal() {
-  qs("#vm-project-materials-modal")?.close();
+  setActiveWorkspace(DEFAULT_WORKSPACE);
 }
 
 async function createProjectMaterialsEpisode() {
@@ -4140,6 +4276,17 @@ function bindOpenLocalPathButtons(root = document) {
 function bindActions() {
   bindButtonAction("#vm-lang-ru", "lang ru", async () => setLocale("ru"));
   bindButtonAction("#vm-lang-en", "lang en", async () => setLocale("en"));
+  bindButtonAction("#vm-menu-open-quickmix", "workspace quick mix", async () => setActiveWorkspace("quick-mix"));
+  bindButtonAction("#vm-menu-open-episodes", "workspace episodes", async () => setActiveWorkspace("episodes"));
+  bindButtonAction("#vm-menu-open-take-editor", "workspace take editor", async () => setActiveWorkspace("take-editor"));
+  bindButtonAction("#vm-menu-open-materials", "workspace materials", async () => setActiveWorkspace("materials"));
+  bindButtonAction("#vm-menu-open-timeline", "workspace timeline", async () => setActiveWorkspace("timeline"));
+  bindButtonAction("#vm-menu-open-music", "workspace music", async () => setActiveWorkspace("music"));
+  bindButtonAction("#vm-menu-open-opening-closing", "workspace opening closing", async () => setActiveWorkspace("opening-closing"));
+  bindButtonAction("#vm-menu-open-results", "workspace results", async () => setActiveWorkspace("results"));
+  document.querySelectorAll("[data-workspace-menu]").forEach((button) => {
+    button.addEventListener("click", () => setActiveWorkspace(DEFAULT_WORKSPACE));
+  });
   bindButtonAction("#vm-source-browse-btn", "browse source", browseSourceDir);
   bindButtonAction("#vm-source-zip-browse-btn", "browse source zip", browseSourceZip);
   bindButtonAction("#vm-source-open-dir-btn", "open source dir", async () => {
@@ -4176,8 +4323,6 @@ function bindActions() {
     bindButtonAction("#vm-project-files-open-btn", "open project source dir", openProjectSourceDir);
   }
   bindButtonAction("#vm-add-episode-btn", "add materials episode", createProjectMaterialsEpisode);
-  bindButtonAction("#vm-open-project-materials-inline-btn", "open project materials", async () => openProjectMaterialsModal());
-  bindButtonAction("#vm-close-project-materials-btn", "close project materials", async () => closeProjectMaterialsModal());
   bindButtonAction("#vm-source-scan-btn", "scan source", scanSourceMaterials, { activityKey: "load_state_scanning_source" });
   bindButtonAction("#vm-source-plan-btn", "plan source", planSourceMaterials, { activityKey: "load_state_planning_source" });
   bindButtonAction("#vm-reset-btn", "reset project workspace", async () => resetProjectWorkspace());
@@ -4219,9 +4364,6 @@ function bindActions() {
   bindButtonAction("#vm-close-take-editor-btn", "close take editor modal", async () => {
     closeTakeEditorModal();
   });
-  bindButtonAction("#vm-open-review", "open review", async () => openTarget("review"));
-  bindButtonAction("#vm-open-exports", "open exports", async () => openTarget("exports"));
-  bindButtonAction("#vm-open-workdir", "open workdir", async () => openTarget("work_dir"));
   bindButtonAction("#vm-copy-url-btn", "copy url", async () => copyCurrentUrl());
   bindButtonAction("#vm-select-visible", "select visible", async () => selectVisibleCandidates());
   bindButtonAction("#vm-clear-selection", "clear selection", async () => clearSelection());
@@ -4332,6 +4474,7 @@ function bindActions() {
 }
 
 function initFromQuery() {
+  restoreWorkspaceFromUrl();
   const workDir = new URLSearchParams(window.location.search).get("work_dir");
   if (workDir) {
     qs("#vm-workdir-input").value = workDir;
@@ -4341,6 +4484,22 @@ function initFromQuery() {
   }
 }
 
+function syncDashboardFromLocation() {
+  lastObservedLocationSearch = window.location.search;
+  state.locale = resolveInitialLocale(window.location.search, readStoredLocale());
+  restoreWorkspaceFromUrl();
+  applyStaticTranslations();
+  const workDir = new URLSearchParams(window.location.search).get("work_dir") || "";
+  if (workDir && workDir !== state.workDir) {
+    qs("#vm-workdir-input").value = workDir;
+    qs("#vm-source-workdir-input").value = workDir;
+    state.workDir = workDir;
+    void loadDashboard(workDir);
+    return;
+  }
+  renderAll();
+}
+
 function init() {
   if (dashboardInitialized) {
     return;
@@ -4348,10 +4507,24 @@ function init() {
   dashboardInitialized = true;
   debugLog("init", "dashboard init start", document.readyState);
   state.locale = resolveInitialLocale(window.location.search, readStoredLocale());
+  restoreWorkspaceFromUrl();
   bindActions();
   applyStaticTranslations();
   renderAll();
   initFromQuery();
+  window.addEventListener("popstate", syncDashboardFromLocation);
+  window.addEventListener("pageshow", syncDashboardFromLocation);
+  window.setInterval(() => {
+    const expectedLocale = resolveInitialLocale(window.location.search, readStoredLocale());
+    const expectedWorkspace = resolveInitialWorkspace(window.location.search);
+    if (
+      window.location.search !== lastObservedLocationSearch
+      || state.locale !== expectedLocale
+      || state.activeWorkspace !== expectedWorkspace
+    ) {
+      syncDashboardFromLocation();
+    }
+  }, 150);
   debugLog("init", "dashboard init complete");
 }
 
