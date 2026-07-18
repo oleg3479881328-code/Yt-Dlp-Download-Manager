@@ -4608,6 +4608,10 @@ function bindOpenLocalPathButtons(root = document) {
   });
 }
 
+function bindOpenLocalFileButtons(root = document) {
+  bindSelectedMediaActionButtons(root);
+}
+
 function bindActions() {
   bindButtonAction("#vm-lang-ru", "lang ru", async () => setLocale("ru"));
   bindButtonAction("#vm-lang-en", "lang en", async () => setLocale("en"));

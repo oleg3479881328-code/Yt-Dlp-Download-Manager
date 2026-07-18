@@ -255,7 +255,7 @@ def sync_proxy_manifest(work_dir: Path, *, ffprobe_path: str = "ffprobe") -> dic
         source_fingerprint = build_source_fingerprint(asset)
         status = entry.get("status") or PROXY_MISSING
         if not output_path.exists():
-            status = PROXY_MISSING if status not in {PROXY_RUNNING, PROXY_PENDING} else status
+            status = PROXY_MISSING
         elif (
             entry.get("source_fingerprint") != source_fingerprint
             or entry.get("profile_fingerprint") != profile_fingerprint
@@ -290,6 +290,15 @@ def sync_proxy_manifest(work_dir: Path, *, ffprobe_path: str = "ffprobe") -> dic
         }
     save_proxy_manifest(work_dir, manifest)
     return manifest
+
+
+def _clear_missing_proxy_entry(entry: dict[str, Any]) -> None:
+    entry["status"] = PROXY_MISSING
+    entry["proxy_duration_ms"] = 0
+    entry["proxy_width"] = 0
+    entry["proxy_height"] = 0
+    entry["error"] = ""
+    entry["updated_at"] = _iso_timestamp()
 
 
 @dataclass(slots=True)
@@ -428,22 +437,20 @@ class ProxyQueueManager:
         return self.dashboard_payload(work_dir)
 
     def delete_proxy(self, work_dir: Path, asset_id: str) -> dict[str, Any]:
+        work_key = str(work_dir.resolve())
         manifest = load_proxy_manifest(work_dir)
         entry = manifest.get("entries", {}).get(asset_id)
         if entry:
             output_path = work_dir / str(entry.get("proxy_path") or "")
             if output_path.exists():
                 output_path.unlink()
-            entry["status"] = PROXY_MISSING
-            entry["proxy_duration_ms"] = 0
-            entry["proxy_width"] = 0
-            entry["proxy_height"] = 0
-            entry["error"] = ""
-            entry["updated_at"] = _iso_timestamp()
+            _clear_missing_proxy_entry(entry)
             save_proxy_manifest(work_dir, manifest)
         partial_path = proxy_partial_path(work_dir, asset_id)
         if partial_path.exists():
             partial_path.unlink()
+        with self._lock:
+            self._jobs_by_work_dir.setdefault(work_key, {}).pop(asset_id, None)
         return self.dashboard_payload(work_dir)
 
     def cleanup_partial_files(self, work_dir: Path) -> dict[str, Any]:
@@ -509,9 +516,13 @@ class ProxyQueueManager:
                     job.updated_at = time.time()
                 manifest = load_proxy_manifest(work_dir)
                 if job.asset_id in manifest.get("entries", {}):
-                    manifest["entries"][job.asset_id]["status"] = PROXY_FAILED
-                    manifest["entries"][job.asset_id]["error"] = str(exc)
-                    manifest["entries"][job.asset_id]["updated_at"] = _iso_timestamp()
+                    entry = manifest["entries"][job.asset_id]
+                    if job.cancelled:
+                        _clear_missing_proxy_entry(entry)
+                    else:
+                        entry["status"] = PROXY_FAILED
+                        entry["error"] = str(exc)
+                        entry["updated_at"] = _iso_timestamp()
                     save_proxy_manifest(work_dir, manifest)
                 proxy_partial_path(work_dir, job.asset_id).unlink(missing_ok=True)
             finally:

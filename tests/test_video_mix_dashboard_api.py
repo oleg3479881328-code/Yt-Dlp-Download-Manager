@@ -19,6 +19,7 @@ from video_mix.core.storage import (
     save_summary,
     work_file,
 )
+from video_mix.proxy_pipeline import PROXY_MISSING, ProxyQueueManager, load_proxy_manifest, save_proxy_manifest
 
 client = TestClient(app)
 
@@ -215,6 +216,79 @@ def test_video_mix_proxies_endpoint_returns_missing_proxy_summary(tmp_path: Path
     assert payload["summary"]["missing"] == 1
     assert payload["items"][0]["asset_id"] == "asset_1"
     assert payload["items"][0]["proxy_absolute_path"] == ""
+
+
+def test_video_mix_proxies_dashboard_recovers_cancelled_pending_entry_without_proxy_file(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    manifest = load_proxy_manifest(work_dir)
+    manifest["entries"]["asset_1"] = {
+        "asset_id": "asset_1",
+        "original_path": str((tmp_path / "input" / "rings_detail.mp4").resolve()),
+        "proxy_path": "video_proxies/asset_1.proxy.mp4",
+        "source_fingerprint": "source-fingerprint",
+        "profile_fingerprint": "profile-fingerprint",
+        "status": "pending",
+        "original_duration_ms": 4000,
+        "proxy_duration_ms": 0,
+        "original_width": 1080,
+        "original_height": 1920,
+        "proxy_width": 0,
+        "proxy_height": 0,
+        "created_at": "",
+        "updated_at": "",
+        "error": "Proxy job was cancelled",
+        "has_audio": True,
+    }
+    save_proxy_manifest(work_dir, manifest)
+
+    payload = ProxyQueueManager().dashboard_payload(work_dir)
+
+    assert payload["summary"]["running"] == 0
+    assert payload["summary"]["missing"] == 1
+    assert payload["items"][0]["status"] == PROXY_MISSING
+    assert payload["items"][0]["error"] == "Proxy job was cancelled"
+
+
+def test_video_mix_delete_proxy_clears_stale_job_progress_from_dashboard(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    proxy_path = work_dir / "video_proxies" / "asset_1.proxy.mp4"
+    proxy_path.parent.mkdir(parents=True, exist_ok=True)
+    proxy_path.write_bytes(b"proxy-data")
+
+    manifest = load_proxy_manifest(work_dir)
+    manifest["entries"]["asset_1"] = {
+        "asset_id": "asset_1",
+        "original_path": str((tmp_path / "input" / "rings_detail.mp4").resolve()),
+        "proxy_path": "video_proxies/asset_1.proxy.mp4",
+        "source_fingerprint": "source-fingerprint",
+        "profile_fingerprint": "profile-fingerprint",
+        "status": "ready",
+        "original_duration_ms": 4000,
+        "proxy_duration_ms": 4010,
+        "original_width": 1080,
+        "original_height": 1920,
+        "proxy_width": 720,
+        "proxy_height": 1280,
+        "created_at": "",
+        "updated_at": "",
+        "error": "",
+        "has_audio": True,
+    }
+    save_proxy_manifest(work_dir, manifest)
+
+    manager = ProxyQueueManager()
+    work_key = str(work_dir.resolve())
+    manager._jobs_by_work_dir[work_key] = {
+        "asset_1": manager._jobs_by_work_dir.get(work_key, {}).get("asset_1")
+    }
+    manager._jobs_by_work_dir[work_key]["asset_1"] = type("JobStub", (), {"asset_id": "asset_1"})()
+
+    payload = manager.delete_proxy(work_dir, "asset_1")
+
+    assert not proxy_path.exists()
+    assert "asset_1" not in manager._jobs_by_work_dir[work_key]
+    assert payload["summary"]["missing"] == 1
+    assert payload["items"][0]["status"] == PROXY_MISSING
 
 
 def test_video_mix_project_files_endpoint_lists_source_files(tmp_path: Path) -> None:
