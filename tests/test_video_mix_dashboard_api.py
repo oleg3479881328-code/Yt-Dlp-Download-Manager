@@ -802,6 +802,74 @@ def test_video_mix_project_material_take_trim_rejects_invalid_range(tmp_path: Pa
     assert "start < end" in response.json()["detail"]
 
 
+def test_video_mix_project_material_photo_take_can_save_and_resave_as_simple_take(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    add_photo_mix_asset(tmp_path, work_dir, "photo_1", "photo_1.jpg")
+
+    assign_response = client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "photo_1", "episode_id": "episode_001"},
+    )
+    assert assign_response.status_code == 200
+    take_id = assign_response.json()["dashboard"]["project_materials"]["episodes"][0]["takes"][0]["take_id"]
+
+    first_save = client.post(
+        "/api/video-mix/project-materials/takes/update",
+        json={
+            "work_dir": str(work_dir),
+            "episode_id": "episode_001",
+            "take_id": take_id,
+            "take_type": "asset_take",
+            "video_asset_id": "photo_1",
+            "source_start_ms": 100,
+            "source_end_ms": 900,
+        },
+    )
+    assert first_save.status_code == 200
+
+    second_save = client.post(
+        "/api/video-mix/project-materials/takes/update",
+        json={
+            "work_dir": str(work_dir),
+            "episode_id": "episode_001",
+            "take_id": take_id,
+            "take_type": "asset_take",
+            "video_asset_id": "photo_1",
+            "source_start_ms": 200,
+            "source_end_ms": 800,
+        },
+    )
+
+    assert second_save.status_code == 200
+    take = second_save.json()["dashboard"]["project_materials"]["episodes"][0]["takes"][0]
+    assert take["take_type"] == "asset_take"
+    assert take["asset_id"] == "photo_1"
+    assert take["source_start_ms"] == 200
+    assert take["source_end_ms"] == 800
+    assert take["duration_ms"] == 600
+    assert take["media_type"] == "photo"
+    assert "video_asset_id" not in take
+    assert "photo_asset_ids" not in take
+    assert "photo_duration_ms" not in take
+    assert "photo_motion_mode" not in take
+
+    timeline_block = second_save.json()["dashboard"]["project_materials"]["timeline"]["rows"][0]["blocks"][0]
+    assert timeline_block["take_type"] == "asset_take"
+    assert timeline_block["asset_id"] == "photo_1"
+    assert timeline_block["duration_ms"] == 600
+
+    state_payload = read_json(work_file(work_dir, "project_materials_state.json"))
+    persisted_take = state_payload["episodes"][0]["takes"][0]
+    assert persisted_take["take_type"] == "asset_take"
+    assert persisted_take["asset_id"] == "photo_1"
+    assert persisted_take["source_start_ms"] == 200
+    assert persisted_take["source_end_ms"] == 800
+    assert "video_asset_id" not in persisted_take
+    assert "photo_asset_ids" not in persisted_take
+    assert "photo_duration_ms" not in persisted_take
+    assert "photo_motion_mode" not in persisted_take
+
+
 def test_video_mix_project_material_take_reorder_persists_and_updates_timeline(tmp_path: Path) -> None:
     work_dir = create_video_mix_workdir(tmp_path)
     add_video_mix_asset(tmp_path, work_dir, "asset_2", "bride_portrait.mp4", duration_ms=6000)
@@ -905,6 +973,63 @@ def test_video_mix_project_material_take_can_become_composite_and_persist_order(
     assert persisted_take["photo_asset_ids"] == ["photo_2", "photo_1"]
     assert persisted_take["photo_duration_ms"] == 1200
     assert persisted_take["photo_motion_mode"] == "ken_burns"
+
+
+def test_video_mix_project_material_composite_rejects_photo_base_video_asset(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    add_photo_mix_asset(tmp_path, work_dir, "photo_1", "photo_1.jpg")
+    add_photo_mix_asset(tmp_path, work_dir, "photo_2", "photo_2.jpg")
+
+    assign_response = client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_001"},
+    )
+    take_id = assign_response.json()["dashboard"]["project_materials"]["episodes"][0]["takes"][0]["take_id"]
+
+    response = client.post(
+        "/api/video-mix/project-materials/takes/update",
+        json={
+            "work_dir": str(work_dir),
+            "episode_id": "episode_001",
+            "take_id": take_id,
+            "take_type": "video_photo_composite",
+            "video_asset_id": "photo_1",
+            "photo_asset_ids": ["photo_2"],
+            "photo_duration_ms": 1200,
+            "photo_motion_mode": "static",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "base asset must be a video" in response.json()["detail"]
+
+
+def test_video_mix_project_material_composite_rejects_video_asset_inside_photo_list(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    add_photo_mix_asset(tmp_path, work_dir, "photo_1", "photo_1.jpg")
+
+    assign_response = client.post(
+        "/api/video-mix/project-materials/assign",
+        json={"work_dir": str(work_dir), "asset_id": "asset_1", "episode_id": "episode_001"},
+    )
+    take_id = assign_response.json()["dashboard"]["project_materials"]["episodes"][0]["takes"][0]["take_id"]
+
+    response = client.post(
+        "/api/video-mix/project-materials/takes/update",
+        json={
+            "work_dir": str(work_dir),
+            "episode_id": "episode_001",
+            "take_id": take_id,
+            "take_type": "video_photo_composite",
+            "video_asset_id": "asset_1",
+            "photo_asset_ids": ["asset_1"],
+            "photo_duration_ms": 1200,
+            "photo_motion_mode": "static",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "photo list can contain only photo assets" in response.json()["detail"]
 
 
 def test_video_mix_project_material_take_can_return_from_composite_to_simple(tmp_path: Path) -> None:

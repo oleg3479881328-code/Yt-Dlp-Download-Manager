@@ -20,9 +20,18 @@ from video_mix.core.review import (
     collect_existing_thumbnails,
     write_review_html,
 )
-from video_mix.core.storage import build_asset, build_candidate, build_clip, read_json, to_jsonable
+from video_mix.core.storage import (
+    build_asset,
+    build_candidate,
+    build_clip,
+    read_json,
+    to_jsonable,
+    work_file,
+    write_json,
+)
 from video_mix.service import (
     _build_episode_groups,
+    _build_episode_groups_from_project_materials_state,
     _build_quick_mix_variant_signature_from_manifest,
     _build_variant_similarity_rank,
     _build_video_segment_command,
@@ -1748,6 +1757,63 @@ def test_quick_mix_source_materials_restores_prior_composite_identity_between_ge
 
     assert planner_prior_signatures[0] == []
     assert planner_prior_signatures[1] == [(content_identity,)]
+
+
+def test_project_materials_state_accepts_standalone_photo_take_for_quick_mix(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    photo_path = tmp_path / "photo_a.jpg"
+    photo_path.write_bytes(b"photo")
+
+    photo_asset = Asset(
+        "photo_a",
+        "project",
+        photo_path,
+        MediaType.PHOTO,
+        duration_ms=None,
+        width=1080,
+        height=1920,
+        fps=None,
+        orientation=Orientation.VERTICAL,
+        has_audio=False,
+        probe_status="skipped_photo",
+    )
+    write_json(
+        work_file(work_dir, "project_materials_state.json"),
+        {
+            "version": 3,
+            "next_take_sequence": 2,
+            "episodes": [
+                {
+                    "episode_id": "episode_001",
+                    "label": "Episode 1",
+                    "position": 1,
+                    "takes": [
+                        {
+                            "take_id": "photo_a_take_001",
+                            "take_type": "asset_take",
+                            "asset_id": "photo_a",
+                            "mode": "assigned",
+                            "order": 1,
+                            "source_start_ms": 100,
+                            "source_end_ms": 900,
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    groups = _build_episode_groups_from_project_materials_state(
+        work_dir=work_dir,
+        assets=[photo_asset],
+    )
+
+    assert len(groups) == 1
+    take = groups[0]["takes"][0]
+    assert take["take_type"] == "asset_take"
+    assert take["asset"].asset_id == "photo_a"
+    assert take["asset"].media_type == MediaType.PHOTO
+    assert take["duration_ms"] == 800
 
 
 def test_estimate_quick_mix_capacity_returns_unique_output_estimate(tmp_path: Path, monkeypatch) -> None:

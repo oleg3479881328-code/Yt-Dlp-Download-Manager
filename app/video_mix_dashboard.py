@@ -766,10 +766,10 @@ def update_project_material_take(
         asset = asset_lookup.get(normalized_asset_id)
         if asset is None:
             raise HTTPException(status_code=404, detail=f"Project material asset not found for take: {take_id}")
-        if asset.media_type != MediaType.VIDEO:
-            raise HTTPException(status_code=400, detail="Simple Take base asset must be a video.")
-
         max_end_ms = _default_take_source_end_ms(asset)
+        if asset.media_type not in {MediaType.VIDEO, MediaType.PHOTO}:
+            raise HTTPException(status_code=400, detail="Simple Take base asset must be a video or photo.")
+
         start_ms = int(source_start_ms or 0)
         end_ms = int(source_end_ms or 0)
         if start_ms < 0:
