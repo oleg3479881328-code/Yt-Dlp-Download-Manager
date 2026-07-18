@@ -7,6 +7,7 @@ from pathlib import Path
 QUICK_MIX_UNIQUE_MATERIAL_EXHAUSTED = "quick_mix_unique_material_exhausted"
 QUICK_MIX_SOURCE_GROUP_RELAXED = "quick_mix_source_group_relaxed"
 QUICK_MIX_ASSET_REPEAT_RELAXED = "quick_mix_asset_repeat_relaxed"
+QUICK_MIX_ATOMIC_TAKE_EXHAUSTED = "quick_mix_atomic_take_exhausted"
 WHATSAPP_DUPLICATE_SUFFIX_RE = re.compile(r"\s+\(\d+\)$")
 
 
@@ -27,6 +28,15 @@ class QuickMixSource:
     @property
     def unique_base_id(self) -> str:
         return self.base_source_id or self.source_id
+
+    @property
+    def material_identity(self) -> str:
+        content_identity = str(
+            self.metadata.get("content_identity")
+            or self.metadata.get("composite_signature")
+            or ""
+        ).strip()
+        return content_identity or self.unique_base_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +82,11 @@ def normalize_quick_mix_source_group(path: Path | str) -> str:
 
 
 def preferred_quick_mix_segment_ms(source: QuickMixSource, remaining_ms: int) -> int:
+    if bool(source.metadata.get("atomic_take")):
+        atomic_duration_ms = int(source.metadata.get("atomic_duration_ms") or source.duration_ms or 0)
+        if atomic_duration_ms <= 0 or remaining_ms < atomic_duration_ms:
+            return 0
+        return atomic_duration_ms
     if source.media_type == "photo":
         return min(remaining_ms, 2000 if remaining_ms > 2000 else remaining_ms)
     if not source.duration_ms:
@@ -102,18 +117,24 @@ def build_quick_mix_plan(
         step_index = 1
         segments: list[QuickMixSegmentPlan] = []
         output_warnings: list[dict] = []
-        used_base_source_ids: set[str] = set()
+        used_material_ids: set[str] = set()
         used_source_groups: set[str] = set()
 
         while remaining_ms > 0:
             source, source_cursor, selection_warning = choose_quick_mix_source(
                 sources,
                 source_cursor,
-                used_base_source_ids=used_base_source_ids,
+                used_material_ids=used_material_ids,
                 used_source_groups=used_source_groups,
                 output_index=output_index,
                 step_index=step_index,
+                remaining_ms=remaining_ms,
             )
+            if source is None:
+                if selection_warning:
+                    output_warnings.append(selection_warning)
+                    all_warnings.append(selection_warning)
+                break
             segment = plan_quick_mix_segment(
                 source,
                 output_index=output_index,
@@ -123,7 +144,7 @@ def build_quick_mix_plan(
                 selection_warning=selection_warning,
             )
             segments.append(segment)
-            used_base_source_ids.add(segment.base_source_id)
+            used_material_ids.add(source.material_identity)
             used_source_groups.add(segment.normalized_source_group)
             output_warnings.extend(segment.warnings)
             all_warnings.extend(segment.warnings)
@@ -147,24 +168,29 @@ def choose_quick_mix_source(
     sources: list[QuickMixSource],
     source_cursor: int,
     *,
-    used_base_source_ids: set[str],
+    used_material_ids: set[str],
     used_source_groups: set[str],
     output_index: int,
     step_index: int,
-) -> tuple[QuickMixSource, int, dict | None]:
+    remaining_ms: int,
+) -> tuple[QuickMixSource | None, int, dict | None]:
     def iter_sources():
         for offset in range(len(sources)):
             absolute_index = source_cursor + offset
             yield absolute_index, sources[absolute_index % len(sources)]
 
     for absolute_index, source in iter_sources():
-        is_new_source = source.unique_base_id not in used_base_source_ids
+        if preferred_quick_mix_segment_ms(source, remaining_ms) <= 0:
+            continue
+        is_new_source = source.material_identity not in used_material_ids
         is_new_group = source.source_group not in used_source_groups
         if is_new_source and is_new_group:
             return source, absolute_index + 1, None
 
     for absolute_index, source in iter_sources():
-        if source.unique_base_id not in used_base_source_ids:
+        if preferred_quick_mix_segment_ms(source, remaining_ms) <= 0:
+            continue
+        if source.material_identity not in used_material_ids:
             return (
                 source,
                 absolute_index + 1,
@@ -177,6 +203,8 @@ def choose_quick_mix_source(
             )
 
     for absolute_index, source in iter_sources():
+        if preferred_quick_mix_segment_ms(source, remaining_ms) <= 0:
+            continue
         if source.source_group not in used_source_groups:
             return (
                 source,
@@ -189,16 +217,34 @@ def choose_quick_mix_source(
                 ),
             )
 
-    source = sources[source_cursor % len(sources)]
+    fallback_source = next(
+        (source for source in sources if bool(source.metadata.get("atomic_take"))),
+        sources[source_cursor % len(sources)] if sources else None,
+    )
+    if fallback_source is not None and preferred_quick_mix_segment_ms(fallback_source, remaining_ms) > 0:
+        return (
+            fallback_source,
+            source_cursor + 1,
+            build_quick_mix_warning(
+                QUICK_MIX_UNIQUE_MATERIAL_EXHAUSTED,
+                output_index=output_index,
+                step_index=step_index,
+                source=fallback_source,
+            ),
+        )
     return (
-        source,
-        source_cursor + 1,
-        build_quick_mix_warning(
-            QUICK_MIX_UNIQUE_MATERIAL_EXHAUSTED,
-            output_index=output_index,
-            step_index=step_index,
-            source=source,
-        ),
+        None,
+        source_cursor,
+        {
+            "code": QUICK_MIX_ATOMIC_TAKE_EXHAUSTED,
+            "output_index": output_index,
+            "step_index": step_index,
+            "remaining_ms": remaining_ms,
+            "source_id": fallback_source.source_id if fallback_source is not None else "",
+            "base_source_id": fallback_source.material_identity if fallback_source is not None else "",
+            "source_path": str(fallback_source.path) if fallback_source is not None else "",
+            "normalized_source_group": fallback_source.source_group if fallback_source is not None else "",
+        },
     )
 
 
@@ -215,7 +261,10 @@ def plan_quick_mix_segment(
     if segment_ms <= 0:
         raise ValueError(f"Could not determine a usable segment duration for source: {source.path}")
 
-    if source.media_type == "video" and source.duration_ms:
+    if bool(source.metadata.get("atomic_take")):
+        relative_start_ms = 0
+        start_ms = source.source_start_ms
+    elif source.media_type == "video" and source.duration_ms:
         max_start = max(0, source.duration_ms - segment_ms)
         cursor = source_offsets.get(source.source_id, 0)
         relative_start_ms = min(cursor, max_start)

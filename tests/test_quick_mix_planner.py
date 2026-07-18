@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from video_mix.core.quick_mix_planner import (
+    QUICK_MIX_ATOMIC_TAKE_EXHAUSTED,
     QUICK_MIX_UNIQUE_MATERIAL_EXHAUSTED,
     QuickMixSource,
     build_quick_mix_plan,
@@ -80,3 +81,88 @@ def test_quick_mix_plan_preserves_video_offsets_without_reusing_within_output_wh
 def test_quick_mix_plan_rejects_empty_sources() -> None:
     with pytest.raises(ValueError, match="At least one Quick Mix source"):
         build_quick_mix_plan([], target_duration_ms=4000, output_count=1)
+
+
+def test_quick_mix_plan_keeps_atomic_take_full_length() -> None:
+    plans, warnings = build_quick_mix_plan(
+        [
+            QuickMixSource(
+                source_id="composite_take",
+                path=Path("composite.mp4"),
+                media_type="video",
+                duration_ms=5400,
+                metadata={
+                    "atomic_take": True,
+                    "atomic_duration_ms": 5400,
+                    "content_identity": "composite:test",
+                },
+            ),
+            QuickMixSource(
+                source_id="photo_tail",
+                path=Path("tail.jpg"),
+                media_type="photo",
+            ),
+        ],
+        target_duration_ms=7400,
+        output_count=1,
+    )
+
+    assert warnings == []
+    assert [segment.source_id for segment in plans[0].segments] == ["composite_take", "photo_tail"]
+    assert plans[0].segments[0].source_start_ms == 0
+    assert plans[0].segments[0].duration_ms == 5400
+    assert plans[0].planned_duration_ms == 7400
+
+
+def test_quick_mix_plan_chooses_other_take_when_atomic_take_does_not_fit() -> None:
+    plans, warnings = build_quick_mix_plan(
+        [
+            QuickMixSource(
+                source_id="composite_take",
+                path=Path("composite.mp4"),
+                media_type="video",
+                duration_ms=5400,
+                metadata={
+                    "atomic_take": True,
+                    "atomic_duration_ms": 5400,
+                    "content_identity": "composite:test",
+                },
+            ),
+            QuickMixSource(
+                source_id="fallback_photo",
+                path=Path("fallback.jpg"),
+                media_type="photo",
+            ),
+        ],
+        target_duration_ms=2000,
+        output_count=1,
+    )
+
+    assert warnings == []
+    assert [segment.source_id for segment in plans[0].segments] == ["fallback_photo"]
+    assert plans[0].segments[0].duration_ms == 2000
+
+
+def test_quick_mix_plan_reports_atomic_exhaustion_instead_of_partial_take() -> None:
+    plans, warnings = build_quick_mix_plan(
+        [
+            QuickMixSource(
+                source_id="composite_take",
+                path=Path("composite.mp4"),
+                media_type="video",
+                duration_ms=5400,
+                metadata={
+                    "atomic_take": True,
+                    "atomic_duration_ms": 5400,
+                    "content_identity": "composite:test",
+                },
+            ),
+        ],
+        target_duration_ms=2000,
+        output_count=1,
+    )
+
+    assert plans[0].segments == []
+    assert len(warnings) == 1
+    assert warnings[0]["code"] == QUICK_MIX_ATOMIC_TAKE_EXHAUSTED
+    assert warnings[0]["remaining_ms"] == 2000

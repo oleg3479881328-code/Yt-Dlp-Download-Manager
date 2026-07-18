@@ -175,6 +175,11 @@ def _plans_from_manifest(payload: dict[str, Any]) -> list[DiversityPlan]:
                         raw_segment.get("source_start_ms") or 0
                     ),
                     duration_ms=duration_ms,
+                    content_identity=str(
+                        raw_segment.get("content_identity")
+                        or raw_segment.get("composite_signature")
+                        or ""
+                    ),
                 )
             )
         if segments:

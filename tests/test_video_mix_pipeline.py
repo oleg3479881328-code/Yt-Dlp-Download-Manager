@@ -20,9 +20,19 @@ from video_mix.core.review import (
     collect_existing_thumbnails,
     write_review_html,
 )
-from video_mix.core.storage import build_asset, build_candidate, build_clip, read_json, to_jsonable
+from video_mix.core.storage import (
+    build_asset,
+    build_candidate,
+    build_clip,
+    read_json,
+    to_jsonable,
+    work_file,
+    write_json,
+)
 from video_mix.service import (
     _build_episode_groups,
+    _build_episode_groups_from_project_materials_state,
+    _build_quick_mix_variant_signature_from_manifest,
     _build_variant_similarity_rank,
     _build_video_segment_command,
     _choose_take_render_window,
@@ -55,6 +65,7 @@ def _fake_diversity_segment(
     duration_ms: int,
     source_start_ms: int = 0,
     source_group: str = "",
+    content_identity: str = "",
 ) -> DiversitySegment:
     return DiversitySegment(
         source_id=source_id,
@@ -65,6 +76,7 @@ def _fake_diversity_segment(
         media_type=asset.media_type.value,
         source_start_ms=source_start_ms,
         duration_ms=duration_ms,
+        content_identity=content_identity,
     )
 
 
@@ -642,10 +654,10 @@ def test_quick_mix_source_materials_avoids_duplicate_whatsapp_groups_per_output(
 def test_quick_mix_source_materials_backfills_short_clip_to_requested_duration(tmp_path: Path, monkeypatch) -> None:
     source_dir = tmp_path / "source"
     source_dir.mkdir()
-    for name in ("a.mp4", "b.mp4", "c.mp4", "d.mp4"):
+    for name in ("a.mp4", "b.mp4", "c.mp4"):
         (source_dir / name).write_bytes(b"video")
 
-    durations_by_name = {"a.mp4": 2000, "b.mp4": 2000, "c.mp4": 700, "d.mp4": 2000}
+    durations_by_name = {"a.mp4": 2000, "b.mp4": 2000, "c.mp4": 700}
     rendered_calls: list[tuple[str, int]] = []
 
     def fake_probe_assets(assets, ffprobe_path="ffprobe"):
@@ -683,17 +695,17 @@ def test_quick_mix_source_materials_backfills_short_clip_to_requested_duration(t
 
     result = quick_mix_source_materials(
         str(source_dir),
-        duration_seconds=6,
+        duration_seconds=4.7,
         output_count=1,
         project_name="Backfill Validation",
         work_dir=str(tmp_path / "work"),
     )
 
     assert result["generated_count"] == 1
-    assert sum(duration_ms for _, duration_ms in rendered_calls) == 6000
+    assert sum(duration_ms for _, duration_ms in rendered_calls) == 4700
     quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
-    assert quick_mix_plan["outputs"][0]["planned_duration_ms"] == 6000
-    assert sum(segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]) == 6000
+    assert quick_mix_plan["outputs"][0]["planned_duration_ms"] == 4700
+    assert sum(segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]) == 4700
     segment_durations = [segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]]
     assert all(duration > 0 for duration in segment_durations)
     assert any(duration < 2000 for duration in segment_durations)
@@ -1445,6 +1457,363 @@ def test_quick_mix_source_materials_allows_short_tail_under_body_minimum(tmp_pat
 
     assert sum(rendered_durations) == 3200
     assert any(duration < 1500 for duration in rendered_durations)
+
+
+def test_quick_mix_variant_signature_distinguishes_composite_photo_order() -> None:
+    variant_a = {
+        "requested_duration_ms": 6000,
+        "selected_takes": [
+            {
+                "episode_id": "episode_001",
+                "composite_signature": "video:asset_1|photos:photo_a,photo_b|photo_ms:1200|motion:static",
+            }
+        ],
+        "selected_music_path": "C:/music_a.mp3",
+        "selected_opening_path": "C:/opening_a.jpg",
+        "selected_closing_path": "C:/closing_a.mp4",
+    }
+    variant_b = {
+        **variant_a,
+        "selected_takes": [
+            {
+                "episode_id": "episode_001",
+                "composite_signature": "video:asset_1|photos:photo_b,photo_a|photo_ms:1200|motion:static",
+            }
+        ],
+    }
+
+    assert _build_quick_mix_variant_signature_from_manifest(variant_a) != _build_quick_mix_variant_signature_from_manifest(variant_b)
+
+
+def test_quick_mix_variant_signature_ignores_music_and_markers_for_composite_body() -> None:
+    base_variant = {
+        "requested_duration_ms": 6000,
+        "selected_takes": [
+            {
+                "episode_id": "episode_001",
+                "composite_signature": "video:asset_1|photos:photo_a,photo_b|photo_ms:1200|motion:ken_burns",
+            }
+        ],
+        "selected_music_path": "C:/music_a.mp3",
+        "selected_opening_path": "C:/opening_a.jpg",
+        "selected_closing_path": "C:/closing_a.mp4",
+    }
+    changed_variant = {
+        **base_variant,
+        "selected_music_path": "C:/music_b.mp3",
+        "selected_opening_path": "C:/opening_b.jpg",
+        "selected_closing_path": "C:/closing_b.mp4",
+    }
+
+    assert _build_quick_mix_variant_signature_from_manifest(base_variant) == _build_quick_mix_variant_signature_from_manifest(changed_variant)
+
+
+def test_quick_mix_source_materials_preserves_composite_atomic_duration_and_content_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    clip_path = source_dir / "clip.mp4"
+    clip_path.write_bytes(b"video")
+    work_dir = tmp_path / "work"
+    content_identity = "composite:atomic-demo"
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            if asset.media_type == MediaType.VIDEO:
+                asset.duration_ms = 3000
+                asset.width = 1080
+                asset.height = 1920
+                asset.fps = 30.0
+                asset.orientation = Orientation.VERTICAL
+                asset.probe_status = "ok"
+            else:
+                asset.probe_status = "skipped_photo"
+        return assets
+
+    video_asset = Asset(stable_id("asset", str(clip_path.resolve())), "project", clip_path.resolve(), MediaType.VIDEO, duration_ms=3000)
+    photo_a = Asset("photo_a", "project", tmp_path / "photo_a.jpg", MediaType.PHOTO)
+    photo_b = Asset("photo_b", "project", tmp_path / "photo_b.jpg", MediaType.PHOTO)
+    photo_a.path.write_bytes(b"a")
+    photo_b.path.write_bytes(b"b")
+    rendered_segment_durations: list[int] = []
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr(
+        "video_mix.service.build_episode_group_diversity_plan",
+        lambda *_args, target_duration_ms, output_count, **_kwargs: SimpleNamespace(
+            batch=_fake_diversity_batch(
+                [
+                    DiversityPlan(
+                        output_index=1,
+                        target_duration_ms=target_duration_ms,
+                        segments=(
+                            _fake_diversity_segment(
+                                video_asset,
+                                source_id="composite_take_001",
+                                folder_id="episode_001",
+                                duration_ms=5400,
+                                content_identity=content_identity,
+                            ),
+                        ),
+                    )
+                ],
+                requested_output_count=output_count,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "video_mix.service.render_segments_for_plan",
+        lambda *_args, **_kwargs: [
+            {
+                "asset": video_asset,
+                "start_ms": 0,
+                "duration_ms": 5400,
+                "step_index": 0,
+                "segment_kind": "body",
+                "source_id": "composite_take_001",
+                "folder_id": "episode_001",
+                "take_type": "video_photo_composite",
+                "content_identity": content_identity,
+                "raw_take": {
+                    "video_asset": video_asset,
+                    "photo_assets": [photo_a, photo_b],
+                    "photo_duration_ms": 1200,
+                    "photo_motion_mode": "static",
+                },
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "video_mix.service.selected_take_manifest_for_plan",
+        lambda *_args, **_kwargs: [
+            {
+                "episode_id": "episode_001",
+                "episode_label": "episode_001",
+                "take_id": "composite_take_001",
+                "take_index": 1,
+                "marker_split": False,
+                "take_type": "video_photo_composite",
+                "asset_id": video_asset.asset_id,
+                "media_type": "video",
+                "normalized_source_group": "clip.mp4",
+                "source_path": str(video_asset.path),
+                "source_start_ms": 0,
+                "source_end_ms": 3000,
+                "render_start_ms": 0,
+                "render_end_ms": 5400,
+                "composite_signature": content_identity,
+                "content_identity": content_identity,
+            }
+        ],
+    )
+
+    def fake_render_segment(_asset: Asset, output_path: Path, *, start_ms: int, duration_ms: int, ffmpeg_path: str, **_kwargs) -> None:
+        rendered_segment_durations.append(duration_ms)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(f"{start_ms}:{duration_ms}".encode())
+
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=5.4,
+        output_count=1,
+        work_dir=str(work_dir),
+    )
+
+    generation_plan = read_json(work_dir / result["quick_mix_generation_plan_path"])
+    output = generation_plan["outputs"][0]
+    body_segments = [segment for segment in output["segments"] if segment["segment_kind"] == "body"]
+
+    assert rendered_segment_durations == [5400]
+    assert output["planned_duration_ms"] == 5400
+    assert output["generated_duration_ms"] == 5400
+    assert output["body_visual_signature"] == [content_identity]
+    assert body_segments[0]["content_identity"] == content_identity
+    assert body_segments[0]["base_source_id"] == content_identity
+
+
+def test_quick_mix_source_materials_restores_prior_composite_identity_between_generations(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    clip_path = source_dir / "clip.mp4"
+    clip_path.write_bytes(b"video")
+    work_dir = tmp_path / "work"
+    content_identity = "composite:history-demo"
+    planner_prior_signatures: list[list[tuple[str, ...]]] = []
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = 3000
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    video_asset = Asset(stable_id("asset", str(clip_path.resolve())), "project", clip_path.resolve(), MediaType.VIDEO, duration_ms=3000)
+
+    def fake_build_episode_group_diversity_plan(
+        _episode_groups,
+        *,
+        target_duration_ms,
+        output_count,
+        prior_plans=(),
+        **_kwargs,
+    ):
+        planner_prior_signatures.append([plan.asset_signature for plan in prior_plans])
+        return SimpleNamespace(
+            batch=_fake_diversity_batch(
+                [
+                    DiversityPlan(
+                        output_index=1,
+                        target_duration_ms=target_duration_ms,
+                        segments=(
+                            _fake_diversity_segment(
+                                video_asset,
+                                source_id="composite_take_001",
+                                folder_id="episode_001",
+                                duration_ms=5400,
+                                content_identity=content_identity,
+                            ),
+                        ),
+                    )
+                ],
+                requested_output_count=output_count,
+            )
+        )
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service.build_episode_group_diversity_plan", fake_build_episode_group_diversity_plan)
+    monkeypatch.setattr(
+        "video_mix.service.render_segments_for_plan",
+        lambda *_args, **_kwargs: [
+            {
+                "asset": video_asset,
+                "start_ms": 0,
+                "duration_ms": 5400,
+                "step_index": 0,
+                "segment_kind": "body",
+                "source_id": "composite_take_001",
+                "folder_id": "episode_001",
+                "take_type": "video_photo_composite",
+                "content_identity": content_identity,
+                "raw_take": {
+                    "video_asset": video_asset,
+                    "photo_assets": [],
+                    "photo_duration_ms": 1200,
+                    "photo_motion_mode": "static",
+                },
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "video_mix.service.selected_take_manifest_for_plan",
+        lambda *_args, **_kwargs: [
+            {
+                "episode_id": "episode_001",
+                "episode_label": "episode_001",
+                "take_id": "composite_take_001",
+                "take_index": 1,
+                "marker_split": False,
+                "take_type": "video_photo_composite",
+                "asset_id": video_asset.asset_id,
+                "media_type": "video",
+                "normalized_source_group": "clip.mp4",
+                "source_path": str(video_asset.path),
+                "source_start_ms": 0,
+                "source_end_ms": 3000,
+                "render_start_ms": 0,
+                "render_end_ms": 5400,
+                "composite_signature": content_identity,
+                "content_identity": content_identity,
+            }
+        ],
+    )
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", lambda *args, **kwargs: Path(args[1]).write_bytes(b"seg"))
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", lambda *args, **kwargs: Path(args[1]).write_bytes(b"out"))
+
+    quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=5.4,
+        output_count=1,
+        work_dir=str(work_dir),
+    )
+    quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=5.4,
+        output_count=1,
+        work_dir=str(work_dir),
+    )
+
+    assert planner_prior_signatures[0] == []
+    assert planner_prior_signatures[1] == [(content_identity,)]
+
+
+def test_project_materials_state_accepts_standalone_photo_take_for_quick_mix(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    photo_path = tmp_path / "photo_a.jpg"
+    photo_path.write_bytes(b"photo")
+
+    photo_asset = Asset(
+        "photo_a",
+        "project",
+        photo_path,
+        MediaType.PHOTO,
+        duration_ms=None,
+        width=1080,
+        height=1920,
+        fps=None,
+        orientation=Orientation.VERTICAL,
+        has_audio=False,
+        probe_status="skipped_photo",
+    )
+    write_json(
+        work_file(work_dir, "project_materials_state.json"),
+        {
+            "version": 3,
+            "next_take_sequence": 2,
+            "episodes": [
+                {
+                    "episode_id": "episode_001",
+                    "label": "Episode 1",
+                    "position": 1,
+                    "takes": [
+                        {
+                            "take_id": "photo_a_take_001",
+                            "take_type": "asset_take",
+                            "asset_id": "photo_a",
+                            "mode": "assigned",
+                            "order": 1,
+                            "source_start_ms": 100,
+                            "source_end_ms": 900,
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    groups = _build_episode_groups_from_project_materials_state(
+        work_dir=work_dir,
+        assets=[photo_asset],
+    )
+
+    assert len(groups) == 1
+    take = groups[0]["takes"][0]
+    assert take["take_type"] == "asset_take"
+    assert take["asset"].asset_id == "photo_a"
+    assert take["asset"].media_type == MediaType.PHOTO
+    assert take["duration_ms"] == 800
 
 
 def test_estimate_quick_mix_capacity_returns_unique_output_estimate(tmp_path: Path, monkeypatch) -> None:

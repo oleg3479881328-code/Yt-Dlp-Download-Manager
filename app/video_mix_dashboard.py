@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 from video_mix.core.asset_scan import SKIP_DIR_NAMES, detect_media_type, scan_project_assets
 from video_mix.core.export_plan import export_candidate
-from video_mix.core.models import Asset, CandidateReel, CandidateStatus, Clip, Project
+from video_mix.core.models import Asset, CandidateReel, CandidateStatus, Clip, MediaType, Project
 from video_mix.core.review import write_review_html
 from video_mix.core.storage import (
     build_summary,
@@ -32,7 +32,11 @@ ALLOWED_FILE_PREFIXES = (
     "reports/thumbnails/",
     "exports/",
 )
-PROJECT_MATERIALS_STATE_VERSION = 2
+PROJECT_MATERIALS_STATE_VERSION = 3
+PROJECT_MATERIAL_SIMPLE_TAKE = "asset_take"
+PROJECT_MATERIAL_COMPOSITE_TAKE = "video_photo_composite"
+PROJECT_MATERIAL_PHOTO_MOTION_MODES = {"static", "ken_burns"}
+PROJECT_MATERIAL_DEFAULT_PHOTO_DURATION_MS = 1200
 
 
 def resolve_work_dir(raw_work_dir: str) -> Path:
@@ -257,6 +261,40 @@ def _default_take_source_end_ms(asset: Asset) -> int:
     return max(int(asset.duration_ms or 0), 1000)
 
 
+def _normalize_photo_motion_mode(raw_mode: Any) -> str:
+    mode = str(raw_mode or "static").strip().lower().replace("-", "_")
+    if mode not in PROJECT_MATERIAL_PHOTO_MOTION_MODES:
+        return "static"
+    return mode
+
+
+def _normalize_composite_photo_asset_ids(raw_value: Any, asset_ids: set[str]) -> tuple[list[str], bool]:
+    if not isinstance(raw_value, list):
+        return [], True
+    result: list[str] = []
+    changed = False
+    for item in raw_value:
+        asset_id = str(item or "").strip()
+        if not asset_id or asset_id not in asset_ids:
+            changed = True
+            continue
+        result.append(asset_id)
+    if len(result) != len(raw_value):
+        changed = True
+    return result, changed
+
+
+def _take_effective_duration_ms(take: dict[str, Any], asset_lookup: dict[str, Asset]) -> int:
+    take_type = str(take.get("take_type") or PROJECT_MATERIAL_SIMPLE_TAKE)
+    if take_type == PROJECT_MATERIAL_COMPOSITE_TAKE:
+        video_asset = asset_lookup.get(str(take.get("video_asset_id") or ""))
+        video_duration_ms = int(video_asset.duration_ms or 0) if video_asset is not None else 0
+        photo_duration_ms = max(0, int(take.get("photo_duration_ms") or 0))
+        photo_count = len(take.get("photo_asset_ids") or [])
+        return max(0, video_duration_ms + (photo_duration_ms * photo_count))
+    return max(0, int(take.get("source_end_ms") or 0) - int(take.get("source_start_ms") or 0))
+
+
 def _resequence_episode_takes(episode: dict[str, Any]) -> None:
     for index, take in enumerate(episode.get("takes", []), start=1):
         take["order"] = index
@@ -292,29 +330,58 @@ def _normalize_project_materials_state(raw_state: dict[str, Any] | None, asset_i
             if not isinstance(raw_take, dict):
                 changed = True
                 continue
-            asset_id = str(raw_take.get("asset_id", "")).strip()
-            if not asset_id or asset_id not in asset_ids:
+            take_type = str(raw_take.get("take_type") or PROJECT_MATERIAL_SIMPLE_TAKE).strip() or PROJECT_MATERIAL_SIMPLE_TAKE
+            if take_type not in {PROJECT_MATERIAL_SIMPLE_TAKE, PROJECT_MATERIAL_COMPOSITE_TAKE}:
+                take_type = PROJECT_MATERIAL_SIMPLE_TAKE
                 changed = True
-                continue
-            take_id = str(raw_take.get("take_id", "")).strip() or f"{asset_id}_take_{len(takes) + 1:03d}"
+            asset_id = str(raw_take.get("asset_id", "")).strip()
+            video_asset_id = str(raw_take.get("video_asset_id", "")).strip()
+            photo_asset_ids, photo_ids_changed = _normalize_composite_photo_asset_ids(raw_take.get("photo_asset_ids"), asset_ids)
+            changed = changed or photo_ids_changed
+            if take_type == PROJECT_MATERIAL_COMPOSITE_TAKE:
+                if not video_asset_id or video_asset_id not in asset_ids or not photo_asset_ids:
+                    changed = True
+                    continue
+                take_id_seed = video_asset_id
+            else:
+                if not asset_id or asset_id not in asset_ids:
+                    changed = True
+                    continue
+                take_id_seed = asset_id
+            take_id = str(raw_take.get("take_id", "")).strip() or f"{take_id_seed}_take_{len(takes) + 1:03d}"
             if take_id != str(raw_take.get("take_id", "")).strip():
                 changed = True
             suffix = take_id.rsplit("_take_", 1)
             if len(suffix) == 2 and suffix[1].isdigit():
                 max_take_sequence = max(max_take_sequence, int(suffix[1]))
             order = int(raw_take.get("order") or take_index)
-            source_start_ms = int(raw_take.get("source_start_ms") or 0)
-            source_end_ms = int(raw_take.get("source_end_ms") or 0)
-            takes.append(
-                {
-                    "take_id": take_id,
-                    "asset_id": asset_id,
-                    "mode": "reused" if str(raw_take.get("mode", "assigned")) == "reused" else "assigned",
-                    "order": order,
-                    "source_start_ms": source_start_ms,
-                    "source_end_ms": source_end_ms,
-                }
-            )
+            if take_type == PROJECT_MATERIAL_COMPOSITE_TAKE:
+                takes.append(
+                    {
+                        "take_id": take_id,
+                        "take_type": PROJECT_MATERIAL_COMPOSITE_TAKE,
+                        "video_asset_id": video_asset_id,
+                        "photo_asset_ids": photo_asset_ids,
+                        "photo_duration_ms": max(100, int(raw_take.get("photo_duration_ms") or PROJECT_MATERIAL_DEFAULT_PHOTO_DURATION_MS)),
+                        "photo_motion_mode": _normalize_photo_motion_mode(raw_take.get("photo_motion_mode")),
+                        "mode": "reused" if str(raw_take.get("mode", "assigned")) == "reused" else "assigned",
+                        "order": order,
+                    }
+                )
+            else:
+                source_start_ms = int(raw_take.get("source_start_ms") or 0)
+                source_end_ms = int(raw_take.get("source_end_ms") or 0)
+                takes.append(
+                    {
+                        "take_id": take_id,
+                        "take_type": PROJECT_MATERIAL_SIMPLE_TAKE,
+                        "asset_id": asset_id,
+                        "mode": "reused" if str(raw_take.get("mode", "assigned")) == "reused" else "assigned",
+                        "order": order,
+                        "source_start_ms": source_start_ms,
+                        "source_end_ms": source_end_ms,
+                    }
+                )
         takes.sort(key=lambda item: (int(item.get("order") or 0), item["take_id"]))
         for resequenced_order, take in enumerate(takes, start=1):
             if int(take.get("order") or 0) != resequenced_order:
@@ -355,6 +422,10 @@ def _load_project_materials_state(work_dir: Path) -> tuple[dict[str, Any], list[
     assets_by_id = {asset.asset_id: asset for asset in assets}
     for episode in state["episodes"]:
         for take in episode.get("takes", []):
+            if str(take.get("take_type") or PROJECT_MATERIAL_SIMPLE_TAKE) == PROJECT_MATERIAL_COMPOSITE_TAKE:
+                take["photo_motion_mode"] = _normalize_photo_motion_mode(take.get("photo_motion_mode"))
+                take["photo_duration_ms"] = max(100, int(take.get("photo_duration_ms") or PROJECT_MATERIAL_DEFAULT_PHOTO_DURATION_MS))
+                continue
             asset = assets_by_id.get(take["asset_id"])
             if asset is None:
                 continue
@@ -384,17 +455,28 @@ def _asset_assignment_rows(state: dict[str, Any], assets: list[Asset]) -> dict[s
     assignments_by_asset: dict[str, list[dict[str, Any]]] = {asset.asset_id: [] for asset in assets}
     for episode in state["episodes"]:
         for take in episode.get("takes", []):
-            asset = asset_lookup.get(take["asset_id"])
-            if asset is None:
-                continue
-            assignments_by_asset.setdefault(asset.asset_id, []).append(
-                {
-                    "episode_id": episode["episode_id"],
-                    "episode_label": episode["label"],
-                    "take_id": take["take_id"],
-                    "mode": take["mode"],
-                }
-            )
+            take_type = str(take.get("take_type") or PROJECT_MATERIAL_SIMPLE_TAKE)
+            assigned_asset_ids = []
+            if take_type == PROJECT_MATERIAL_COMPOSITE_TAKE:
+                assigned_asset_ids = [
+                    str(take.get("video_asset_id") or "").strip(),
+                    *[str(item or "").strip() for item in take.get("photo_asset_ids") or []],
+                ]
+            else:
+                assigned_asset_ids = [str(take.get("asset_id") or "").strip()]
+            for assigned_asset_id in assigned_asset_ids:
+                asset = asset_lookup.get(assigned_asset_id)
+                if asset is None:
+                    continue
+                assignments_by_asset.setdefault(asset.asset_id, []).append(
+                    {
+                        "episode_id": episode["episode_id"],
+                        "episode_label": episode["label"],
+                        "take_id": take["take_id"],
+                        "mode": take["mode"],
+                        "take_type": take_type,
+                    }
+                )
     return assignments_by_asset
 
 
@@ -430,6 +512,56 @@ def build_project_materials_payload(raw_work_dir: str) -> dict[str, Any]:
     for episode in state["episodes"]:
         takes = []
         for take in episode["takes"]:
+            take_type = str(take.get("take_type") or PROJECT_MATERIAL_SIMPLE_TAKE)
+            if take_type == PROJECT_MATERIAL_COMPOSITE_TAKE:
+                video_asset = asset_lookup.get(str(take.get("video_asset_id") or ""))
+                photo_assets = [
+                    asset_lookup[photo_asset_id]
+                    for photo_asset_id in take.get("photo_asset_ids") or []
+                    if photo_asset_id in asset_lookup
+                ]
+                if video_asset is None or not photo_assets:
+                    continue
+                photo_duration_ms = max(100, int(take.get("photo_duration_ms") or PROJECT_MATERIAL_DEFAULT_PHOTO_DURATION_MS))
+                effective_duration_ms = _take_effective_duration_ms(take, asset_lookup)
+                takes.append(
+                    {
+                        "take_id": take["take_id"],
+                        "take_type": PROJECT_MATERIAL_COMPOSITE_TAKE,
+                        "asset_id": video_asset.asset_id,
+                        "video_asset_id": video_asset.asset_id,
+                        "photo_asset_ids": [asset.asset_id for asset in photo_assets],
+                        "mode": take["mode"],
+                        "order": int(take["order"]),
+                        "file_name": video_asset.path.name,
+                        "source_path": str(video_asset.path),
+                        "media_type": "composite",
+                        "asset_duration_ms": video_asset.duration_ms,
+                        "duration_ms": effective_duration_ms,
+                        "source_start_ms": 0,
+                        "source_end_ms": int(video_asset.duration_ms or 0),
+                        "photo_duration_ms": photo_duration_ms,
+                        "photo_motion_mode": _normalize_photo_motion_mode(take.get("photo_motion_mode")),
+                        "photo_count": len(photo_assets),
+                        "photo_items": [
+                            {
+                                "asset_id": asset.asset_id,
+                                "file_name": asset.path.name,
+                                "source_path": str(asset.path),
+                                "media_type": asset.media_type.value,
+                            }
+                            for asset in photo_assets
+                        ],
+                        "summary": {
+                            "video_file_name": video_asset.path.name,
+                            "photo_count": len(photo_assets),
+                            "photo_duration_ms": photo_duration_ms,
+                            "photo_motion_mode": _normalize_photo_motion_mode(take.get("photo_motion_mode")),
+                        },
+                    }
+                )
+                continue
+
             asset = asset_lookup.get(take["asset_id"])
             if asset is None:
                 continue
@@ -437,6 +569,7 @@ def build_project_materials_payload(raw_work_dir: str) -> dict[str, Any]:
             takes.append(
                 {
                     "take_id": take["take_id"],
+                    "take_type": PROJECT_MATERIAL_SIMPLE_TAKE,
                     "asset_id": take["asset_id"],
                     "mode": take["mode"],
                     "order": int(take["order"]),
@@ -458,6 +591,7 @@ def build_project_materials_payload(raw_work_dir: str) -> dict[str, Any]:
                 "blocks": [
                     {
                         "take_id": take["take_id"],
+                        "take_type": take["take_type"],
                         "asset_id": take["asset_id"],
                         "mode": take["mode"],
                         "order": int(take["order"]),
@@ -467,6 +601,12 @@ def build_project_materials_payload(raw_work_dir: str) -> dict[str, Any]:
                         "duration_ms": take["duration_ms"],
                         "source_start_ms": int(take["source_start_ms"]),
                         "source_end_ms": int(take["source_end_ms"]),
+                        "video_asset_id": take.get("video_asset_id"),
+                        "photo_asset_ids": take.get("photo_asset_ids", []),
+                        "photo_duration_ms": int(take.get("photo_duration_ms") or 0),
+                        "photo_motion_mode": str(take.get("photo_motion_mode") or ""),
+                        "photo_count": int(take.get("photo_count") or 0),
+                        "summary": take.get("summary"),
                     }
                     for take in takes
                 ],
@@ -536,6 +676,7 @@ def assign_project_material(raw_work_dir: str, asset_id: str, episode_id: str, r
     episode["takes"].append(
         {
             "take_id": _next_project_material_take_id(state, asset_id),
+            "take_type": PROJECT_MATERIAL_SIMPLE_TAKE,
             "asset_id": asset_id,
             "mode": "reused" if existing_assignments else "assigned",
             "order": len(episode["takes"]) + 1,
@@ -564,8 +705,14 @@ def update_project_material_take(
     raw_work_dir: str,
     episode_id: str,
     take_id: str,
-    source_start_ms: int,
-    source_end_ms: int,
+    source_start_ms: int | None = None,
+    source_end_ms: int | None = None,
+    *,
+    take_type: str | None = None,
+    video_asset_id: str | None = None,
+    photo_asset_ids: list[str] | None = None,
+    photo_duration_ms: int | None = None,
+    photo_motion_mode: str | None = None,
 ) -> dict[str, Any]:
     work_dir = resolve_work_dir(raw_work_dir)
     state, assets = _load_project_materials_state(work_dir)
@@ -574,22 +721,72 @@ def update_project_material_take(
     take = next((item for item in episode["takes"] if item["take_id"] == take_id), None)
     if take is None:
         raise HTTPException(status_code=404, detail=f"Project material take not found: {take_id}")
-    asset = asset_lookup.get(take["asset_id"])
-    if asset is None:
-        raise HTTPException(status_code=404, detail=f"Project material asset not found for take: {take_id}")
+    normalized_take_type = str(take_type or take.get("take_type") or PROJECT_MATERIAL_SIMPLE_TAKE).strip() or PROJECT_MATERIAL_SIMPLE_TAKE
+    take_order = int(take.get("order") or 1)
+    take_mode = str(take.get("mode") or "assigned")
 
-    max_end_ms = _default_take_source_end_ms(asset)
-    start_ms = int(source_start_ms)
-    end_ms = int(source_end_ms)
-    if start_ms < 0:
-        raise HTTPException(status_code=400, detail="Take trim start must be zero or greater.")
-    if end_ms > max_end_ms:
-        raise HTTPException(status_code=400, detail=f"Take trim end exceeds asset duration ({max_end_ms} ms).")
-    if start_ms >= end_ms:
-        raise HTTPException(status_code=400, detail="Take trim must satisfy start < end.")
+    if normalized_take_type == PROJECT_MATERIAL_COMPOSITE_TAKE:
+        normalized_video_asset_id = str(video_asset_id or take.get("video_asset_id") or "").strip()
+        video_asset = asset_lookup.get(normalized_video_asset_id)
+        if video_asset is None:
+            raise HTTPException(status_code=404, detail="Composite Take video asset was not found.")
+        if video_asset.media_type != MediaType.VIDEO:
+            raise HTTPException(status_code=400, detail="Composite Take base asset must be a video.")
+        normalized_photo_asset_ids = [str(item or "").strip() for item in (photo_asset_ids or []) if str(item or "").strip()]
+        if not normalized_photo_asset_ids:
+            raise HTTPException(status_code=400, detail="Composite Take requires at least one photo asset.")
+        photo_assets = []
+        for photo_asset_id in normalized_photo_asset_ids:
+            photo_asset = asset_lookup.get(photo_asset_id)
+            if photo_asset is None:
+                raise HTTPException(status_code=404, detail=f"Composite Take photo asset was not found: {photo_asset_id}")
+            if photo_asset.media_type != MediaType.PHOTO:
+                raise HTTPException(status_code=400, detail="Composite Take photo list can contain only photo assets.")
+            photo_assets.append(photo_asset)
+        take.clear()
+        take.update(
+            {
+                "take_id": take_id,
+                "take_type": PROJECT_MATERIAL_COMPOSITE_TAKE,
+                "video_asset_id": normalized_video_asset_id,
+                "photo_asset_ids": [asset.asset_id for asset in photo_assets],
+                "photo_duration_ms": max(100, int(photo_duration_ms or PROJECT_MATERIAL_DEFAULT_PHOTO_DURATION_MS)),
+                "photo_motion_mode": _normalize_photo_motion_mode(photo_motion_mode),
+                "mode": take_mode,
+                "order": take_order,
+            }
+        )
+    else:
+        normalized_asset_id = str(
+            take.get("asset_id")
+            or take.get("video_asset_id")
+            or video_asset_id
+            or ""
+        ).strip()
+        asset = asset_lookup.get(normalized_asset_id)
+        if asset is None:
+            raise HTTPException(status_code=404, detail=f"Project material asset not found for take: {take_id}")
+        max_end_ms = _default_take_source_end_ms(asset)
+        if asset.media_type not in {MediaType.VIDEO, MediaType.PHOTO}:
+            raise HTTPException(status_code=400, detail="Simple Take base asset must be a video or photo.")
 
-    take["source_start_ms"] = start_ms
-    take["source_end_ms"] = end_ms
+        start_ms = int(source_start_ms or 0)
+        end_ms = int(source_end_ms or 0)
+        if start_ms < 0:
+            raise HTTPException(status_code=400, detail="Take trim start must be zero or greater.")
+        if end_ms > max_end_ms:
+            raise HTTPException(status_code=400, detail=f"Take trim end exceeds asset duration ({max_end_ms} ms).")
+        if start_ms >= end_ms:
+            raise HTTPException(status_code=400, detail="Take trim must satisfy start < end.")
+
+        take["asset_id"] = normalized_asset_id
+        take["take_type"] = PROJECT_MATERIAL_SIMPLE_TAKE
+        take["source_start_ms"] = start_ms
+        take["source_end_ms"] = end_ms
+        take.pop("video_asset_id", None)
+        take.pop("photo_asset_ids", None)
+        take.pop("photo_duration_ms", None)
+        take.pop("photo_motion_mode", None)
     _save_project_materials_state(work_dir, state)
     return build_dashboard_payload(str(work_dir))
 
@@ -812,6 +1009,7 @@ def add_external_project_materials(raw_work_dir: str, episode_id: str, file_path
         episode["takes"].append(
             {
                 "take_id": _next_project_material_take_id(state, asset.asset_id),
+                "take_type": PROJECT_MATERIAL_SIMPLE_TAKE,
                 "asset_id": asset.asset_id,
                 "mode": "reused" if existing_assignments else "assigned",
                 "order": len(episode["takes"]) + 1,

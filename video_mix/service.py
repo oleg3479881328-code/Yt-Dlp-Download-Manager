@@ -10,7 +10,7 @@ import tempfile
 import time
 from collections import deque
 from dataclasses import replace
-from hashlib import sha1
+from hashlib import sha1, sha256
 from pathlib import Path
 
 from .core.asset_scan import detect_media_type, scan_project_assets, should_skip_project_path, stable_id
@@ -44,11 +44,13 @@ from .core.scoring import score_assets, score_clips
 from .core.segmenters import FixedIntervalSegmenter, PySceneDetectSegmenter, plan_segments_for_assets
 from .core.storage import (
     build_summary,
+    read_json,
     save_assets,
     save_candidates,
     save_clips,
     save_project,
     save_summary,
+    work_file,
     write_json,
 )
 from .core.tagging import apply_filename_tags
@@ -78,6 +80,8 @@ SUPPORTED_MUSIC_SOURCE_SUFFIXES = {
     ".webm",
 }
 UNSORTED_EPISODE_LABEL = "Без блока"
+PROJECT_MATERIAL_SIMPLE_TAKE = "asset_take"
+PROJECT_MATERIAL_COMPOSITE_TAKE = "video_photo_composite"
 
 
 def _decode_subprocess_stdout(stdout: str | bytes | None) -> str:
@@ -796,6 +800,135 @@ def _build_episode_groups(usable_assets: list[Asset], ffmpeg_path: str, project_
     return episode_groups
 
 
+def _project_materials_state_file(work_dir: Path) -> Path:
+    return work_file(work_dir, "project_materials_state.json")
+
+
+def _composite_take_payload(raw_take: dict[str, object]) -> dict[str, object]:
+    return {
+        "take_type": PROJECT_MATERIAL_COMPOSITE_TAKE,
+        "video_asset_id": str(raw_take.get("video_asset_id") or ""),
+        "photo_asset_ids": [
+            str(item or "").strip()
+            for item in raw_take.get("photo_asset_ids") or []
+            if str(item or "").strip()
+        ],
+        "photo_duration_ms": int(raw_take.get("photo_duration_ms") or 0),
+        "photo_motion_mode": str(raw_take.get("photo_motion_mode") or "static"),
+    }
+
+
+def _composite_take_signature(raw_take: dict[str, object]) -> str:
+    canonical_json = json.dumps(
+        _composite_take_payload(raw_take),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"composite:{sha256(canonical_json.encode('utf-8')).hexdigest()}"
+
+
+def _build_episode_groups_from_project_materials_state(
+    *,
+    work_dir: Path,
+    assets: list[Asset],
+) -> list[dict[str, object]]:
+    state_path = _project_materials_state_file(work_dir)
+    if not state_path.exists():
+        return []
+    raw_state = read_json(state_path)
+    if not isinstance(raw_state, dict):
+        return []
+    raw_episodes = raw_state.get("episodes", [])
+    if not isinstance(raw_episodes, list):
+        return []
+
+    asset_lookup = {asset.asset_id: asset for asset in assets}
+    episode_groups: list[dict[str, object]] = []
+    for raw_episode in raw_episodes:
+        if not isinstance(raw_episode, dict):
+            continue
+        takes: list[dict[str, object]] = []
+        for raw_take in raw_episode.get("takes", []) or []:
+            if not isinstance(raw_take, dict):
+                continue
+            take_type = str(raw_take.get("take_type") or PROJECT_MATERIAL_SIMPLE_TAKE)
+            take_id = str(raw_take.get("take_id") or "").strip()
+            if not take_id:
+                continue
+            if take_type == PROJECT_MATERIAL_COMPOSITE_TAKE:
+                video_asset = asset_lookup.get(str(raw_take.get("video_asset_id") or ""))
+                photo_asset_ids = [str(item or "").strip() for item in raw_take.get("photo_asset_ids") or [] if str(item or "").strip()]
+                photo_assets = [asset_lookup[item] for item in photo_asset_ids if item in asset_lookup]
+                if video_asset is None or not photo_assets:
+                    continue
+                photo_duration_ms = max(100, int(raw_take.get("photo_duration_ms") or 1200))
+                duration_ms = int(video_asset.duration_ms or 0) + (photo_duration_ms * len(photo_assets))
+                takes.append(
+                    {
+                        "take_id": take_id,
+                        "take_type": PROJECT_MATERIAL_COMPOSITE_TAKE,
+                        "take_index": int(raw_take.get("order") or len(takes) + 1),
+                        "asset": video_asset,
+                        "start_ms": 0,
+                        "end_ms": int(video_asset.duration_ms or 0),
+                        "duration_ms": duration_ms,
+                        "max_duration_ms": duration_ms,
+                        "marker_split": False,
+                        "atomic_take": True,
+                        "video_asset": video_asset,
+                        "photo_assets": photo_assets,
+                        "photo_duration_ms": photo_duration_ms,
+                        "photo_motion_mode": str(raw_take.get("photo_motion_mode") or "static"),
+                        "composite_signature": _composite_take_signature(raw_take),
+                    }
+                )
+                continue
+
+            asset = asset_lookup.get(str(raw_take.get("asset_id") or ""))
+            if asset is None:
+                continue
+            start_ms = max(0, int(raw_take.get("source_start_ms") or 0))
+            end_ms = max(start_ms, int(raw_take.get("source_end_ms") or asset.duration_ms or start_ms))
+            duration_ms = max(0, end_ms - start_ms)
+            if duration_ms <= 0:
+                continue
+            takes.append(
+                {
+                    "take_id": take_id,
+                    "take_type": PROJECT_MATERIAL_SIMPLE_TAKE,
+                    "take_index": int(raw_take.get("order") or len(takes) + 1),
+                    "asset": asset,
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "duration_ms": duration_ms,
+                    "max_duration_ms": duration_ms,
+                    "marker_split": False,
+                    "atomic_take": False,
+                }
+            )
+
+        if not takes:
+            continue
+        takes.sort(key=lambda item: (int(item.get("take_index") or 0), str(item.get("take_id") or "")))
+        episode_groups.append(
+            {
+                "episode_id": str(raw_episode.get("episode_id") or ""),
+                "episode_label": str(raw_episode.get("label") or raw_episode.get("episode_id") or ""),
+                "assets": [take["asset"] for take in takes],
+                "asset": takes[0]["asset"],
+                "group_kind": "project_materials_episode",
+                "source_folder": "project_materials",
+                "takes": takes,
+                "take_count": len(takes),
+                "marker_ranges": [],
+                "marker_assets": [],
+                "marker_split": False,
+            }
+        )
+    return episode_groups
+
+
 def _serialize_episode_group(group: dict[str, object]) -> dict[str, object]:
     assets = list(group.get("assets", []))
     marker_assets = list(group.get("marker_assets", []))
@@ -1018,19 +1151,31 @@ def _build_quick_mix_variant_signature(
     target_duration_ms: int,
     use_closing_duration: bool = False,
 ) -> str:
-    source_groups = [
-        str(take.get("normalized_source_group") or "")
-        for take in selected_takes
-        if str(take.get("normalized_source_group") or "")
-    ]
+    body_units = []
+    source_groups = []
+    for take in selected_takes:
+        composite_signature = str(take.get("composite_signature") or "")
+        content_identity = str(
+            take.get("content_identity")
+            or composite_signature
+            or ""
+        )
+        if content_identity:
+            body_units.append(content_identity)
+        else:
+            body_units.append(
+                {
+                    "take_id": str(take.get("take_id", "")),
+                    "render_start_ms": int(take.get("render_start_ms") or 0),
+                    "render_end_ms": int(take.get("render_end_ms") or 0),
+                }
+            )
+        normalized_source_group = str(take.get("normalized_source_group") or "")
+        if normalized_source_group:
+            source_groups.append(normalized_source_group)
     signature_payload = {
         "target_duration_ms": target_duration_ms,
-        "music_path": str(selected_music_path.resolve()) if selected_music_path is not None else "",
-        "music_start_ms": selected_music_start_ms,
-        "opening_media_path": str(opening_asset.path.resolve()) if opening_asset is not None else "",
-        "closing_media_path": str(closing_asset.path.resolve()) if closing_asset is not None else "",
-        "use_closing_duration": use_closing_duration,
-        "take_ids": [str(take.get("take_id", "")) for take in selected_takes],
+        "body_units": body_units,
     }
     if source_groups:
         signature_payload["source_groups"] = source_groups
@@ -1065,13 +1210,24 @@ def _build_quick_mix_variant_signature_from_manifest(variant: dict[str, object])
         selected_takes = []
     signature_payload: dict[str, object] = {
         "target_duration_ms": int(variant.get("target_duration_ms") or 0),
-        "music_path": str(variant.get("music_path") or ""),
-        "music_start_ms": int(variant.get("music_start_ms") or 0),
-        "opening_media_path": str(variant.get("opening_media_path") or ""),
-        "closing_media_path": str(variant.get("closing_media_path") or ""),
-        "use_closing_duration": bool(variant.get("use_closing_duration") or False),
-        "take_ids": [
-            str(take.get("take_id", ""))
+        "body_units": [
+            (
+                str(
+                    take.get("content_identity")
+                    or take.get("composite_signature")
+                    or ""
+                )
+                if str(
+                    take.get("content_identity")
+                    or take.get("composite_signature")
+                    or ""
+                )
+                else {
+                    "take_id": str(take.get("take_id", "")),
+                    "render_start_ms": int(take.get("render_start_ms") or 0),
+                    "render_end_ms": int(take.get("render_end_ms") or 0),
+                }
+            )
             for take in selected_takes
             if isinstance(take, dict)
         ],
@@ -1396,11 +1552,13 @@ def _build_full_quick_mix_manifest_segments(
             if asset_path
             else ""
         )
+        content_identity = str(segment_plan.get("content_identity") or "")
+        base_source_id = content_identity or asset_id
         result.append(
             {
                 "segment_kind": str(segment_plan.get("segment_kind") or "body"),
                 "asset_id": asset_id,
-                "base_source_id": asset_id,
+                "base_source_id": base_source_id,
                 "source_id": str(segment_plan.get("source_id") or ""),
                 "source_group": source_group,
                 "source_path": source_path,
@@ -1408,6 +1566,7 @@ def _build_full_quick_mix_manifest_segments(
                 "duration_ms": int(segment_plan.get("duration_ms") or 0),
                 "full_timeline_position": position_index,
                 "folder_id": str(segment_plan.get("folder_id") or ""),
+                "content_identity": content_identity,
                 "media_type": str(
                     getattr(getattr(asset, "media_type", ""), "value", "")
                     or getattr(asset, "media_type", "")
@@ -1460,7 +1619,19 @@ def _build_photo_segment_command(
     *,
     duration_ms: int,
     ffmpeg_path: str,
+    motion_mode: str = "static",
 ) -> list[str]:
+    if motion_mode == "ken_burns":
+        total_frames = max(1, int(round((duration_ms / 1000) * 30)))
+        vf = (
+            "scale=1400:2489:force_original_aspect_ratio=increase,"
+            f"zoompan=z='min(1.12,1+0.12*on/{total_frames})':"
+            "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+            f"d={total_frames}:s=1080x1920:fps=30,"
+            "format=yuv420p"
+        )
+    else:
+        vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30"
     return [
         ffmpeg_path,
         "-y",
@@ -1471,7 +1642,7 @@ def _build_photo_segment_command(
         "-t",
         f"{duration_ms / 1000:.3f}",
         "-vf",
-        "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
+        vf,
         "-an",
         "-c:v",
         "libx264",
@@ -1492,8 +1663,47 @@ def _render_quick_mix_segment(
     start_ms: int,
     duration_ms: int,
     ffmpeg_path: str,
+    composite_parts: dict[str, object] | None = None,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if composite_parts:
+        video_asset = composite_parts["video_asset"]
+        photo_assets = list(composite_parts.get("photo_assets") or [])
+        photo_duration_ms = int(composite_parts.get("photo_duration_ms") or 0)
+        photo_motion_mode = str(composite_parts.get("photo_motion_mode") or "static")
+        composite_dir = output_path.parent / f"{output_path.stem}_composite"
+        composite_dir.mkdir(parents=True, exist_ok=True)
+        part_paths: list[Path] = []
+
+        video_part_path = composite_dir / "part_001_video.mp4"
+        subprocess.run(
+            _build_video_segment_command(
+                video_asset,
+                video_part_path,
+                start_ms=0,
+                duration_ms=int(video_asset.duration_ms or duration_ms),
+                ffmpeg_path=ffmpeg_path,
+            ),
+            check=True,
+        )
+        part_paths.append(video_part_path)
+
+        for index, photo_asset in enumerate(photo_assets, start=1):
+            photo_part_path = composite_dir / f"part_{index + 1:03d}_photo.mp4"
+            subprocess.run(
+                _build_photo_segment_command(
+                    photo_asset,
+                    photo_part_path,
+                    duration_ms=photo_duration_ms,
+                    ffmpeg_path=ffmpeg_path,
+                    motion_mode=photo_motion_mode,
+                ),
+                check=True,
+            )
+            part_paths.append(photo_part_path)
+
+        _render_quick_mix_output(part_paths, output_path, ffmpeg_path)
+        return
     if asset.media_type == MediaType.PHOTO:
         command = _build_photo_segment_command(asset, output_path, duration_ms=duration_ms, ffmpeg_path=ffmpeg_path)
     else:
@@ -1725,7 +1935,12 @@ def quick_mix_source_materials(
     )
     resolved_music_paths = _resolve_music_paths(music_path, music_paths)
 
-    episode_groups = _build_episode_groups(usable_assets, ffmpeg_path, source_dir)
+    episode_groups = _build_episode_groups_from_project_materials_state(
+        work_dir=resolved_work_dir,
+        assets=assets,
+    )
+    if not episode_groups:
+        episode_groups = _build_episode_groups(usable_assets, ffmpeg_path, source_dir)
     if not episode_groups:
         raise ValueError("No usable Quick Mix episode groups could be built from the selected source folder.")
 
@@ -1908,12 +2123,25 @@ def quick_mix_source_materials(
         for segment_plan in segment_plans:
             step_number = int(segment_plan["step_index"]) + 1
             segment_path = generation_paths.segments_dir / f"quick_mix_{output_index:03d}_seg_{step_number:02d}.mp4"
+            composite_parts = None
+            if str(segment_plan.get("take_type") or "") == PROJECT_MATERIAL_COMPOSITE_TAKE:
+                composite_parts = {
+                    "video_asset": segment_plan["raw_take"]["video_asset"],
+                    "photo_assets": segment_plan["raw_take"]["photo_assets"],
+                    "photo_duration_ms": int(segment_plan["raw_take"]["photo_duration_ms"]),
+                    "photo_motion_mode": str(segment_plan["raw_take"]["photo_motion_mode"]),
+                }
+            render_kwargs = {
+                "start_ms": int(segment_plan["start_ms"]),
+                "duration_ms": int(segment_plan["duration_ms"]),
+                "ffmpeg_path": ffmpeg_path,
+            }
+            if composite_parts is not None:
+                render_kwargs["composite_parts"] = composite_parts
             _render_quick_mix_segment(
                 segment_plan["asset"],
                 segment_path,
-                start_ms=int(segment_plan["start_ms"]),
-                duration_ms=int(segment_plan["duration_ms"]),
-                ffmpeg_path=ffmpeg_path,
+                **render_kwargs,
             )
             segment_paths.append(segment_path)
 

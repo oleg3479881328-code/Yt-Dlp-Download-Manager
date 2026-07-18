@@ -113,6 +113,9 @@ const TRANSLATIONS = {
     materials_take_edit: "Редактировать",
     materials_take_move_left: "Левее",
     materials_take_move_right: "Правее",
+    materials_take_kind_simple: "Обычный дубль",
+    materials_take_kind_composite: "Видео + фото",
+    materials_take_photo_count: "{count} фото",
     timeline_title: "Timeline",
     timeline_help: "Горизонтальные дорожки будущего монтажа, собранные из Episode/Take назначений.",
     timeline_empty: "Назначьте хотя бы один Take, чтобы появился видимый timeline.",
@@ -127,6 +130,19 @@ const TRANSLATIONS = {
     take_editor_trim_end: "Конец, сек",
     take_editor_asset_duration: "Длительность исходника",
     take_editor_trim_duration: "Длительность Take",
+    take_editor_composite_duration: "Длительность composite",
+    take_editor_take_type: "Тип Take",
+    take_editor_base_video: "Базовое видео",
+    take_editor_photo_duration: "Длительность одного фото, сек",
+    take_editor_photo_motion: "Режим фото",
+    take_editor_photo_motion_static: "Static",
+    take_editor_photo_motion_ken_burns: "Ken Burns",
+    take_editor_selected_photos: "Выбранные фото",
+    take_editor_available_photos: "Доступные фото проекта",
+    take_editor_add_photo: "Добавить",
+    take_editor_remove_photo: "Убрать фото",
+    take_editor_no_photos: "Добавьте хотя бы одну фотографию.",
+    take_editor_composite_summary: "{count} фото · {seconds} сек · {motion}",
     take_editor_save: "Сохранить",
     take_editor_cancel: "Отмена",
     take_editor_open_file: "Открыть файл",
@@ -441,6 +457,9 @@ const TRANSLATIONS = {
     materials_take_edit: "Edit",
     materials_take_move_left: "Left",
     materials_take_move_right: "Right",
+    materials_take_kind_simple: "Simple take",
+    materials_take_kind_composite: "Video + photos",
+    materials_take_photo_count: "{count} photos",
     timeline_title: "Timeline",
     timeline_help: "Horizontal editing tracks built from the current Episode/Take assignments.",
     timeline_empty: "Assign at least one Take to make the visible timeline appear.",
@@ -455,6 +474,19 @@ const TRANSLATIONS = {
     take_editor_trim_end: "End, sec",
     take_editor_asset_duration: "Source duration",
     take_editor_trim_duration: "Take duration",
+    take_editor_composite_duration: "Composite duration",
+    take_editor_take_type: "Take type",
+    take_editor_base_video: "Base video",
+    take_editor_photo_duration: "Photo duration, sec",
+    take_editor_photo_motion: "Photo mode",
+    take_editor_photo_motion_static: "Static",
+    take_editor_photo_motion_ken_burns: "Ken Burns",
+    take_editor_selected_photos: "Selected photos",
+    take_editor_available_photos: "Available project photos",
+    take_editor_add_photo: "Add",
+    take_editor_remove_photo: "Remove photo",
+    take_editor_no_photos: "Add at least one photo.",
+    take_editor_composite_summary: "{count} photos · {seconds} sec · {motion}",
     take_editor_save: "Save",
     take_editor_cancel: "Cancel",
     take_editor_open_file: "Open file",
@@ -884,6 +916,39 @@ function closeTakeEditorModal() {
   qs("#vm-take-editor-modal")?.close();
 }
 
+function projectMaterialAssetById(assetId) {
+  return (projectMaterials().assets || []).find((asset) => asset.asset_id === assetId) || null;
+}
+
+function compositeMotionLabel(mode) {
+  return t(mode === "ken_burns" ? "take_editor_photo_motion_ken_burns" : "take_editor_photo_motion_static");
+}
+
+function takeEditorSummaryText(take) {
+  if (String(take?.take_type || "") === "video_photo_composite") {
+    return t("take_editor_composite_summary", {
+      count: Number(take.photo_count || (take.photo_asset_ids || []).length || 0),
+      seconds: (Math.max(0, Number(take.photo_duration_ms || 0)) / 1000).toFixed(1),
+      motion: compositeMotionLabel(take.photo_motion_mode),
+    });
+  }
+  return `${formatSecondsValue(take?.source_start_ms || 0)}s → ${formatSecondsValue(take?.source_end_ms || 0)}s`;
+}
+
+function buildTakeEditorState(episodeId, take) {
+  return {
+    episodeId,
+    takeId: take.take_id,
+    takeType: String(take.take_type || "asset_take"),
+    startSeconds: Number(formatSecondsValue(take.source_start_ms)),
+    endSeconds: Number(formatSecondsValue(take.source_end_ms)),
+    videoAssetId: String(take.video_asset_id || take.asset_id || ""),
+    photoAssetIds: Array.isArray(take.photo_asset_ids) ? [...take.photo_asset_ids] : [],
+    photoDurationSeconds: Math.max(0.1, Number(take.photo_duration_ms || 1200) / 1000),
+    photoMotionMode: String(take.photo_motion_mode || "static"),
+  };
+}
+
 function findEpisodeTake(episodeId, takeId) {
   const materials = projectMaterials();
   const episode = (materials.episodes || []).find((item) => item.episode_id === episodeId);
@@ -913,6 +978,25 @@ function buildTakeEditorPreview(filePath) {
   return `<div class="empty compact">${escapeHtml(name)}</div>`;
 }
 
+function buildTakeEditorPhotoThumb(asset, index) {
+  return `
+    <div class="video-mix-composite-photo-card" data-composite-photo-id="${escapeAttr(asset.asset_id)}">
+      <button type="button" class="video-mix-composite-photo-preview" data-open-local-file="${escapeAttr(asset.source_path || "")}" title="${escapeAttr(asset.file_name || asset.asset_id || "")}">
+        ${episodeTakeCompactPreviewHtml(asset.source_path)}
+      </button>
+      <div class="video-mix-composite-photo-meta">
+        <strong>${escapeHtml(`#${index + 1}`)}</strong>
+        <span class="muted">${escapeHtml(asset.file_name || asset.asset_id || "")}</span>
+      </div>
+      <div class="video-mix-composite-photo-actions">
+        <button type="button" class="ghost-btn" data-composite-photo-move-left="${escapeAttr(asset.asset_id)}" ${index <= 0 ? "disabled" : ""}>${escapeHtml(t("materials_take_move_left"))}</button>
+        <button type="button" class="ghost-btn" data-composite-photo-move-right="${escapeAttr(asset.asset_id)}" ${index >= (state.takeEditor?.photoAssetIds?.length || 0) - 1 ? "disabled" : ""}>${escapeHtml(t("materials_take_move_right"))}</button>
+        <button type="button" class="ghost-btn" data-composite-photo-remove="${escapeAttr(asset.asset_id)}">${escapeHtml(t("take_editor_remove_photo"))}</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderTakeEditorModal() {
   const body = qs("#vm-take-editor-body");
   if (!body) return;
@@ -926,36 +1010,98 @@ function renderTakeEditorModal() {
     return;
   }
   const takeCount = (episode.takes || []).length;
+  const isComposite = String(state.takeEditor.takeType || take.take_type || "asset_take") === "video_photo_composite";
   const startSeconds = state.takeEditor.startSeconds ?? Number(formatSecondsValue(take.source_start_ms));
   const endSeconds = state.takeEditor.endSeconds ?? Number(formatSecondsValue(take.source_end_ms));
   const trimmedDurationMs = Math.max(0, Number(take.source_end_ms || 0) - Number(take.source_start_ms || 0));
+  const videoAssets = (projectMaterials().assets || []).filter((asset) => asset.media_type === "video");
+  const photoAssets = (projectMaterials().assets || []).filter((asset) => asset.media_type === "photo");
+  const selectedVideoAsset = projectMaterialAssetById(state.takeEditor.videoAssetId) || projectMaterialAssetById(take.asset_id) || null;
+  const selectedPhotoAssets = (state.takeEditor.photoAssetIds || []).map((assetId) => projectMaterialAssetById(assetId)).filter(Boolean);
+  const compositeDurationMs = Math.max(0, Number(selectedVideoAsset?.duration_ms || 0)) + Math.round((state.takeEditor.photoDurationSeconds || 0) * 1000 * selectedPhotoAssets.length);
+  const compositeEditorHtml = `
+    <div class="video-mix-take-editor-fields">
+      <label class="field">
+        <span>${escapeHtml(t("take_editor_base_video"))}</span>
+        <select id="vm-take-editor-video-select">
+          ${videoAssets.map((asset) => `
+            <option value="${escapeAttr(asset.asset_id)}" ${asset.asset_id === state.takeEditor.videoAssetId ? "selected" : ""}>${escapeHtml(asset.file_name || asset.asset_id || "")}</option>
+          `).join("")}
+        </select>
+      </label>
+      <label class="field">
+        <span>${escapeHtml(t("take_editor_photo_duration"))}</span>
+        <input id="vm-take-editor-photo-duration-input" type="number" min="0.1" step="0.1" value="${escapeAttr(String(state.takeEditor.photoDurationSeconds || 1.2))}">
+      </label>
+      <label class="field">
+        <span>${escapeHtml(t("take_editor_photo_motion"))}</span>
+        <select id="vm-take-editor-photo-motion-select">
+          <option value="static" ${state.takeEditor.photoMotionMode === "static" ? "selected" : ""}>${escapeHtml(t("take_editor_photo_motion_static"))}</option>
+          <option value="ken_burns" ${state.takeEditor.photoMotionMode === "ken_burns" ? "selected" : ""}>${escapeHtml(t("take_editor_photo_motion_ken_burns"))}</option>
+        </select>
+      </label>
+    </div>
+    <div class="video-mix-take-editor-stats">
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("take_editor_asset_duration"))}</span><strong>${escapeHtml(formatDurationMs(selectedVideoAsset?.duration_ms || 0))}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("take_editor_composite_duration"))}</span><strong>${escapeHtml(formatDurationMs(compositeDurationMs))}</strong></div>
+    </div>
+    <div class="video-mix-take-editor-composite-sections">
+      <div class="video-mix-take-editor-composite-block">
+        <strong>${escapeHtml(t("take_editor_selected_photos"))}</strong>
+        <div class="video-mix-composite-photo-strip">
+          ${selectedPhotoAssets.length ? selectedPhotoAssets.map((asset, index) => buildTakeEditorPhotoThumb(asset, index)).join("") : `<div class="empty compact">${escapeHtml(t("take_editor_no_photos"))}</div>`}
+        </div>
+      </div>
+      <div class="video-mix-take-editor-composite-block">
+        <strong>${escapeHtml(t("take_editor_available_photos"))}</strong>
+        <div class="video-mix-composite-photo-picker">
+          ${photoAssets.map((asset) => `
+            <button type="button" class="video-mix-composite-picker-card" data-composite-photo-add="${escapeAttr(asset.asset_id)}" ${state.takeEditor.photoAssetIds.includes(asset.asset_id) ? "disabled" : ""}>
+              ${episodeTakeCompactPreviewHtml(asset.source_path)}
+              <span>${escapeHtml(asset.file_name || asset.asset_id || "")}</span>
+              <strong>${escapeHtml(t("take_editor_add_photo"))}</strong>
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    </div>
+  `;
   body.innerHTML = `
     <div class="video-mix-take-editor-layout">
       <div class="video-mix-take-editor-preview">
-        ${buildTakeEditorPreview(take.source_path)}
+        ${buildTakeEditorPreview((selectedVideoAsset && isComposite ? selectedVideoAsset.source_path : take.source_path) || take.source_path)}
       </div>
       <div class="video-mix-take-editor-meta">
         <div class="video-mix-take-editor-head">
-          <strong>${escapeHtml(take.file_name || take.take_id || "")}</strong>
+          <strong>${escapeHtml((selectedVideoAsset && isComposite ? selectedVideoAsset.file_name : take.file_name) || take.take_id || "")}</strong>
           <span class="status-chip status-idle">${escapeHtml(`${t("take_editor_episode")}: ${episode.label}`)}</span>
         </div>
         <div class="muted">${escapeHtml(`${t("take_editor_take")}: #${take.order}`)}</div>
-        <div class="video-mix-take-editor-stats">
-          <div class="video-mix-summary-card"><span>${escapeHtml(t("take_editor_asset_duration"))}</span><strong>${escapeHtml(formatDurationMs(take.asset_duration_ms || 0))}</strong></div>
-          <div class="video-mix-summary-card"><span>${escapeHtml(t("take_editor_trim_duration"))}</span><strong>${escapeHtml(formatDurationMs(trimmedDurationMs))}</strong></div>
+        <div class="video-mix-take-editor-type-toggle">
+          <span class="muted">${escapeHtml(t("take_editor_take_type"))}</span>
+          <div class="actions-row">
+            <button type="button" class="${isComposite ? "ghost-btn" : "accent-btn"}" data-take-editor-type="asset_take">${escapeHtml(t("materials_take_kind_simple"))}</button>
+            <button type="button" class="${isComposite ? "accent-btn" : "ghost-btn"}" data-take-editor-type="video_photo_composite">${escapeHtml(t("materials_take_kind_composite"))}</button>
+          </div>
         </div>
-        <div class="video-mix-take-editor-fields">
-          <label class="field">
-            <span>${escapeHtml(t("take_editor_trim_start"))}</span>
-            <input id="vm-take-editor-start-input" type="number" min="0" step="0.1" value="${escapeAttr(String(startSeconds))}">
-          </label>
-          <label class="field">
-            <span>${escapeHtml(t("take_editor_trim_end"))}</span>
-            <input id="vm-take-editor-end-input" type="number" min="0.1" step="0.1" value="${escapeAttr(String(endSeconds))}">
-          </label>
-        </div>
+        ${isComposite ? compositeEditorHtml : `
+          <div class="video-mix-take-editor-stats">
+            <div class="video-mix-summary-card"><span>${escapeHtml(t("take_editor_asset_duration"))}</span><strong>${escapeHtml(formatDurationMs(take.asset_duration_ms || 0))}</strong></div>
+            <div class="video-mix-summary-card"><span>${escapeHtml(t("take_editor_trim_duration"))}</span><strong>${escapeHtml(formatDurationMs(trimmedDurationMs))}</strong></div>
+          </div>
+          <div class="video-mix-take-editor-fields">
+            <label class="field">
+              <span>${escapeHtml(t("take_editor_trim_start"))}</span>
+              <input id="vm-take-editor-start-input" type="number" min="0" step="0.1" value="${escapeAttr(String(startSeconds))}">
+            </label>
+            <label class="field">
+              <span>${escapeHtml(t("take_editor_trim_end"))}</span>
+              <input id="vm-take-editor-end-input" type="number" min="0.1" step="0.1" value="${escapeAttr(String(endSeconds))}">
+            </label>
+          </div>
+        `}
         <div class="actions-row video-mix-take-editor-actions">
-          <button type="button" class="ghost-btn" data-open-local-file="${escapeAttr(take.source_path || "")}">${escapeHtml(t("take_editor_open_file"))}</button>
+          <button type="button" class="ghost-btn" data-open-local-file="${escapeAttr(((selectedVideoAsset && isComposite ? selectedVideoAsset.source_path : take.source_path) || ""))}">${escapeHtml(t("take_editor_open_file"))}</button>
           <button type="button" class="ghost-btn" id="vm-take-editor-move-left-btn" ${takeIndex <= 0 ? "disabled" : ""}>${escapeHtml(t("materials_take_move_left"))}</button>
           <button type="button" class="ghost-btn" id="vm-take-editor-move-right-btn" ${takeIndex >= takeCount - 1 ? "disabled" : ""}>${escapeHtml(t("materials_take_move_right"))}</button>
           <button type="button" class="ghost-btn" id="vm-take-editor-remove-btn">${escapeHtml(t("materials_take_remove"))}</button>
@@ -968,6 +1114,67 @@ function renderTakeEditorModal() {
     </div>
   `;
   bindSelectedMediaActionButtons(body);
+  body.querySelectorAll("[data-take-editor-type]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!state.takeEditor) return;
+      state.takeEditor.takeType = button.dataset.takeEditorType || "asset_take";
+      renderTakeEditorModal();
+    });
+  });
+  qs("#vm-take-editor-video-select")?.addEventListener("change", (event) => {
+    if (!state.takeEditor) return;
+    state.takeEditor.videoAssetId = event.target.value || "";
+    renderTakeEditorModal();
+  });
+  qs("#vm-take-editor-photo-duration-input")?.addEventListener("input", (event) => {
+    if (!state.takeEditor) return;
+    state.takeEditor.photoDurationSeconds = Math.max(0.1, Number(event.target.value || 1.2));
+  });
+  qs("#vm-take-editor-photo-motion-select")?.addEventListener("change", (event) => {
+    if (!state.takeEditor) return;
+    state.takeEditor.photoMotionMode = event.target.value || "static";
+  });
+  body.querySelectorAll("[data-composite-photo-add]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!state.takeEditor) return;
+      const assetId = button.dataset.compositePhotoAdd || "";
+      if (!assetId || state.takeEditor.photoAssetIds.includes(assetId)) return;
+      state.takeEditor.photoAssetIds.push(assetId);
+      renderTakeEditorModal();
+    });
+  });
+  body.querySelectorAll("[data-composite-photo-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!state.takeEditor) return;
+      const assetId = button.dataset.compositePhotoRemove || "";
+      state.takeEditor.photoAssetIds = state.takeEditor.photoAssetIds.filter((item) => item !== assetId);
+      renderTakeEditorModal();
+    });
+  });
+  body.querySelectorAll("[data-composite-photo-move-left]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!state.takeEditor) return;
+      const assetId = button.dataset.compositePhotoMoveLeft || "";
+      const index = state.takeEditor.photoAssetIds.indexOf(assetId);
+      if (index <= 0) return;
+      const ids = [...state.takeEditor.photoAssetIds];
+      [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
+      state.takeEditor.photoAssetIds = ids;
+      renderTakeEditorModal();
+    });
+  });
+  body.querySelectorAll("[data-composite-photo-move-right]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!state.takeEditor) return;
+      const assetId = button.dataset.compositePhotoMoveRight || "";
+      const index = state.takeEditor.photoAssetIds.indexOf(assetId);
+      if (index < 0 || index >= state.takeEditor.photoAssetIds.length - 1) return;
+      const ids = [...state.takeEditor.photoAssetIds];
+      [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]];
+      state.takeEditor.photoAssetIds = ids;
+      renderTakeEditorModal();
+    });
+  });
   qs("#vm-take-editor-cancel-btn")?.addEventListener("click", () => closeTakeEditorModal());
   qs("#vm-take-editor-save-btn")?.addEventListener("click", async () => saveTakeEditorChanges());
   qs("#vm-take-editor-move-left-btn")?.addEventListener("click", async () => moveTakeWithinEpisode(episode.episode_id, take.take_id, -1));
@@ -982,12 +1189,7 @@ function openTakeEditor(episodeId, takeId) {
   const { episode, take } = findEpisodeTake(episodeId, takeId);
   if (!episode || !take) return;
   state.selectedMaterialEpisodeId = episodeId;
-  state.takeEditor = {
-    episodeId,
-    takeId,
-    startSeconds: Number(formatSecondsValue(take.source_start_ms)),
-    endSeconds: Number(formatSecondsValue(take.source_end_ms)),
-  };
+  state.takeEditor = buildTakeEditorState(episodeId, take);
   renderAll();
   const dialog = qs("#vm-take-editor-modal");
   if (dialog && !dialog.open) {
@@ -1002,30 +1204,53 @@ async function saveTakeEditorChanges() {
     setLocalizedLoadState("load_state_enter_workdir", "status-failed");
     return;
   }
-  const startSeconds = Number(qs("#vm-take-editor-start-input")?.value || 0);
-  const endSeconds = Number(qs("#vm-take-editor-end-input")?.value || 0);
-  if (!(startSeconds >= 0) || !(endSeconds > startSeconds)) {
-    setLoadState(t("take_editor_validation"), "status-failed");
-    return;
-  }
-  const sourceStartMs = Math.round(startSeconds * 1000);
-  const sourceEndMs = Math.round(endSeconds * 1000);
   setLocalizedLoadState("activity_running", "status-downloading");
   try {
-    const payload = await fetchJson("/api/video-mix/project-materials/takes/update", {
-      method: "POST",
-      body: JSON.stringify({
+    let requestBody;
+    if (state.takeEditor.takeType === "video_photo_composite") {
+      if (!state.takeEditor.photoAssetIds.length) {
+        setLoadState(t("take_editor_no_photos"), "status-failed");
+        return;
+      }
+      requestBody = {
         work_dir: workDir,
         episode_id: state.takeEditor.episodeId,
         take_id: state.takeEditor.takeId,
-        source_start_ms: sourceStartMs,
-        source_end_ms: sourceEndMs,
-      }),
+        take_type: "video_photo_composite",
+        video_asset_id: state.takeEditor.videoAssetId,
+        photo_asset_ids: state.takeEditor.photoAssetIds,
+        photo_duration_ms: Math.round(Math.max(0.1, Number(state.takeEditor.photoDurationSeconds || 1.2)) * 1000),
+        photo_motion_mode: state.takeEditor.photoMotionMode || "static",
+      };
+    } else {
+      const startSeconds = Number(qs("#vm-take-editor-start-input")?.value || 0);
+      const endSeconds = Number(qs("#vm-take-editor-end-input")?.value || 0);
+      if (!(startSeconds >= 0) || !(endSeconds > startSeconds)) {
+        setLoadState(t("take_editor_validation"), "status-failed");
+        return;
+      }
+      requestBody = {
+        work_dir: workDir,
+        episode_id: state.takeEditor.episodeId,
+        take_id: state.takeEditor.takeId,
+        take_type: "asset_take",
+        video_asset_id: state.takeEditor.videoAssetId,
+        source_start_ms: Math.round(startSeconds * 1000),
+        source_end_ms: Math.round(endSeconds * 1000),
+      };
+      state.takeEditor.startSeconds = startSeconds;
+      state.takeEditor.endSeconds = endSeconds;
+    }
+    const payload = await fetchJson("/api/video-mix/project-materials/takes/update", {
+      method: "POST",
+      body: JSON.stringify(requestBody),
     });
     applyDashboardPayload(payload.dashboard);
     state.selectedMaterialEpisodeId = state.takeEditor.episodeId;
-    state.takeEditor.startSeconds = startSeconds;
-    state.takeEditor.endSeconds = endSeconds;
+    const { take: freshTake } = findEpisodeTake(state.takeEditor.episodeId, state.takeEditor.takeId);
+    if (freshTake) {
+      state.takeEditor = buildTakeEditorState(state.takeEditor.episodeId, freshTake);
+    }
     renderTakeEditorModal();
     renderAll();
     setLocalizedLoadState("take_editor_saved", "status-completed");
@@ -2146,8 +2371,8 @@ function renderMaterialEpisodes() {
           data-take-editor-open="true"
           data-take-episode-id="${escapeAttr(episode.episode_id)}"
           data-take-editor-id="${escapeAttr(take.take_id)}"
-          aria-label="${escapeAttr(take.file_name || take.take_id || "")}"
-          title="${escapeAttr(take.file_name || take.take_id || "")}"
+          aria-label="${escapeAttr(`${take.file_name || take.take_id || ""} · ${takeEditorSummaryText(take)}`)}"
+          title="${escapeAttr(`${take.file_name || take.take_id || ""} · ${takeEditorSummaryText(take)}`)}"
         >
           ${episodeTakeCompactPreviewHtml(take.source_path)}
         </button>
@@ -2261,7 +2486,7 @@ function renderMaterialTimeline() {
         <button class="video-mix-timeline-block${row.episode_id === selectedEpisodeId ? " is-selected" : ""}" type="button" data-timeline-episode-id="${escapeAttr(row.episode_id)}" data-timeline-take-id="${escapeAttr(block.take_id)}">
           <strong>${escapeHtml(block.file_name)}</strong>
           <span>#${escapeHtml(block.order)} · ${escapeHtml(block.media_type)} · ${escapeHtml(formatDurationMs(block.duration_ms || 0))}</span>
-          <span>${escapeHtml(formatSecondsValue(block.source_start_ms))}s → ${escapeHtml(formatSecondsValue(block.source_end_ms))}s</span>
+          <span>${escapeHtml(takeEditorSummaryText(block))}</span>
           <span class="video-mix-timeline-block-mode">${escapeHtml(t(`timeline_block_${block.mode}`))}</span>
         </button>
       `).join("")
