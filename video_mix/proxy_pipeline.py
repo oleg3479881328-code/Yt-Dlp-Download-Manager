@@ -175,6 +175,15 @@ def build_source_fingerprint(asset: Asset) -> str:
     return _json_hash(payload)
 
 
+def _build_source_fingerprint_safe(asset: Asset) -> tuple[str, str]:
+    try:
+        return build_source_fingerprint(asset), ""
+    except FileNotFoundError:
+        return "", f"Original source is missing: {asset.path}"
+    except OSError as exc:
+        return "", f"Original source is unavailable: {asset.path} ({exc})"
+
+
 def build_profile_fingerprint() -> str:
     return _json_hash(PROXY_PROFILE)
 
@@ -252,9 +261,12 @@ def sync_proxy_manifest(work_dir: Path, *, ffprobe_path: str = "ffprobe") -> dic
     for asset in assets:
         output_path = proxy_output_path(work_dir, asset.asset_id)
         entry = entries.get(asset.asset_id, {})
-        source_fingerprint = build_source_fingerprint(asset)
+        source_fingerprint, source_error = _build_source_fingerprint_safe(asset)
         status = entry.get("status") or PROXY_MISSING
-        if not output_path.exists():
+        if source_error:
+            status = PROXY_FAILED if output_path.exists() else PROXY_MISSING
+            entry["error"] = source_error
+        elif not output_path.exists():
             status = PROXY_MISSING
         elif (
             entry.get("source_fingerprint") != source_fingerprint
@@ -534,6 +546,8 @@ class ProxyQueueManager:
         asset = assets.get(job.asset_id)
         if asset is None:
             raise ValueError(f"Video asset not found for proxy job: {job.asset_id}")
+        if not asset.path.exists():
+            raise FileNotFoundError(f"Original source is missing: {asset.path}")
         output_dir = proxy_directory_path(work_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         log_path = proxy_job_log_path(work_dir, job.asset_id)
@@ -573,14 +587,15 @@ class ProxyQueueManager:
         partial_path.replace(final_path)
         manifest = load_proxy_manifest(work_dir)
         entry = manifest.setdefault("entries", {}).setdefault(job.asset_id, {})
+        source_fingerprint, source_error = _build_source_fingerprint_safe(asset)
         entry.update(
             {
                 "asset_id": asset.asset_id,
                 "original_path": str(asset.path.resolve()),
                 "proxy_path": str(final_path.relative_to(work_dir)).replace("\\", "/"),
-                "source_fingerprint": build_source_fingerprint(asset),
+                "source_fingerprint": source_fingerprint,
                 "profile_fingerprint": build_profile_fingerprint(),
-                "status": PROXY_READY,
+                "status": PROXY_READY if not source_error else PROXY_FAILED,
                 "original_duration_ms": int(asset.duration_ms or 0),
                 "proxy_duration_ms": int(validation["proxy_duration_ms"]),
                 "original_width": int(asset.width or 0),
@@ -589,7 +604,7 @@ class ProxyQueueManager:
                 "proxy_height": int(validation["proxy_height"]),
                 "created_at": entry.get("created_at") or _iso_timestamp(),
                 "updated_at": _iso_timestamp(),
-                "error": "",
+                "error": source_error,
                 "has_audio": bool(validation["has_audio"]),
             }
         )

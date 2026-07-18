@@ -218,6 +218,37 @@ def test_video_mix_proxies_endpoint_returns_missing_proxy_summary(tmp_path: Path
     assert payload["items"][0]["proxy_absolute_path"] == ""
 
 
+def test_video_mix_dashboard_handles_missing_original_without_crashing(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    missing_original = tmp_path / "input" / "rings_detail.mp4"
+    missing_original.unlink()
+
+    response = client.get("/api/video-mix/dashboard", params={"work_dir": str(work_dir)})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["video_proxies"]["summary"]["total"] == 1
+    assert payload["video_proxies"]["summary"]["missing"] == 1
+    assert payload["video_proxies"]["items"][0]["asset_id"] == "asset_1"
+    assert payload["video_proxies"]["items"][0]["status"] == PROXY_MISSING
+    assert "Original source is missing" in payload["video_proxies"]["items"][0]["error"]
+
+
+def test_video_mix_proxies_endpoint_reports_missing_original_asset(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    missing_original = tmp_path / "input" / "rings_detail.mp4"
+    missing_original.unlink()
+
+    response = client.get("/api/video-mix/proxies", params={"work_dir": str(work_dir)})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["total"] == 1
+    assert payload["summary"]["missing"] == 1
+    assert payload["items"][0]["status"] == PROXY_MISSING
+    assert "Original source is missing" in payload["items"][0]["error"]
+
+
 def test_video_mix_proxies_dashboard_recovers_cancelled_pending_entry_without_proxy_file(tmp_path: Path) -> None:
     work_dir = create_video_mix_workdir(tmp_path)
     manifest = load_proxy_manifest(work_dir)
@@ -302,6 +333,14 @@ def test_video_mix_project_files_endpoint_lists_source_files(tmp_path: Path) -> 
     payload = response.json()
     assert payload["file_count"] == 2
     assert {item["relative_path"] for item in payload["files"]} == {"rings_detail.mp4", "notes.txt"}
+
+
+def test_gitignore_covers_video_proxy_derived_artifacts() -> None:
+    gitignore = Path(".gitignore").read_text(encoding="utf-8")
+
+    assert "**/video_proxies/" in gitignore
+    assert "**/reports/video_proxy_manifest.json" in gitignore
+    assert "**/reports/video_proxy_jobs/" in gitignore
 
 
 def test_video_mix_project_files_add_copies_files_into_project(tmp_path: Path) -> None:
