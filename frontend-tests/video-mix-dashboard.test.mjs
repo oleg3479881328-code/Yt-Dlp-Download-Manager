@@ -5,7 +5,9 @@ import {
   buildEmptyProjectWorkspaceState,
   collectDraftNotesFromElements,
   filterSelectedCandidateIdsToVisible,
+  normalizeWorkspace,
   resolveInitialLocale,
+  resolveInitialWorkspace,
   resolveReviewNoteValue,
   translate,
 } from "../app/static/video-mix-dashboard.js";
@@ -14,6 +16,7 @@ test("buildEmptyProjectWorkspaceState resets project-scoped dashboard state to d
   const debugLogs = [{ at: "12:00:00", kind: "info", message: "keep log" }];
   const workspace = buildEmptyProjectWorkspaceState(debugLogs);
 
+  assert.equal(workspace.activeWorkspace, "menu");
   assert.equal(workspace.dashboard, null);
   assert.equal(workspace.workDir, "");
   assert.equal(workspace.quickMixEstimate.status, "idle");
@@ -66,9 +69,19 @@ test("resolveInitialLocale prefers query param over stored locale", () => {
   assert.equal(resolveInitialLocale("", ""), "ru");
 });
 
+test("workspace helpers normalize invalid values and read query param", () => {
+  assert.equal(normalizeWorkspace("results"), "results");
+  assert.equal(normalizeWorkspace("unknown"), "menu");
+  assert.equal(resolveInitialWorkspace("?workspace=timeline"), "timeline");
+  assert.equal(resolveInitialWorkspace("?workspace=bad-value"), "menu");
+  assert.equal(resolveInitialWorkspace(""), "menu");
+});
+
 test("translate returns locale-specific dashboard strings", () => {
   assert.equal(translate("ru", "hero_title"), "Локальный дашборд для Quick Mix, ревью и экспорта");
   assert.equal(translate("en", "hero_title"), "Local dashboard for Quick Mix, review, and export");
+  assert.equal(translate("ru", "menu_title"), "Разделы");
+  assert.equal(translate("en", "workspace_back"), "Back to menu");
   assert.equal(translate("ru", "quickmix_music_label"), "Музыкальный трек (опционально)");
   assert.equal(translate("ru", "source_drop_zip"), "Перетащите папку или ZIP сюда");
   assert.equal(translate("en", "selected_count", { count: 3 }), "3 selected");
