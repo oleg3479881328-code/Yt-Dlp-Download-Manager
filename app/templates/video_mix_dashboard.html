@@ -39,6 +39,7 @@
           <button id="vm-menu-open-take-editor" class="video-mix-menu-card" type="button">Take Editor</button>
           <button id="vm-menu-open-materials" class="video-mix-menu-card" type="button">Project Materials</button>
           <button id="vm-menu-open-timeline" class="video-mix-menu-card" type="button">Timeline</button>
+          <button id="vm-menu-open-video-proxies" class="video-mix-menu-card" type="button">Video Proxies</button>
           <button id="vm-menu-open-music" class="video-mix-menu-card" type="button">Music</button>
           <button id="vm-menu-open-opening-closing" class="video-mix-menu-card" type="button">Opening / Closing</button>
           <button id="vm-menu-open-results" class="video-mix-menu-card" type="button">Results</button>
@@ -293,6 +294,31 @@
         </div>
         <div id="vm-material-timeline" class="video-mix-timeline-surface">
           <div class="empty">Таймлайн появится после назначения Takes в Episodes.</div>
+        </div>
+      </section>
+
+      <section id="vm-workspace-video-proxies" class="card video-mix-workspace-screen" data-workspace="video-proxies">
+        <div class="card-header">
+          <div>
+            <h2 id="vm-video-proxies-title">Video Proxies</h2>
+            <p id="vm-video-proxies-help" class="muted">Отдельная очередь локальных proxy-файлов только для AI-анализа видео.</p>
+          </div>
+          <button class="ghost-btn" type="button" data-workspace-menu>К разделам</button>
+        </div>
+        <div id="vm-video-proxies-summary" class="video-mix-summary-grid">
+          <div class="empty">Загрузите work_dir, чтобы увидеть proxy-статусы.</div>
+        </div>
+        <div class="actions-row video-mix-inline-actions">
+          <button id="vm-video-proxies-create-missing-btn" class="accent-btn" type="button">Создать отсутствующие</button>
+          <button id="vm-video-proxies-rebuild-stale-btn" class="ghost-btn" type="button">Пересобрать stale</button>
+          <button id="vm-video-proxies-retry-failed-btn" class="ghost-btn" type="button">Повторить failed</button>
+          <button id="vm-video-proxies-cleanup-btn" class="ghost-btn" type="button">Убрать partial</button>
+        </div>
+        <div id="vm-video-proxies-queue" class="video-mix-proxy-queue">
+          <div class="empty">Очередь появится после загрузки work_dir.</div>
+        </div>
+        <div id="vm-video-proxies-list" class="video-mix-proxy-list">
+          <div class="empty">Прокси-карточки появятся после загрузки work_dir.</div>
         </div>
       </section>
 

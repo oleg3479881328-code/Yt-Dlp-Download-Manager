@@ -13,5 +13,8 @@ __pycache__/
 *.pyd
 _video_mix_work/
 video_mix_validation/
+**/video_proxies/
 **/reports/review.html
+**/reports/video_proxy_manifest.json
+**/reports/video_proxy_jobs/
 **/reports/thumbnails/

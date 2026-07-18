@@ -71,6 +71,7 @@ test("resolveInitialLocale prefers query param over stored locale", () => {
 
 test("workspace helpers normalize invalid values and read query param", () => {
   assert.equal(normalizeWorkspace("results"), "results");
+  assert.equal(normalizeWorkspace("video-proxies"), "video-proxies");
   assert.equal(normalizeWorkspace("unknown"), "menu");
   assert.equal(resolveInitialWorkspace("?workspace=timeline"), "timeline");
   assert.equal(resolveInitialWorkspace("?workspace=bad-value"), "menu");
@@ -81,6 +82,8 @@ test("translate returns locale-specific dashboard strings", () => {
   assert.equal(translate("ru", "hero_title"), "Локальный дашборд для Quick Mix, ревью и экспорта");
   assert.equal(translate("en", "hero_title"), "Local dashboard for Quick Mix, review, and export");
   assert.equal(translate("ru", "menu_title"), "Разделы");
+  assert.equal(translate("ru", "menu_video_proxies"), "Video Proxies");
+  assert.equal(translate("en", "video_proxies_create_missing"), "Create missing");
   assert.equal(translate("en", "workspace_back"), "Back to menu");
   assert.equal(translate("ru", "quickmix_music_label"), "Музыкальный трек (опционально)");
   assert.equal(translate("ru", "source_drop_zip"), "Перетащите папку или ZIP сюда");

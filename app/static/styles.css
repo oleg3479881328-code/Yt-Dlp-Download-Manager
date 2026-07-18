@@ -1443,6 +1443,67 @@ code {
   min-width: 220px;
 }
 
+.video-mix-proxy-queue,
+.video-mix-proxy-list {
+  display: grid;
+  gap: 14px;
+}
+
+.video-mix-proxy-queue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.video-mix-proxy-queue-list {
+  display: grid;
+  gap: 12px;
+}
+
+.video-mix-proxy-queue-card,
+.video-mix-proxy-item-card {
+  border: 1px solid rgba(145, 164, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 18px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.video-mix-proxy-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.video-mix-proxy-item-head h3 {
+  margin: 0;
+}
+
+.video-mix-proxy-item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.video-mix-proxy-item-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.video-mix-proxy-item-grid strong {
+  display: block;
+}
+
+.video-mix-proxy-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .video-mix-take-editor-modal {
   width: min(980px, calc(100vw - 40px));
 }

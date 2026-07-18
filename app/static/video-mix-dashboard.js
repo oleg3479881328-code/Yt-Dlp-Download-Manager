@@ -13,6 +13,7 @@ const WORKSPACES = Object.freeze([
   "take-editor",
   "materials",
   "timeline",
+  "video-proxies",
   "music",
   "opening-closing",
   "results",
@@ -244,10 +245,47 @@ const TRANSLATIONS = {
     menu_take_editor: "Take Editor",
     menu_materials: "Project Materials",
     menu_timeline: "Timeline",
+    menu_video_proxies: "Video Proxies",
     menu_music: "Music",
     menu_opening_closing: "Opening / Closing",
     menu_results: "Results",
     workspace_back: "К разделам",
+    video_proxies_title: "Video Proxies",
+    video_proxies_help: "Отдельная очередь локальных proxy-файлов только для AI-анализа видео.",
+    video_proxies_create_missing: "Создать отсутствующие",
+    video_proxies_rebuild_stale: "Пересобрать stale",
+    video_proxies_retry_failed: "Повторить failed",
+    video_proxies_cleanup: "Убрать partial",
+    video_proxies_open_proxy: "Открыть proxy",
+    video_proxies_open_source: "Открыть оригинал",
+    video_proxies_open_proxy_folder: "Открыть папку proxy",
+    video_proxies_rebuild_one: "Пересобрать",
+    video_proxies_cancel: "Остановить",
+    video_proxies_delete: "Удалить proxy",
+    video_proxies_empty: "Загрузите work_dir, чтобы увидеть proxy-статусы.",
+    video_proxies_queue_empty: "Активных proxy-job сейчас нет.",
+    video_proxies_list_empty: "В проекте пока нет видео для proxy-пайплайна.",
+    video_proxies_summary_total: "Видео",
+    video_proxies_summary_ready: "Готово",
+    video_proxies_summary_missing: "Нет proxy",
+    video_proxies_summary_stale: "Stale",
+    video_proxies_summary_running: "В очереди / работе",
+    video_proxies_summary_failed: "Failed",
+    video_proxies_queue_title: "Очередь",
+    video_proxies_queue_profile: "Профиль",
+    video_proxies_queue_concurrency: "Concurrency",
+    video_proxies_queue_progress: "Прогресс",
+    video_proxies_item_original: "Оригинал",
+    video_proxies_item_proxy: "Proxy",
+    video_proxies_item_status: "Статус",
+    video_proxies_item_error: "Ошибка",
+    video_proxies_status_ready: "Готово",
+    video_proxies_status_missing: "Нет proxy",
+    video_proxies_status_stale: "Stale",
+    video_proxies_status_running: "В работе",
+    video_proxies_status_pending: "В очереди",
+    video_proxies_status_failed: "Failed",
+    video_proxies_status_unknown: "Неизвестно",
     music_workspace_title: "Музыка",
     opening_closing_workspace_title: "Начало / финал",
     results_workspace_title: "Результаты",
@@ -604,10 +642,47 @@ const TRANSLATIONS = {
     menu_take_editor: "Take Editor",
     menu_materials: "Project Materials",
     menu_timeline: "Timeline",
+    menu_video_proxies: "Video Proxies",
     menu_music: "Music",
     menu_opening_closing: "Opening / Closing",
     menu_results: "Results",
     workspace_back: "Back to menu",
+    video_proxies_title: "Video Proxies",
+    video_proxies_help: "A separate local proxy queue used only for AI video analysis.",
+    video_proxies_create_missing: "Create missing",
+    video_proxies_rebuild_stale: "Rebuild stale",
+    video_proxies_retry_failed: "Retry failed",
+    video_proxies_cleanup: "Clean partials",
+    video_proxies_open_proxy: "Open proxy",
+    video_proxies_open_source: "Open source",
+    video_proxies_open_proxy_folder: "Open proxy folder",
+    video_proxies_rebuild_one: "Rebuild",
+    video_proxies_cancel: "Cancel",
+    video_proxies_delete: "Delete proxy",
+    video_proxies_empty: "Load a work_dir to see proxy statuses.",
+    video_proxies_queue_empty: "No active proxy jobs right now.",
+    video_proxies_list_empty: "There are no videos in this project for the proxy pipeline yet.",
+    video_proxies_summary_total: "Videos",
+    video_proxies_summary_ready: "Ready",
+    video_proxies_summary_missing: "Missing",
+    video_proxies_summary_stale: "Stale",
+    video_proxies_summary_running: "Queued / running",
+    video_proxies_summary_failed: "Failed",
+    video_proxies_queue_title: "Queue",
+    video_proxies_queue_profile: "Profile",
+    video_proxies_queue_concurrency: "Concurrency",
+    video_proxies_queue_progress: "Progress",
+    video_proxies_item_original: "Original",
+    video_proxies_item_proxy: "Proxy",
+    video_proxies_item_status: "Status",
+    video_proxies_item_error: "Error",
+    video_proxies_status_ready: "Ready",
+    video_proxies_status_missing: "Missing",
+    video_proxies_status_stale: "Stale",
+    video_proxies_status_running: "Running",
+    video_proxies_status_pending: "Queued",
+    video_proxies_status_failed: "Failed",
+    video_proxies_status_unknown: "Unknown",
     music_workspace_title: "Music",
     opening_closing_workspace_title: "Opening / Closing",
     results_workspace_title: "Results",
@@ -814,6 +889,19 @@ function formatDurationMs(value) {
 
 function formatSecondsValue(value) {
   return (Math.max(0, Number(value) || 0) / 1000).toFixed(1);
+}
+
+function formatBytes(value) {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let size = bytes / 1024;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function fileUrl(relativePath) {
@@ -1824,6 +1912,7 @@ function applyStaticTranslations() {
     ["#vm-menu-open-take-editor", "menu_take_editor"],
     ["#vm-menu-open-materials", "menu_materials"],
     ["#vm-menu-open-timeline", "menu_timeline"],
+    ["#vm-menu-open-video-proxies", "menu_video_proxies"],
     ["#vm-menu-open-music", "menu_music"],
     ["#vm-menu-open-opening-closing", "menu_opening_closing"],
     ["#vm-menu-open-results", "menu_results"],
@@ -1847,6 +1936,8 @@ function applyStaticTranslations() {
     ["#vm-project-materials-search-label", "materials_search"],
     ["#vm-timeline-title", "timeline_title"],
     ["#vm-timeline-help", "timeline_help"],
+    ["#vm-video-proxies-title", "video_proxies_title"],
+    ["#vm-video-proxies-help", "video_proxies_help"],
     ["#vm-take-editor-title", "take_editor_title"],
     ["#vm-take-editor-help", "take_editor_help"],
     ["#vm-close-take-editor-btn", "workspace_back"],
@@ -1865,6 +1956,10 @@ function applyStaticTranslations() {
     ["#vm-project-files-help", "project_files_help"],
     ["#vm-project-files-add-btn", "project_files_add"],
     ["#vm-project-files-open-btn", "project_files_open"],
+    ["#vm-video-proxies-create-missing-btn", "video_proxies_create_missing"],
+    ["#vm-video-proxies-rebuild-stale-btn", "video_proxies_rebuild_stale"],
+    ["#vm-video-proxies-retry-failed-btn", "video_proxies_retry_failed"],
+    ["#vm-video-proxies-cleanup-btn", "video_proxies_cleanup"],
     ["#vm-quickmix-duration-label", "quickmix_duration_label"],
     ["#vm-quickmix-count-label", "quickmix_count_label"],
     ["#vm-quickmix-music-label", "quickmix_music_label"],
@@ -2443,6 +2538,15 @@ function projectMaterials() {
   return state.dashboard?.project_materials || { episodes: [], assets: [], counts: { all: 0, unassigned: 0, assigned: 0, reused: 0 } };
 }
 
+function videoProxies() {
+  return state.dashboard?.video_proxies || {
+    summary: { total: 0, ready: 0, missing: 0, stale: 0, running: 0, failed: 0 },
+    profile: {},
+    queue: { concurrency: 1, max_concurrency: 2, active_jobs: [] },
+    items: [],
+  };
+}
+
 function ensureSelectedMaterialEpisode() {
   const episodes = projectMaterials().episodes || [];
   if (!episodes.length) {
@@ -2636,6 +2740,116 @@ function renderMaterialTimeline() {
       renderAll();
     });
   });
+}
+
+function videoProxyStatusKey(status) {
+  if (["ready", "missing", "stale", "running", "pending", "failed"].includes(String(status || ""))) {
+    return `video_proxies_status_${String(status)}`;
+  }
+  return "video_proxies_status_unknown";
+}
+
+function renderVideoProxiesWorkspace() {
+  const summaryTarget = qs("#vm-video-proxies-summary");
+  const queueTarget = qs("#vm-video-proxies-queue");
+  const listTarget = qs("#vm-video-proxies-list");
+  if (!summaryTarget || !queueTarget || !listTarget) return;
+  if (!state.dashboard || !activeWorkDir()) {
+    const empty = `<div class="empty">${escapeHtml(t("video_proxies_empty"))}</div>`;
+    summaryTarget.innerHTML = empty;
+    queueTarget.innerHTML = `<div class="empty">${escapeHtml(t("video_proxies_queue_empty"))}</div>`;
+    listTarget.innerHTML = `<div class="empty">${escapeHtml(t("video_proxies_list_empty"))}</div>`;
+    return;
+  }
+
+  const payload = videoProxies();
+  const summary = payload.summary || {};
+  const queue = payload.queue || {};
+  const profile = payload.profile || {};
+  const items = payload.items || [];
+  const activeJobs = queue.active_jobs || [];
+
+  summaryTarget.innerHTML = `
+    <div class="video-mix-summary-card"><span>${escapeHtml(t("video_proxies_summary_total"))}</span><strong>${escapeHtml(summary.total || 0)}</strong></div>
+    <div class="video-mix-summary-card"><span>${escapeHtml(t("video_proxies_summary_ready"))}</span><strong>${escapeHtml(summary.ready || 0)}</strong></div>
+    <div class="video-mix-summary-card"><span>${escapeHtml(t("video_proxies_summary_missing"))}</span><strong>${escapeHtml(summary.missing || 0)}</strong></div>
+    <div class="video-mix-summary-card"><span>${escapeHtml(t("video_proxies_summary_stale"))}</span><strong>${escapeHtml(summary.stale || 0)}</strong></div>
+    <div class="video-mix-summary-card"><span>${escapeHtml(t("video_proxies_summary_running"))}</span><strong>${escapeHtml(summary.running || 0)}</strong></div>
+    <div class="video-mix-summary-card"><span>${escapeHtml(t("video_proxies_summary_failed"))}</span><strong>${escapeHtml(summary.failed || 0)}</strong></div>
+  `;
+
+  queueTarget.innerHTML = `
+    <div class="video-mix-proxy-queue-meta">
+      <span class="status-chip status-idle">${escapeHtml(t("video_proxies_queue_profile"))}: ${escapeHtml(`${profile.container || "mp4"} / ${profile.video_codec || "?"} / ${profile.audio_codec || "?"} / ${profile.scale || "?"}`)}</span>
+      <span class="status-chip status-idle">${escapeHtml(t("video_proxies_queue_concurrency"))}: ${escapeHtml(`${queue.concurrency || 1}/${queue.max_concurrency || 2}`)}</span>
+    </div>
+    ${activeJobs.length ? `
+      <div class="video-mix-proxy-queue-list">
+        ${activeJobs.map((job) => `
+          <article class="video-mix-proxy-queue-card">
+            <strong>${escapeHtml(job.asset_id || "")}</strong>
+            <div class="muted">${escapeHtml(t(videoProxyStatusKey(job.queue_state || "")))}</div>
+            <div class="muted">${escapeHtml(t("video_proxies_queue_progress"))}: ${escapeHtml(job.progress_text || "0%")}</div>
+            ${job.error ? `<div class="muted">${escapeHtml(t("video_proxies_item_error"))}: ${escapeHtml(job.error)}</div>` : ""}
+          </article>
+        `).join("")}
+      </div>
+    ` : `<div class="empty compact">${escapeHtml(t("video_proxies_queue_empty"))}</div>`}
+  `;
+
+  if (!items.length) {
+    listTarget.innerHTML = `<div class="empty">${escapeHtml(t("video_proxies_list_empty"))}</div>`;
+    return;
+  }
+
+  listTarget.innerHTML = items.map((item) => {
+    const proxyExists = Boolean(item.proxy_absolute_path);
+    const canCancel = ["queued", "running"].includes(String(item.queue_state || ""));
+    const statusClass = ["ready", "failed"].includes(String(item.status || "")) ? `status-${escapeAttr(item.status)}` : "status-idle";
+    return `
+      <article class="video-mix-proxy-item-card">
+        <div class="video-mix-proxy-item-head">
+          <div>
+            <h3>${escapeHtml(item.file_name || item.asset_id || "")}</h3>
+            <div class="muted">${escapeHtml(item.asset_id || "")}</div>
+          </div>
+          <span class="status-chip ${statusClass}">${escapeHtml(t(videoProxyStatusKey(item.status)))}</span>
+        </div>
+        <div class="video-mix-proxy-item-grid">
+          <div><span>${escapeHtml(t("video_proxies_item_original"))}</span><strong>${escapeHtml(formatDurationMs(item.original_duration_ms || 0))} · ${escapeHtml(`${item.original_width || 0}x${item.original_height || 0}`)} · ${escapeHtml(formatBytes(item.original_size_bytes || 0))}</strong></div>
+          <div><span>${escapeHtml(t("video_proxies_item_proxy"))}</span><strong>${escapeHtml(proxyExists ? `${formatDurationMs(item.proxy_duration_ms || 0)} · ${item.proxy_width || 0}x${item.proxy_height || 0} · ${formatBytes(item.proxy_size_bytes || 0)}` : "—")}</strong></div>
+          <div><span>${escapeHtml(t("video_proxies_item_status"))}</span><strong>${escapeHtml(item.progress_text || t(videoProxyStatusKey(item.status)))}</strong></div>
+        </div>
+        ${item.error ? `<div class="muted">${escapeHtml(t("video_proxies_item_error"))}: ${escapeHtml(item.error)}</div>` : ""}
+        <div class="video-mix-proxy-item-actions">
+          <button class="ghost-btn" type="button" data-open-local-file="${escapeAttr(item.original_path || "")}">${escapeHtml(t("video_proxies_open_source"))}</button>
+          <button class="ghost-btn" type="button" data-open-local-file="${escapeAttr(item.proxy_absolute_path || "")}" ${proxyExists ? "" : "disabled"}>${escapeHtml(t("video_proxies_open_proxy"))}</button>
+          <button class="ghost-btn" type="button" data-open-local-path="${escapeAttr(item.proxy_folder_path || "")}">${escapeHtml(t("video_proxies_open_proxy_folder"))}</button>
+          <button class="ghost-btn" type="button" data-video-proxy-rebuild="${escapeAttr(item.asset_id || "")}">${escapeHtml(t("video_proxies_rebuild_one"))}</button>
+          <button class="ghost-btn" type="button" data-video-proxy-cancel="${escapeAttr(item.asset_id || "")}" ${canCancel ? "" : "disabled"}>${escapeHtml(t("video_proxies_cancel"))}</button>
+          <button class="ghost-btn" type="button" data-video-proxy-delete="${escapeAttr(item.asset_id || "")}" ${proxyExists ? "" : "disabled"}>${escapeHtml(t("video_proxies_delete"))}</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  listTarget.querySelectorAll("[data-video-proxy-rebuild]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await rebuildOneVideoProxy(button.dataset.videoProxyRebuild || "");
+    });
+  });
+  listTarget.querySelectorAll("[data-video-proxy-cancel]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await cancelVideoProxy(button.dataset.videoProxyCancel || "");
+    });
+  });
+  listTarget.querySelectorAll("[data-video-proxy-delete]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await deleteVideoProxy(button.dataset.videoProxyDelete || "");
+    });
+  });
+  bindOpenLocalPathButtons(listTarget);
+  bindOpenLocalFileButtons(listTarget);
 }
 
 function renderProjectMaterialsModal() {
@@ -3125,6 +3339,7 @@ function renderAll() {
   renderProjectFiles();
   renderMaterialEpisodes();
   renderMaterialTimeline();
+  renderVideoProxiesWorkspace();
   renderTakeEditorModal();
   renderProjectMaterialsModal();
   renderQuickMixSummary();
@@ -4068,6 +4283,126 @@ function closeProjectMaterialsModal() {
   setActiveWorkspace(DEFAULT_WORKSPACE);
 }
 
+async function updateVideoProxiesFromResponse(request) {
+  const workDir = activeWorkDir();
+  if (!workDir) {
+    setLocalizedLoadState("load_state_enter_workdir", "status-failed");
+    return;
+  }
+  state.workDir = workDir;
+  const payload = await request(workDir);
+  const proxyPayload = payload?.video_proxies?.dashboard
+    ? payload.video_proxies.dashboard
+    : (payload.video_proxies || payload.dashboard?.video_proxies || payload);
+  state.dashboard = {
+    ...(state.dashboard || {}),
+    work_dir: workDir,
+    video_proxies: proxyPayload,
+  };
+  renderAll();
+}
+
+async function createMissingVideoProxies() {
+  setLocalizedLoadState("activity_running", "status-downloading");
+  try {
+    await updateVideoProxiesFromResponse((workDir) => fetchJson("/api/video-mix/proxies/create-missing", {
+      method: "POST",
+      body: JSON.stringify({ work_dir: workDir }),
+    }));
+    setLocalizedLoadState("load_state_loaded", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function rebuildStaleVideoProxies() {
+  setLocalizedLoadState("activity_running", "status-downloading");
+  try {
+    await updateVideoProxiesFromResponse((workDir) => fetchJson("/api/video-mix/proxies/rebuild-stale", {
+      method: "POST",
+      body: JSON.stringify({ work_dir: workDir }),
+    }));
+    setLocalizedLoadState("load_state_loaded", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function retryFailedVideoProxies() {
+  setLocalizedLoadState("activity_running", "status-downloading");
+  try {
+    await updateVideoProxiesFromResponse((workDir) => fetchJson("/api/video-mix/proxies/retry-failed", {
+      method: "POST",
+      body: JSON.stringify({ work_dir: workDir }),
+    }));
+    setLocalizedLoadState("load_state_loaded", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function cleanupPartialVideoProxies() {
+  setLocalizedLoadState("activity_running", "status-downloading");
+  try {
+    await updateVideoProxiesFromResponse((workDir) => fetchJson("/api/video-mix/proxies/cleanup", {
+      method: "POST",
+      body: JSON.stringify({ work_dir: workDir }),
+    }));
+    setLocalizedLoadState("load_state_loaded", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function rebuildOneVideoProxy(assetId) {
+  if (!assetId) return;
+  setLocalizedLoadState("activity_running", "status-downloading");
+  try {
+    await updateVideoProxiesFromResponse((workDir) => fetchJson("/api/video-mix/proxies/rebuild-one", {
+      method: "POST",
+      body: JSON.stringify({ work_dir: workDir, asset_id: assetId }),
+    }));
+    setLocalizedLoadState("load_state_loaded", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function cancelVideoProxy(assetId) {
+  if (!assetId) return;
+  setLocalizedLoadState("activity_running", "status-downloading");
+  try {
+    await updateVideoProxiesFromResponse((workDir) => fetchJson("/api/video-mix/proxies/cancel", {
+      method: "POST",
+      body: JSON.stringify({ work_dir: workDir, asset_id: assetId }),
+    }));
+    setLocalizedLoadState("load_state_loaded", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function deleteVideoProxy(assetId) {
+  if (!assetId) return;
+  setLocalizedLoadState("activity_running", "status-downloading");
+  try {
+    await updateVideoProxiesFromResponse((workDir) => fetchJson("/api/video-mix/proxies/delete", {
+      method: "POST",
+      body: JSON.stringify({ work_dir: workDir, asset_id: assetId }),
+    }));
+    setLocalizedLoadState("load_state_loaded", "status-completed");
+  } catch (error) {
+    state.loadState = null;
+    setLoadState(error.message, "status-failed");
+  }
+}
+
 async function createProjectMaterialsEpisode() {
   const workDir = activeWorkDir();
   if (!workDir) {
@@ -4273,6 +4608,10 @@ function bindOpenLocalPathButtons(root = document) {
   });
 }
 
+function bindOpenLocalFileButtons(root = document) {
+  bindSelectedMediaActionButtons(root);
+}
+
 function bindActions() {
   bindButtonAction("#vm-lang-ru", "lang ru", async () => setLocale("ru"));
   bindButtonAction("#vm-lang-en", "lang en", async () => setLocale("en"));
@@ -4281,6 +4620,7 @@ function bindActions() {
   bindButtonAction("#vm-menu-open-take-editor", "workspace take editor", async () => setActiveWorkspace("take-editor"));
   bindButtonAction("#vm-menu-open-materials", "workspace materials", async () => setActiveWorkspace("materials"));
   bindButtonAction("#vm-menu-open-timeline", "workspace timeline", async () => setActiveWorkspace("timeline"));
+  bindButtonAction("#vm-menu-open-video-proxies", "workspace video proxies", async () => setActiveWorkspace("video-proxies"));
   bindButtonAction("#vm-menu-open-music", "workspace music", async () => setActiveWorkspace("music"));
   bindButtonAction("#vm-menu-open-opening-closing", "workspace opening closing", async () => setActiveWorkspace("opening-closing"));
   bindButtonAction("#vm-menu-open-results", "workspace results", async () => setActiveWorkspace("results"));
@@ -4326,6 +4666,10 @@ function bindActions() {
   bindButtonAction("#vm-source-scan-btn", "scan source", scanSourceMaterials, { activityKey: "load_state_scanning_source" });
   bindButtonAction("#vm-source-plan-btn", "plan source", planSourceMaterials, { activityKey: "load_state_planning_source" });
   bindButtonAction("#vm-reset-btn", "reset project workspace", async () => resetProjectWorkspace());
+  bindButtonAction("#vm-video-proxies-create-missing-btn", "video proxies create missing", createMissingVideoProxies);
+  bindButtonAction("#vm-video-proxies-rebuild-stale-btn", "video proxies rebuild stale", rebuildStaleVideoProxies);
+  bindButtonAction("#vm-video-proxies-retry-failed-btn", "video proxies retry failed", retryFailedVideoProxies);
+  bindButtonAction("#vm-video-proxies-cleanup-btn", "video proxies cleanup partials", cleanupPartialVideoProxies);
   bindButtonAction("#vm-quickmix-music-browse-btn", "browse music", async () =>
     browseQuickMixFile("#vm-quickmix-music-input", "Select music track", "load_state_browsing_music", "load_state_music_browse_canceled"));
   bindButtonAction("#vm-quickmix-opening-browse-btn", "browse opening", async () =>
