@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import Protocol
@@ -51,22 +52,98 @@ class FixedIntervalSegmenter:
 class PySceneDetectSegmenter:
     name = SegmenterName.PYSCENEDETECT
 
-    def __init__(self, scenedetect_path: str = "scenedetect") -> None:
+    def __init__(
+        self,
+        scenedetect_path: str = "scenedetect",
+        *,
+        ffmpeg_path: str = "ffmpeg",
+        scene_threshold: float = 0.30,
+        min_scene_ms: int = 1200,
+        max_clips_per_asset: int = 18,
+    ) -> None:
         self.scenedetect_path = scenedetect_path
+        self.ffmpeg_path = ffmpeg_path
+        self.scene_threshold = scene_threshold
+        self.min_scene_ms = min_scene_ms
+        self.max_clips_per_asset = max_clips_per_asset
 
     def is_available(self) -> bool:
         result = subprocess.run(
-            [self.scenedetect_path, "--help"],
+            [self.ffmpeg_path, "-version"],
             capture_output=True,
             text=True,
             check=False,
         )
         return result.returncode == 0
 
+    def _detect_scene_cut_points_ms(self, asset: Asset) -> list[int]:
+        if asset.media_type != MediaType.VIDEO or not asset.duration_ms or asset.duration_ms < self.min_scene_ms:
+            return []
+        command = [
+            self.ffmpeg_path,
+            "-hide_banner",
+            "-i",
+            str(asset.path),
+            "-filter:v",
+            f"select='gt(scene,{self.scene_threshold})',metadata=print:file=-",
+            "-an",
+            "-f",
+            "null",
+            "-",
+        ]
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        if completed.returncode != 0:
+            return []
+        points: list[int] = []
+        for match in re.finditer(r"pts_time:([0-9]+(?:\.[0-9]+)?)", completed.stdout):
+            pts_ms = int(round(float(match.group(1)) * 1000))
+            if pts_ms > 0:
+                points.append(pts_ms)
+        deduped: list[int] = []
+        for point in sorted(points):
+            if not deduped or point - deduped[-1] >= self.min_scene_ms:
+                deduped.append(point)
+        return deduped
+
     def plan(self, asset: Asset, output_dir: Path) -> list[Clip]:
         if not self.is_available():
             return []
-        return []
+        cut_points_ms = self._detect_scene_cut_points_ms(asset)
+        if not cut_points_ms:
+            return []
+        output_dir.mkdir(parents=True, exist_ok=True)
+        clips: list[Clip] = []
+        boundaries = [0, *cut_points_ms, int(asset.duration_ms or 0)]
+        for start_ms, end_ms in zip(boundaries, boundaries[1:], strict=False):
+            if len(clips) >= self.max_clips_per_asset:
+                break
+            if end_ms - start_ms < self.min_scene_ms:
+                continue
+            clip_id = stable_id("clip", f"{asset.asset_id}:{self.name.value}:{start_ms}:{end_ms}")
+            clips.append(
+                Clip(
+                    clip_id=clip_id,
+                    project_id=asset.project_id,
+                    asset_id=asset.asset_id,
+                    source_path=asset.path,
+                    source_start_ms=start_ms,
+                    source_end_ms=end_ms,
+                    segmenter=self.name,
+                    working_path=output_dir / f"{clip_id}.mp4",
+                    metadata={
+                        "scene_threshold": self.scene_threshold,
+                        "scene_detected": True,
+                    },
+                )
+            )
+        return clips
 
 
 def plan_asset_segments(asset: Asset, output_dir: Path, segmenters: list[Segmenter]) -> list[Clip]:

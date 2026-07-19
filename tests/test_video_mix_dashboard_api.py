@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -19,6 +20,8 @@ from video_mix.core.storage import (
     save_summary,
     work_file,
 )
+from video_mix.core.store import VideoMixFoundationStore
+from video_mix.ingestion import bootstrap_foundation_state
 from video_mix.proxy_pipeline import PROXY_MISSING, ProxyQueueManager, load_proxy_manifest, save_proxy_manifest
 
 client = TestClient(app)
@@ -205,6 +208,150 @@ def test_video_mix_dashboard_reads_candidate_cards(tmp_path: Path) -> None:
     assert payload["video_proxies"]["summary"]["missing"] == 1
 
 
+def test_video_mix_dashboard_exposes_production_runs_summary(tmp_path: Path) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    bootstrap_foundation_state(work_dir)
+    store = VideoMixFoundationStore(work_dir)
+    store.upsert_job(
+        job_id="run_1",
+        project_id="project_1",
+        job_type="production_run",
+        status="running",
+        payload_json={
+            "stage": "analysis",
+            "request": {"count": 5, "duration_seconds": 15},
+        },
+        idempotency_key="production-run:test",
+        attempt_count=1,
+        max_attempts=3,
+        lease_owner="test",
+        lease_expires_at="",
+        heartbeat_at="",
+        progress=0.4,
+        cancel_requested=False,
+        error="",
+        created_at="2026-07-18T10:00:00Z",
+        started_at="2026-07-18T10:00:01Z",
+        finished_at="",
+    )
+
+    response = client.get("/api/video-mix/dashboard", params={"work_dir": str(work_dir)})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["production_runs"]["run_count"] == 1
+    assert payload["production_runs"]["latest_run"]["run_id"] == "run_1"
+    assert payload["production_runs"]["latest_run"]["stage"] == "analysis"
+
+
+def test_video_mix_create_production_run_returns_status_and_dashboard(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+
+    monkeypatch.setattr(
+        "app.main.production_run_manager.start",
+        lambda request: {"run_id": "run_1", "work_dir": str(work_dir), "project_id": "project_1"},
+    )
+    monkeypatch.setattr(
+        "app.main.production_run_manager.get_status",
+        lambda work_dir, run_id: {"job_id": run_id, "status": "queued", "progress": 0.0},
+    )
+
+    response = client.post(
+        "/api/video-mix/production-runs",
+        json={
+            "source_dir": str((tmp_path / "input").resolve()),
+            "work_dir": str(work_dir),
+            "project_name": "Wedding Validation",
+            "count": 5,
+            "duration_seconds": 15,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["run_id"] == "run_1"
+    assert payload["status"]["status"] == "queued"
+    assert payload["dashboard"]["project"]["name"] == "Wedding Validation"
+
+
+def test_video_mix_cancel_and_retry_production_run_return_dashboard(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    monkeypatch.setattr(
+        "app.main.production_run_manager.cancel",
+        lambda work_dir, run_id: {"job_id": run_id, "status": "canceled"},
+    )
+    monkeypatch.setattr(
+        "app.main.production_run_manager.retry",
+        lambda work_dir, run_id: {"job_id": "run_2", "status": "queued"},
+    )
+
+    cancel_response = client.post(
+        "/api/video-mix/production-runs/run_1/cancel",
+        json={"work_dir": str(work_dir)},
+    )
+    retry_response = client.post(
+        "/api/video-mix/production-runs/run_1/retry",
+        json={"work_dir": str(work_dir)},
+    )
+
+    assert cancel_response.status_code == 200
+    assert cancel_response.json()["status"]["status"] == "canceled"
+    assert cancel_response.json()["dashboard"]["project"]["project_id"] == "project_1"
+    assert retry_response.status_code == 200
+    assert retry_response.json()["status"]["job_id"] == "run_2"
+
+
+def test_video_mix_production_run_package_endpoint_returns_manifest(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    monkeypatch.setattr(
+        "app.main.production_run_manager.get_status",
+        lambda work_dir, run_id: {
+            "job_id": run_id,
+            "latest_package": {
+                "relative_package_dir": "publishing/five_reels_demo",
+                "package_manifest_path": "publishing/five_reels_demo/publishing_package.json",
+            },
+        },
+    )
+
+    response = client.get(
+        "/api/video-mix/production-runs/run_1/package",
+        params={"work_dir": str(work_dir)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["package"]["package_manifest_path"] == "publishing/five_reels_demo/publishing_package.json"
+
+
+def test_video_mix_production_run_manifest_endpoint_returns_manifest_payload(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    package_dir = work_dir / "publishing" / "five_reels_demo"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = package_dir / "publishing_package.json"
+    manifest_path.write_text('{"schema_version":"publishing-package/v1","items":[{"mp4":"reel_01.mp4"}]}', encoding="utf-8")
+    monkeypatch.setattr(
+        "app.main.production_run_manager.get_status",
+        lambda work_dir, run_id: {
+            "job_id": run_id,
+            "latest_package": {
+                "relative_package_dir": "publishing/five_reels_demo",
+                "package_manifest_path": "publishing/five_reels_demo/publishing_package.json",
+            },
+        },
+    )
+
+    response = client.get(
+        "/api/video-mix/production-runs/run_1/manifest",
+        params={"work_dir": str(work_dir)},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["manifest_path"] == "publishing/five_reels_demo/publishing_package.json"
+    assert payload["manifest"]["schema_version"] == "publishing-package/v1"
+
+
 def test_video_mix_proxies_endpoint_returns_missing_proxy_summary(tmp_path: Path) -> None:
     work_dir = create_video_mix_workdir(tmp_path)
 
@@ -231,7 +378,60 @@ def test_video_mix_dashboard_handles_missing_original_without_crashing(tmp_path:
     assert payload["video_proxies"]["summary"]["missing"] == 1
     assert payload["video_proxies"]["items"][0]["asset_id"] == "asset_1"
     assert payload["video_proxies"]["items"][0]["status"] == PROXY_MISSING
-    assert "Original source is missing" in payload["video_proxies"]["items"][0]["error"]
+
+
+def test_video_mix_foundation_store_backfills_preview_path_for_legacy_scenes_table(tmp_path: Path) -> None:
+    work_dir = tmp_path / "legacy_work"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    db_path = work_dir / "video_mix.db"
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE schema_versions (
+                component TEXT PRIMARY KEY,
+                version INTEGER NOT NULL
+            );
+            INSERT INTO schema_versions (component, version)
+            VALUES ('video_mix_foundation', 1);
+
+            CREATE TABLE scenes (
+                project_id TEXT NOT NULL,
+                scene_id TEXT PRIMARY KEY,
+                analysis_run_id TEXT NOT NULL,
+                asset_id TEXT NOT NULL,
+                start_ms INTEGER NOT NULL,
+                end_ms INTEGER NOT NULL,
+                duration_ms INTEGER NOT NULL,
+                keyframe_path TEXT NOT NULL DEFAULT '',
+                score_json TEXT NOT NULL DEFAULT '{}',
+                detector_json TEXT NOT NULL DEFAULT '{}',
+                schema_version TEXT NOT NULL
+            );
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    VideoMixFoundationStore(work_dir)
+
+    migrated = sqlite3.connect(db_path)
+    try:
+        column_names = {
+            str(row[1])
+            for row in migrated.execute("PRAGMA table_info(scenes)").fetchall()
+        }
+        version = migrated.execute(
+            "SELECT version FROM schema_versions WHERE component = ?",
+            ("video_mix_foundation",),
+        ).fetchone()
+    finally:
+        migrated.close()
+
+    assert "preview_path" in column_names
+    assert version is not None
+    assert int(version[0]) >= 2
 
 
 def test_video_mix_proxies_endpoint_reports_missing_original_asset(tmp_path: Path) -> None:

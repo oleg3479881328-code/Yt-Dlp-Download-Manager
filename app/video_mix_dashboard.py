@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -25,6 +26,7 @@ from video_mix.core.storage import (
     work_file,
     write_json,
 )
+from video_mix.core.store import VideoMixFoundationStore
 from video_mix.proxy_pipeline import (
     PROXY_FAILED,
     PROXY_STALE,
@@ -900,6 +902,58 @@ def build_video_proxies_payload(raw_work_dir: str, *, ffprobe_path: str = "ffpro
     return proxy_queue_manager.dashboard_payload(work_dir, ffprobe_path=ffprobe_path)
 
 
+def _decode_dashboard_json(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
+def build_production_runs_payload(raw_work_dir: str) -> dict[str, Any]:
+    work_dir = resolve_work_dir(raw_work_dir)
+    store = VideoMixFoundationStore(work_dir)
+    rows = store.fetch_all(
+        "SELECT * FROM jobs WHERE job_type = 'production_run' ORDER BY created_at DESC, job_id DESC LIMIT 20"
+    )
+    runs: list[dict[str, Any]] = []
+    latest_package = None
+    for row in rows:
+        payload = _decode_dashboard_json(row.get("payload_json")) or {}
+        package = payload.get("package") if isinstance(payload, dict) else None
+        if latest_package is None and isinstance(package, dict):
+            latest_package = package
+        runs.append(
+            {
+                "run_id": str(row.get("job_id") or ""),
+                "status": str(row.get("status") or ""),
+                "progress": float(row.get("progress") or 0.0),
+                "attempt_count": int(row.get("attempt_count") or 0),
+                "max_attempts": int(row.get("max_attempts") or 0),
+                "cancel_requested": bool(row.get("cancel_requested")),
+                "error": str(row.get("error") or ""),
+                "created_at": str(row.get("created_at") or ""),
+                "started_at": str(row.get("started_at") or ""),
+                "finished_at": str(row.get("finished_at") or ""),
+                "stage": str(payload.get("stage") or ""),
+                "analysis_run_id": str(payload.get("analysis_run_id") or ""),
+                "generation_id": str(payload.get("generation_id") or ""),
+                "plan_path": str(payload.get("plan_path") or ""),
+                "requested_count": int((payload.get("request") or {}).get("count") or 0),
+                "requested_duration_seconds": float((payload.get("request") or {}).get("duration_seconds") or 0),
+                "package": package,
+                "quality_reports": payload.get("quality_reports") or [],
+            }
+        )
+    return {
+        "run_count": len(runs),
+        "latest_run": runs[0] if runs else None,
+        "latest_package": latest_package,
+        "runs": runs,
+    }
+
+
 def create_missing_video_proxies(raw_work_dir: str, *, ffmpeg_path: str = "ffmpeg", ffprobe_path: str = "ffprobe") -> dict[str, Any]:
     work_dir = resolve_work_dir(raw_work_dir)
     return proxy_queue_manager.enqueue_missing_or_stale(work_dir, ffmpeg_path=ffmpeg_path, ffprobe_path=ffprobe_path)
@@ -1141,6 +1195,7 @@ def build_dashboard_payload(raw_work_dir: str) -> dict[str, Any]:
         "zip_import": zip_import,
         "project_files": build_project_files_payload(str(work_dir)),
         "video_proxies": build_video_proxies_payload(str(work_dir)),
+        "production_runs": build_production_runs_payload(str(work_dir)),
         "candidates": [
             _build_candidate_card(work_dir, candidate, clip_lookup, asset_lookup)
             for candidate in candidates
@@ -1242,10 +1297,12 @@ def export_approved_candidates(raw_work_dir: str, ffmpeg_path: str = "ffmpeg") -
 
 def open_dashboard_target(raw_work_dir: str, target: str) -> dict[str, Any]:
     work_dir = resolve_work_dir(raw_work_dir)
+    latest_package_dir = str(build_production_runs_payload(str(work_dir)).get("latest_package", {}).get("relative_package_dir", "") or "")
     targets = {
         "work_dir": work_dir,
         "review": work_dir / "reports" / "review.html",
         "exports": work_dir / "exports",
+        "publishing": (work_dir / latest_package_dir).resolve() if latest_package_dir else work_dir / "publishing",
     }
     path = targets.get(target)
     if path is None:
