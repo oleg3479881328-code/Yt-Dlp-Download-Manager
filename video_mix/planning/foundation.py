@@ -58,6 +58,7 @@ def build_foundation_edit_plans(
     all_candidates = manifest.get("outputs", [])
     selected_candidates = all_candidates[:requested_output_count]
     created_at = _utc_now()
+    scene_lookup = {str(scene.get("scene_id") or ""): scene for scene in scene_rows}
 
     stored_plans: list[dict[str, Any]] = []
     for raw_output in selected_candidates:
@@ -89,6 +90,10 @@ def build_foundation_edit_plans(
                     "output_position": step_index,
                     "source_group": str(segment.get("folder_id") or ""),
                     "content_identity": str(segment.get("content_identity") or ""),
+                    "keyframe_path": str((scene_lookup.get(str(segment.get("source_id") or "")) or {}).get("keyframe_path") or ""),
+                    "preview_path": str((scene_lookup.get(str(segment.get("source_id") or "")) or {}).get("preview_path") or ""),
+                    "score_json": dict((scene_lookup.get(str(segment.get("source_id") or "")) or {}).get("score_json") or {}),
+                    "detector_json": dict((scene_lookup.get(str(segment.get("source_id") or "")) or {}).get("detector_json") or {}),
                 },
             ).model_dump()
             items.append(item)

@@ -700,6 +700,33 @@ async def get_video_mix_production_run_package(run_id: str, work_dir: str) -> di
     return {"ok": True, "package": package}
 
 
+@app.get("/api/video-mix/production-runs/{run_id}/manifest")
+async def get_video_mix_production_run_manifest(run_id: str, work_dir: str) -> dict[str, Any]:
+    try:
+        status = production_run_manager.get_status(work_dir, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    package = status.get("latest_package")
+    if not package:
+        raise HTTPException(status_code=404, detail=f"Publishing package not found yet for production run: {run_id}")
+    relative_manifest_path = str(package.get("package_manifest_path") or "")
+    if not relative_manifest_path:
+        raise HTTPException(status_code=404, detail=f"Publishing manifest path not found for production run: {run_id}")
+    resolved_work_dir = Path(work_dir).expanduser().resolve()
+    manifest_path = (resolved_work_dir / relative_manifest_path).resolve()
+    try:
+        manifest_path.relative_to(resolved_work_dir)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Publishing manifest path escapes work_dir") from exc
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail=f"Publishing manifest does not exist: {relative_manifest_path}")
+    return {
+        "ok": True,
+        "manifest_path": relative_manifest_path.replace("\\", "/"),
+        "manifest": json.loads(manifest_path.read_text(encoding="utf-8")),
+    }
+
+
 @app.post("/api/video-mix/candidates/bulk/approve")
 async def approve_video_mix_candidates_bulk(payload: VideoMixBulkRequest) -> dict[str, Any]:
     dashboard = bulk_update_candidate_status(payload.work_dir, payload.candidate_ids, CandidateStatus.APPROVED, payload.note)

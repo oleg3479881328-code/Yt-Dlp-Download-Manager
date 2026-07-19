@@ -15,6 +15,13 @@ from video_mix.core.storage import load_project
 from video_mix.core.store import VideoMixFoundationStore
 from video_mix.ingestion import bootstrap_foundation_state
 from video_mix.planning import build_foundation_edit_plans
+from video_mix.proxy_pipeline import (
+    PROXY_FAILED,
+    PROXY_MISSING,
+    PROXY_READY,
+    PROXY_STALE,
+    proxy_queue_manager,
+)
 from video_mix.publishing import build_publishing_package
 from video_mix.quality import build_quality_report
 from video_mix.rendering import render_foundation_outputs
@@ -113,7 +120,11 @@ class ProductionRunManager:
             payload = leased.get("payload_json") or {}
             try:
                 self._execute_job(work_dir, job_id, payload)
-                queue.complete(job_id)
+                current = self._job_row(store, job_id)
+                if str(current.get("status") or "") == "canceled" or bool(current.get("cancel_requested")):
+                    self._mark_canceled(store, job_id)
+                else:
+                    queue.complete(job_id)
             except Exception as exc:  # noqa: BLE001
                 queue.fail(job_id, error=str(exc))
 
@@ -150,6 +161,42 @@ class ProductionRunManager:
         row["progress"] = progress
         store.upsert_job(**row)
 
+    def _prepare_analysis_proxies(self, work_dir: Path, request: ProductionRunRequest, store: VideoMixFoundationStore, run_id: str) -> dict[str, Any]:
+        self._heartbeat(store, run_id, 0.10, "video-proxies")
+        proxy_queue_manager.enqueue_missing_or_stale(
+            work_dir,
+            ffmpeg_path=request.ffmpeg,
+            ffprobe_path=request.ffprobe,
+            only_statuses={PROXY_MISSING, PROXY_STALE, PROXY_FAILED},
+        )
+        last_payload: dict[str, Any] = {}
+        while True:
+            if self._is_cancelled(store, run_id):
+                active_jobs = ((last_payload.get("queue") or {}).get("active_jobs") or [])
+                for job in active_jobs:
+                    asset_id = str(job.get("asset_id") or "")
+                    if asset_id:
+                        try:
+                            proxy_queue_manager.cancel(work_dir, asset_id)
+                        except ValueError:
+                            continue
+                self._mark_canceled(store, run_id)
+                return last_payload
+            last_payload = proxy_queue_manager.dashboard_payload(work_dir, ffprobe_path=request.ffprobe)
+            active_jobs = ((last_payload.get("queue") or {}).get("active_jobs") or [])
+            if not active_jobs:
+                break
+            time.sleep(0.2)
+        non_ready = [
+            item
+            for item in (last_payload.get("items") or [])
+            if str(item.get("status") or "") != PROXY_READY
+        ]
+        if non_ready:
+            bad_assets = ", ".join(str(item.get("asset_id") or "") for item in non_ready)
+            raise RuntimeError(f"Video proxies are not ready for analysis: {bad_assets}")
+        return last_payload
+
     def _execute_job(self, work_dir: Path, run_id: str, payload: dict[str, Any]) -> None:
         if isinstance(payload, str):
             payload = json.loads(payload)
@@ -170,12 +217,26 @@ class ProductionRunManager:
             event_type="project.registered",
             payload=bootstrap_summary,
         )
+        proxy_payload = self._prepare_analysis_proxies(work_dir, request, store, run_id)
+        if self._is_cancelled(store, run_id):
+            self._mark_canceled(store, run_id)
+            return
+        append_event(
+            store,
+            project_id=project.project_id,
+            entity_type="proxy_manifest",
+            entity_id=project.project_id,
+            event_type="video_proxies.ready",
+            payload={"summary": proxy_payload.get("summary", {}), "queue": proxy_payload.get("queue", {})},
+        )
         self._heartbeat(store, run_id, 0.15, "analysis")
         analysis = analyze_project_scenes(
             work_dir,
             ffprobe_path=request.ffprobe,
+            ffmpeg_path=request.ffmpeg,
             min_scene_ms=int(request.episode_duration_min_seconds * 1000),
             fixed_clip_ms=int(((request.episode_duration_min_seconds + request.episode_duration_max_seconds) / 2) * 1000),
+            prefer_pyscenedetect=True,
         )
         append_event(
             store,
@@ -220,7 +281,11 @@ class ProductionRunManager:
             generation_id=planning["generation_id"],
             selected_plans=planning["selected_plans"],
             ffmpeg_path=request.ffmpeg,
+            ffprobe_path=request.ffprobe,
             music_paths=request.music_paths or [],
+            opening_media_paths=request.opening_media_paths or [],
+            closing_media_paths=request.closing_media_paths or [],
+            use_closing_duration=request.use_closing_duration,
         )
         if self._is_cancelled(store, run_id):
             self._mark_canceled(store, run_id)
@@ -234,6 +299,7 @@ class ProductionRunManager:
                 plan=row["plan"],
                 output_path=work_dir / row["output_path"],
                 ffprobe_path=request.ffprobe,
+                ffmpeg_path=request.ffmpeg,
             )
             row["quality_report"] = report
             qc_reports.append(report)
@@ -318,6 +384,23 @@ class ProductionRunManager:
         )
         self._ensure_worker(resolved_work_dir)
         return self.get_status(str(resolved_work_dir), retried_run_id)
+
+    def wait_for_terminal_status(
+        self,
+        work_dir: str,
+        run_id: str,
+        *,
+        poll_interval_seconds: float = 0.5,
+        timeout_seconds: float = 600.0,
+    ) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            status = self.get_status(work_dir, run_id)
+            if str(status.get("status") or "") in {"completed", "failed", "canceled", "cancelled"}:
+                return status
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for production run {run_id} in {work_dir}")
+            time.sleep(poll_interval_seconds)
 
 
 production_run_manager = ProductionRunManager()

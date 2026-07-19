@@ -2938,7 +2938,7 @@ function renderProductionRunSummary() {
       <button class="ghost-btn" type="button" data-production-run-retry="${escapeAttr(latestRun.run_id || "")}">${escapeHtml(t("production_run_retry"))}</button>
       <button class="ghost-btn" type="button" data-production-run-cancel="${escapeAttr(latestRun.run_id || "")}" ${["queued", "retry_wait", "running"].includes(String(latestRun.status || "")) ? "" : "disabled"}>${escapeHtml(t("production_run_cancel"))}</button>
       <button class="ghost-btn" type="button" data-production-run-open-package ${packagePath ? "" : "disabled"}>${escapeHtml(t("production_run_open_package"))}</button>
-      <button class="ghost-btn" type="button" data-production-run-open-manifest="${escapeAttr(packagePath ? `${packagePath}/publishing_package.json` : "")}" ${packagePath ? "" : "disabled"}>${escapeHtml(t("production_run_open_manifest"))}</button>
+      <button class="ghost-btn" type="button" data-production-run-open-manifest="${escapeAttr(latestRun.run_id || "")}" ${packagePath ? "" : "disabled"}>${escapeHtml(t("production_run_open_manifest"))}</button>
     </div>
   `;
   target.querySelectorAll("[data-production-run-retry]").forEach((button) => {
@@ -2958,9 +2958,14 @@ function renderProductionRunSummary() {
   });
   target.querySelectorAll("[data-production-run-open-manifest]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const relativePath = button.dataset.productionRunOpenManifest || "";
-      if (!relativePath || !activeWorkDir()) return;
-      window.open(fileUrl(relativePath), "_blank", "noreferrer");
+      const runId = button.dataset.productionRunOpenManifest || "";
+      if (!runId || !activeWorkDir()) return;
+      const payload = await fetchJson(`/api/video-mix/production-runs/${encodeURIComponent(runId)}/manifest?work_dir=${encodeURIComponent(activeWorkDir())}`);
+      const popup = window.open("", "_blank", "noreferrer");
+      if (!popup) return;
+      const content = escapeHtml(JSON.stringify(payload.manifest || {}, null, 2));
+      popup.document.write(`<pre style="white-space:pre-wrap;font:13px/1.4 Consolas,monospace;padding:16px;">${content}</pre>`);
+      popup.document.close();
     });
   });
 }

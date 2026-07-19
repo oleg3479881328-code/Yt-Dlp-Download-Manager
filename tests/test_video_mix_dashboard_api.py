@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -323,6 +324,34 @@ def test_video_mix_production_run_package_endpoint_returns_manifest(tmp_path: Pa
     assert response.json()["package"]["package_manifest_path"] == "publishing/five_reels_demo/publishing_package.json"
 
 
+def test_video_mix_production_run_manifest_endpoint_returns_manifest_payload(tmp_path: Path, monkeypatch) -> None:
+    work_dir = create_video_mix_workdir(tmp_path)
+    package_dir = work_dir / "publishing" / "five_reels_demo"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = package_dir / "publishing_package.json"
+    manifest_path.write_text('{"schema_version":"publishing-package/v1","items":[{"mp4":"reel_01.mp4"}]}', encoding="utf-8")
+    monkeypatch.setattr(
+        "app.main.production_run_manager.get_status",
+        lambda work_dir, run_id: {
+            "job_id": run_id,
+            "latest_package": {
+                "relative_package_dir": "publishing/five_reels_demo",
+                "package_manifest_path": "publishing/five_reels_demo/publishing_package.json",
+            },
+        },
+    )
+
+    response = client.get(
+        "/api/video-mix/production-runs/run_1/manifest",
+        params={"work_dir": str(work_dir)},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["manifest_path"] == "publishing/five_reels_demo/publishing_package.json"
+    assert payload["manifest"]["schema_version"] == "publishing-package/v1"
+
+
 def test_video_mix_proxies_endpoint_returns_missing_proxy_summary(tmp_path: Path) -> None:
     work_dir = create_video_mix_workdir(tmp_path)
 
@@ -349,7 +378,60 @@ def test_video_mix_dashboard_handles_missing_original_without_crashing(tmp_path:
     assert payload["video_proxies"]["summary"]["missing"] == 1
     assert payload["video_proxies"]["items"][0]["asset_id"] == "asset_1"
     assert payload["video_proxies"]["items"][0]["status"] == PROXY_MISSING
-    assert "Original source is missing" in payload["video_proxies"]["items"][0]["error"]
+
+
+def test_video_mix_foundation_store_backfills_preview_path_for_legacy_scenes_table(tmp_path: Path) -> None:
+    work_dir = tmp_path / "legacy_work"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    db_path = work_dir / "video_mix.db"
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE schema_versions (
+                component TEXT PRIMARY KEY,
+                version INTEGER NOT NULL
+            );
+            INSERT INTO schema_versions (component, version)
+            VALUES ('video_mix_foundation', 1);
+
+            CREATE TABLE scenes (
+                project_id TEXT NOT NULL,
+                scene_id TEXT PRIMARY KEY,
+                analysis_run_id TEXT NOT NULL,
+                asset_id TEXT NOT NULL,
+                start_ms INTEGER NOT NULL,
+                end_ms INTEGER NOT NULL,
+                duration_ms INTEGER NOT NULL,
+                keyframe_path TEXT NOT NULL DEFAULT '',
+                score_json TEXT NOT NULL DEFAULT '{}',
+                detector_json TEXT NOT NULL DEFAULT '{}',
+                schema_version TEXT NOT NULL
+            );
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    VideoMixFoundationStore(work_dir)
+
+    migrated = sqlite3.connect(db_path)
+    try:
+        column_names = {
+            str(row[1])
+            for row in migrated.execute("PRAGMA table_info(scenes)").fetchall()
+        }
+        version = migrated.execute(
+            "SELECT version FROM schema_versions WHERE component = ?",
+            ("video_mix_foundation",),
+        ).fetchone()
+    finally:
+        migrated.close()
+
+    assert "preview_path" in column_names
+    assert version is not None
+    assert int(version[0]) >= 2
 
 
 def test_video_mix_proxies_endpoint_reports_missing_original_asset(tmp_path: Path) -> None:

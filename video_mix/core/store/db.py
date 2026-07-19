@@ -212,6 +212,24 @@ class VideoMixFoundationStore:
                 );
                 """
             )
+            self._migrate_schema(connection)
+
+    def _migrate_schema(self, connection: sqlite3.Connection) -> None:
+        scenes_columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(scenes)").fetchall()
+        }
+        if "preview_path" not in scenes_columns:
+            connection.execute(
+                "ALTER TABLE scenes ADD COLUMN preview_path TEXT NOT NULL DEFAULT ''"
+            )
+        connection.execute(
+            """
+            INSERT INTO schema_versions (component, version)
+            VALUES ('video_mix_foundation', 2)
+            ON CONFLICT(component) DO UPDATE SET version = excluded.version
+            """
+        )
 
     def _execute(self, query: str, params: tuple[Any, ...]) -> None:
         with self._lock, self.connect() as connection:

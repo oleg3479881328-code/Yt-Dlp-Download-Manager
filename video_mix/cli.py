@@ -133,6 +133,16 @@ def run_production_run(args: argparse.Namespace) -> None:
     print(f"run_id={result['run_id']}")
     print(f"project_id={result['project_id']}")
     print(f"work_dir={result['work_dir']}")
+    final_status = production_run_manager.wait_for_terminal_status(
+        result["work_dir"],
+        result["run_id"],
+        poll_interval_seconds=args.poll_interval_seconds,
+        timeout_seconds=args.timeout_seconds,
+    )
+    status_value = str(final_status.get("status") or "")
+    print(f"final_status={status_value}")
+    if status_value in {"failed", "canceled", "cancelled"}:
+        raise SystemExit(1)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -190,6 +200,8 @@ def build_parser() -> argparse.ArgumentParser:
     production_run.add_argument("--opening-media-paths", nargs="*", default=[])
     production_run.add_argument("--closing-media-paths", nargs="*", default=[])
     production_run.add_argument("--use-closing-duration", action="store_true")
+    production_run.add_argument("--poll-interval-seconds", type=float, default=0.5)
+    production_run.add_argument("--timeout-seconds", type=float, default=600.0)
     production_run.set_defaults(func=run_production_run)
 
     return parser
