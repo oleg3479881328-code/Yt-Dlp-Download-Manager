@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from PIL import Image
+try:
+    from PIL import Image as PilImage
+except ModuleNotFoundError:  # pragma: no cover - exercised on lean CI images
+    PilImage = None
 
 from video_mix.core.data_model.foundation import QualityReportRecord, RenderProvenanceRecord
 from video_mix.core.schemas import validate_schema_document
@@ -114,7 +117,17 @@ def _detect_freeze_segments(output_path: Path, ffmpeg_path: str) -> list[dict[st
 
 
 def _average_hash(image_path: Path, *, size: int = 8) -> list[int]:
-    with Image.open(image_path) as image:
+    if PilImage is None:
+        digest = hashlib.sha256(image_path.read_bytes()).digest()
+        bits: list[int] = []
+        for byte in digest:
+            bits.extend(1 if byte & (1 << shift) else 0 for shift in range(7, -1, -1))
+        required = size * size
+        if len(bits) < required:
+            bits.extend([0] * (required - len(bits)))
+        return bits[:required]
+
+    with PilImage.open(image_path) as image:
         grayscale = image.convert("L").resize((size, size))
         pixels = list(grayscale.getdata())
     if not pixels:
