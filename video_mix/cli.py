@@ -15,6 +15,7 @@ from .core.storage import (
     save_candidates,
     save_summary,
 )
+from .foundation_runtime import ProductionRunRequest, production_run_manager
 from .service import plan_source_materials
 
 
@@ -110,6 +111,30 @@ def run_review(args: argparse.Namespace) -> None:
         print(f"thumbnail_warnings={len(thumbnail_warnings)}")
 
 
+def run_production_run(args: argparse.Namespace) -> None:
+    request = ProductionRunRequest(
+        source_dir=args.source_dir,
+        work_dir=args.work_dir or "",
+        project_name=args.project_name or "",
+        count=args.count,
+        duration_seconds=args.duration_seconds,
+        episode_duration_min_seconds=args.episode_duration_min_seconds,
+        episode_duration_max_seconds=args.episode_duration_max_seconds,
+        ffmpeg=args.ffmpeg,
+        ffprobe=args.ffprobe,
+        music_paths=args.music_paths or [],
+        use_music_duration=args.use_music_duration,
+        opening_media_paths=args.opening_media_paths or [],
+        closing_media_paths=args.closing_media_paths or [],
+        use_closing_duration=args.use_closing_duration,
+        pack=args.pack,
+    )
+    result = production_run_manager.start(request)
+    print(f"run_id={result['run_id']}")
+    print(f"project_id={result['project_id']}")
+    print(f"work_dir={result['work_dir']}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="VIDEO MIX Stage 1 CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -148,6 +173,24 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("work_dir")
     export.add_argument("--ffmpeg", default="ffmpeg")
     export.set_defaults(func=run_export)
+
+    production_run = sub.add_parser("production-run", help="Run VIDEO MIX foundation production slice")
+    production_run.add_argument("source_dir")
+    production_run.add_argument("--work-dir", default="")
+    production_run.add_argument("--project-name", default="")
+    production_run.add_argument("--pack", default="wedding")
+    production_run.add_argument("--count", type=int, default=5)
+    production_run.add_argument("--duration-seconds", type=float, default=15.0)
+    production_run.add_argument("--episode-duration-min-seconds", type=float, default=1.5)
+    production_run.add_argument("--episode-duration-max-seconds", type=float, default=2.0)
+    production_run.add_argument("--ffmpeg", default="ffmpeg")
+    production_run.add_argument("--ffprobe", default="ffprobe")
+    production_run.add_argument("--music-paths", nargs="*", default=[])
+    production_run.add_argument("--use-music-duration", action="store_true")
+    production_run.add_argument("--opening-media-paths", nargs="*", default=[])
+    production_run.add_argument("--closing-media-paths", nargs="*", default=[])
+    production_run.add_argument("--use-closing-duration", action="store_true")
+    production_run.set_defaults(func=run_production_run)
 
     return parser
 

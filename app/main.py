@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from video_mix.core.asset_scan import detect_media_type
 from video_mix.core.models import CandidateStatus
 from video_mix.core.zip_intake import import_video_mix_zip, stage_upload_file
+from video_mix.foundation_runtime import ProductionRunRequest, production_run_manager
 from video_mix.service import (
     estimate_quick_mix_capacity,
     plan_source_materials,
@@ -270,9 +271,35 @@ class VideoMixProxyAssetRequest(BaseModel):
     ffprobe: str = "ffprobe"
 
 
+class VideoMixProductionRunRequest(BaseModel):
+    source_dir: str
+    work_dir: str = ""
+    project_name: str = ""
+    count: int = Field(default=5, gt=0)
+    duration_seconds: float = Field(default=15.0, gt=0)
+    episode_duration_min_seconds: float = Field(default=1.5, gt=0)
+    episode_duration_max_seconds: float = Field(default=2.0, gt=0)
+    ffmpeg: str = "ffmpeg"
+    ffprobe: str = "ffprobe"
+    music_path: str = ""
+    music_paths: list[str] = Field(default_factory=list)
+    use_music_duration: bool = False
+    opening_media_path: str = ""
+    opening_media_paths: list[str] = Field(default_factory=list)
+    closing_media_path: str = ""
+    closing_media_paths: list[str] = Field(default_factory=list)
+    use_closing_duration: bool = False
+    pack: str = "wedding"
+
+
+class VideoMixProductionRunStatusRequest(BaseModel):
+    work_dir: str
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     worker.start()
+    production_run_manager.recover()
     yield
 
 
@@ -604,6 +631,73 @@ async def video_mix_delete_proxy(payload: VideoMixProxyAssetRequest) -> dict[str
 @app.post("/api/video-mix/proxies/cleanup")
 async def video_mix_cleanup_proxy_partials(payload: VideoMixProxyQueueRequest) -> dict[str, Any]:
     return {"ok": True, **cleanup_video_proxy_partials(payload.work_dir)}
+
+
+@app.post("/api/video-mix/production-runs")
+async def create_video_mix_production_run(payload: VideoMixProductionRunRequest) -> dict[str, Any]:
+    request = ProductionRunRequest(
+        source_dir=payload.source_dir,
+        work_dir=payload.work_dir,
+        project_name=payload.project_name,
+        count=payload.count,
+        duration_seconds=payload.duration_seconds,
+        episode_duration_min_seconds=payload.episode_duration_min_seconds,
+        episode_duration_max_seconds=payload.episode_duration_max_seconds,
+        ffmpeg=payload.ffmpeg,
+        ffprobe=payload.ffprobe,
+        music_paths=payload.music_paths or ([payload.music_path] if payload.music_path else []),
+        use_music_duration=payload.use_music_duration,
+        opening_media_paths=payload.opening_media_paths or ([payload.opening_media_path] if payload.opening_media_path else []),
+        closing_media_paths=payload.closing_media_paths or ([payload.closing_media_path] if payload.closing_media_path else []),
+        use_closing_duration=payload.use_closing_duration,
+        pack=payload.pack,
+    )
+    result = production_run_manager.start(request)
+    return {
+        "ok": True,
+        **result,
+        "status": production_run_manager.get_status(result["work_dir"], result["run_id"]),
+        "dashboard": build_video_mix_dashboard_payload(result["work_dir"]),
+    }
+
+
+@app.get("/api/video-mix/production-runs/{run_id}")
+async def get_video_mix_production_run(run_id: str, work_dir: str) -> dict[str, Any]:
+    try:
+        status = production_run_manager.get_status(work_dir, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "status": status}
+
+
+@app.post("/api/video-mix/production-runs/{run_id}/cancel")
+async def cancel_video_mix_production_run(run_id: str, payload: VideoMixProductionRunStatusRequest) -> dict[str, Any]:
+    try:
+        status = production_run_manager.cancel(payload.work_dir, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "status": status, "dashboard": build_video_mix_dashboard_payload(payload.work_dir)}
+
+
+@app.post("/api/video-mix/production-runs/{run_id}/retry")
+async def retry_video_mix_production_run(run_id: str, payload: VideoMixProductionRunStatusRequest) -> dict[str, Any]:
+    try:
+        status = production_run_manager.retry(payload.work_dir, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "status": status, "dashboard": build_video_mix_dashboard_payload(payload.work_dir)}
+
+
+@app.get("/api/video-mix/production-runs/{run_id}/package")
+async def get_video_mix_production_run_package(run_id: str, work_dir: str) -> dict[str, Any]:
+    try:
+        status = production_run_manager.get_status(work_dir, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    package = status.get("latest_package")
+    if not package:
+        raise HTTPException(status_code=404, detail=f"Publishing package not found yet for production run: {run_id}")
+    return {"ok": True, "package": package}
 
 
 @app.post("/api/video-mix/candidates/bulk/approve")

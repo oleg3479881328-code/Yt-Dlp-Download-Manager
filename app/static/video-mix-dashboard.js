@@ -250,6 +250,29 @@ const TRANSLATIONS = {
     menu_opening_closing: "Opening / Closing",
     menu_results: "Results",
     workspace_back: "К разделам",
+    production_run_title: "Production run",
+    production_run_help: "One-click foundation slice: анализ, планы, 5 рилсов, QC и publishing package.",
+    production_run_start: "Собрать 5 роликов",
+    production_run_refresh: "Обновить статус",
+    production_run_open_package: "Открыть publishing package",
+    production_run_empty: "Production run ещё не запускался.",
+    production_run_latest: "Последний run",
+    production_run_status: "Статус",
+    production_run_stage: "Этап",
+    production_run_requested: "Запрошено",
+    production_run_progress: "Прогресс",
+    production_run_package: "Package",
+    production_run_reports: "QC reports",
+    production_run_open_manifest: "Открыть manifest",
+    production_run_retry: "Повторить run",
+    production_run_cancel: "Остановить run",
+    production_run_stage_bootstrap: "bootstrap",
+    production_run_stage_analysis: "analysis",
+    production_run_stage_planning: "planning",
+    production_run_stage_rendering: "rendering",
+    production_run_stage_quality: "quality",
+    production_run_stage_publishing: "publishing",
+    production_run_stage_completed: "completed",
     video_proxies_title: "Video Proxies",
     video_proxies_help: "Отдельная очередь локальных proxy-файлов только для AI-анализа видео.",
     video_proxies_create_missing: "Создать отсутствующие",
@@ -647,6 +670,29 @@ const TRANSLATIONS = {
     menu_opening_closing: "Opening / Closing",
     menu_results: "Results",
     workspace_back: "Back to menu",
+    production_run_title: "Production run",
+    production_run_help: "One-click foundation slice: analysis, plans, 5 reels, QC, and publishing package.",
+    production_run_start: "Build 5 reels",
+    production_run_refresh: "Refresh status",
+    production_run_open_package: "Open publishing package",
+    production_run_empty: "No production run yet.",
+    production_run_latest: "Latest run",
+    production_run_status: "Status",
+    production_run_stage: "Stage",
+    production_run_requested: "Requested",
+    production_run_progress: "Progress",
+    production_run_package: "Package",
+    production_run_reports: "QC reports",
+    production_run_open_manifest: "Open manifest",
+    production_run_retry: "Retry run",
+    production_run_cancel: "Cancel run",
+    production_run_stage_bootstrap: "bootstrap",
+    production_run_stage_analysis: "analysis",
+    production_run_stage_planning: "planning",
+    production_run_stage_rendering: "rendering",
+    production_run_stage_quality: "quality",
+    production_run_stage_publishing: "publishing",
+    production_run_stage_completed: "completed",
     video_proxies_title: "Video Proxies",
     video_proxies_help: "A separate local proxy queue used only for AI video analysis.",
     video_proxies_create_missing: "Create missing",
@@ -1916,6 +1962,11 @@ function applyStaticTranslations() {
     ["#vm-menu-open-music", "menu_music"],
     ["#vm-menu-open-opening-closing", "menu_opening_closing"],
     ["#vm-menu-open-results", "menu_results"],
+    ["#vm-production-run-title", "production_run_title"],
+    ["#vm-production-run-help", "production_run_help"],
+    ["#vm-production-run-start-btn", "production_run_start"],
+    ["#vm-production-run-refresh-btn", "production_run_refresh"],
+    ["#vm-production-run-open-package-btn", "production_run_open_package"],
     ["#vm-hero-copy", "hero_copy"],
     ["#vm-open-review", "open_review"],
     ["#vm-open-exports", "open_exports"],
@@ -2547,6 +2598,15 @@ function videoProxies() {
   };
 }
 
+function productionRuns() {
+  return state.dashboard?.production_runs || {
+    run_count: 0,
+    latest_run: null,
+    latest_package: null,
+    runs: [],
+  };
+}
+
 function ensureSelectedMaterialEpisode() {
   const episodes = projectMaterials().episodes || [];
   if (!episodes.length) {
@@ -2850,6 +2910,59 @@ function renderVideoProxiesWorkspace() {
   });
   bindOpenLocalPathButtons(listTarget);
   bindOpenLocalFileButtons(listTarget);
+}
+
+function renderProductionRunSummary() {
+  const target = qs("#vm-production-run-summary");
+  if (!target) return;
+  const payload = productionRuns();
+  const latestRun = payload.latest_run;
+  const latestPackage = payload.latest_package;
+  if (!latestRun) {
+    target.innerHTML = `<div class="empty">${escapeHtml(t("production_run_empty"))}</div>`;
+    return;
+  }
+  const packagePath = latestPackage?.relative_package_dir || "";
+  target.innerHTML = `
+    <div class="video-mix-summary-grid">
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("production_run_latest"))}</span><strong>${escapeHtml(latestRun.run_id || "")}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("production_run_status"))}</span><strong>${escapeHtml(latestRun.status || "")}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("production_run_stage"))}</span><strong>${escapeHtml(t(`production_run_stage_${latestRun.stage || "completed"}`))}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("production_run_requested"))}</span><strong>${escapeHtml(`${latestRun.requested_count || 0} / ${latestRun.requested_duration_seconds || 0}s`)}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("production_run_progress"))}</span><strong>${escapeHtml(`${Math.round(Number(latestRun.progress || 0) * 100)}%`)}</strong></div>
+      <div class="video-mix-summary-card"><span>${escapeHtml(t("production_run_reports"))}</span><strong>${escapeHtml((latestRun.quality_reports || []).length)}</strong></div>
+    </div>
+    ${latestRun.error ? `<div class="muted">${escapeHtml(latestRun.error)}</div>` : ""}
+    ${packagePath ? `<div class="muted">${escapeHtml(t("production_run_package"))}: ${escapeHtml(packagePath)}</div>` : ""}
+    <div class="actions-row">
+      <button class="ghost-btn" type="button" data-production-run-retry="${escapeAttr(latestRun.run_id || "")}">${escapeHtml(t("production_run_retry"))}</button>
+      <button class="ghost-btn" type="button" data-production-run-cancel="${escapeAttr(latestRun.run_id || "")}" ${["queued", "retry_wait", "running"].includes(String(latestRun.status || "")) ? "" : "disabled"}>${escapeHtml(t("production_run_cancel"))}</button>
+      <button class="ghost-btn" type="button" data-production-run-open-package ${packagePath ? "" : "disabled"}>${escapeHtml(t("production_run_open_package"))}</button>
+      <button class="ghost-btn" type="button" data-production-run-open-manifest="${escapeAttr(packagePath ? `${packagePath}/publishing_package.json` : "")}" ${packagePath ? "" : "disabled"}>${escapeHtml(t("production_run_open_manifest"))}</button>
+    </div>
+  `;
+  target.querySelectorAll("[data-production-run-retry]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await retryProductionRun(button.dataset.productionRunRetry || "");
+    });
+  });
+  target.querySelectorAll("[data-production-run-cancel]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await cancelProductionRun(button.dataset.productionRunCancel || "");
+    });
+  });
+  target.querySelectorAll("[data-production-run-open-package]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await openTarget("publishing");
+    });
+  });
+  target.querySelectorAll("[data-production-run-open-manifest]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const relativePath = button.dataset.productionRunOpenManifest || "";
+      if (!relativePath || !activeWorkDir()) return;
+      window.open(fileUrl(relativePath), "_blank", "noreferrer");
+    });
+  });
 }
 
 function renderProjectMaterialsModal() {
@@ -3340,6 +3453,7 @@ function renderAll() {
   renderMaterialEpisodes();
   renderMaterialTimeline();
   renderVideoProxiesWorkspace();
+  renderProductionRunSummary();
   renderTakeEditorModal();
   renderProjectMaterialsModal();
   renderQuickMixSummary();
@@ -4130,6 +4244,102 @@ async function quickMixSourceMaterials() {
   }
 }
 
+async function startProductionRun() {
+  const sourceDir = currentSourcePath();
+  const projectName = qs("#vm-source-project-name-input")?.value?.trim() || "";
+  const outputWorkDir = qs("#vm-source-workdir-input")?.value?.trim() || defaultSourceWorkDir(sourceDir);
+  const durationSeconds = Number(qs("#vm-quickmix-duration-input")?.value || 0);
+  const outputCount = Number(qs("#vm-quickmix-count-input")?.value || 0);
+  const episodeDurationMinSeconds = Number(qs("#vm-quickmix-episode-min-input")?.value || 0);
+  const episodeDurationMaxSeconds = Number(qs("#vm-quickmix-episode-max-input")?.value || 0);
+  const musicPaths = readQuickMixFileList("#vm-quickmix-music-input");
+  const useMusicDuration = Boolean(qs("#vm-quickmix-use-music-duration")?.checked);
+  const openingMediaPaths = readQuickMixFileList("#vm-quickmix-opening-input");
+  const closingMediaPaths = readQuickMixFileList("#vm-quickmix-closing-input");
+  const useClosingDuration = Boolean(qs("#vm-quickmix-use-closing-duration")?.checked);
+  if (!sourceDir) {
+    setLocalizedLoadState("load_state_enter_source_dir", "status-failed");
+    return;
+  }
+  if (!(durationSeconds > 0) || !(outputCount > 0)) {
+    setLocalizedLoadState("load_state_enter_duration", "status-failed");
+    return;
+  }
+  if (!(episodeDurationMinSeconds > 0) || !(episodeDurationMaxSeconds > 0) || episodeDurationMaxSeconds < episodeDurationMinSeconds) {
+    setLocalizedLoadState("load_state_enter_episode_range", "status-failed");
+    return;
+  }
+  setLoadState("Production run запускается...", "status-downloading");
+  try {
+    const payload = await fetchJson("/api/video-mix/production-runs", {
+      method: "POST",
+      body: JSON.stringify({
+        source_dir: sourceDir,
+        project_name: projectName,
+        work_dir: outputWorkDir,
+        count: outputCount,
+        duration_seconds: durationSeconds,
+        episode_duration_min_seconds: episodeDurationMinSeconds,
+        episode_duration_max_seconds: episodeDurationMaxSeconds,
+        music_path: musicPaths[0] || "",
+        music_paths: musicPaths,
+        use_music_duration: useMusicDuration,
+        opening_media_path: openingMediaPaths[0] || "",
+        opening_media_paths: openingMediaPaths,
+        closing_media_path: closingMediaPaths[0] || "",
+        closing_media_paths: closingMediaPaths,
+        use_closing_duration: useClosingDuration,
+      }),
+    });
+    state.workDir = payload.work_dir || outputWorkDir;
+    qs("#vm-workdir-input").value = state.workDir;
+    qs("#vm-source-workdir-input").value = state.workDir;
+    applyDashboardPayload(payload.dashboard);
+    setLoadState(`Production run создан: ${payload.run_id}`, "status-completed");
+    syncLocaleToUrl();
+  } catch (error) {
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function refreshProductionRunStatus() {
+  if (!activeWorkDir()) {
+    setLocalizedLoadState("load_state_enter_workdir", "status-failed");
+    return;
+  }
+  await loadDashboard(activeWorkDir());
+}
+
+async function cancelProductionRun(runId) {
+  if (!runId || !activeWorkDir()) return;
+  setLoadState(`Останавливаю run ${runId}...`, "status-downloading");
+  try {
+    const payload = await fetchJson(`/api/video-mix/production-runs/${encodeURIComponent(runId)}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ work_dir: activeWorkDir() }),
+    });
+    applyDashboardPayload(payload.dashboard);
+    setLoadState(`Run ${runId} остановлен`, "status-completed");
+  } catch (error) {
+    setLoadState(error.message, "status-failed");
+  }
+}
+
+async function retryProductionRun(runId) {
+  if (!runId || !activeWorkDir()) return;
+  setLoadState(`Повторяю run ${runId}...`, "status-downloading");
+  try {
+    const payload = await fetchJson(`/api/video-mix/production-runs/${encodeURIComponent(runId)}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ work_dir: activeWorkDir() }),
+    });
+    applyDashboardPayload(payload.dashboard);
+    setLoadState(`Создан retry run ${payload.status?.job_id || payload.status?.run_id || ""}`.trim(), "status-completed");
+  } catch (error) {
+    setLoadState(error.message, "status-failed");
+  }
+}
+
 function noteForCandidate(candidateId) {
   return qs(`[data-note-for="${CSS.escape(candidateId)}"]`)?.value?.trim() || "";
 }
@@ -4624,6 +4834,9 @@ function bindActions() {
   bindButtonAction("#vm-menu-open-music", "workspace music", async () => setActiveWorkspace("music"));
   bindButtonAction("#vm-menu-open-opening-closing", "workspace opening closing", async () => setActiveWorkspace("opening-closing"));
   bindButtonAction("#vm-menu-open-results", "workspace results", async () => setActiveWorkspace("results"));
+  bindButtonAction("#vm-production-run-start-btn", "production run start", startProductionRun);
+  bindButtonAction("#vm-production-run-refresh-btn", "production run refresh", refreshProductionRunStatus);
+  bindButtonAction("#vm-production-run-open-package-btn", "production run open package", async () => openTarget("publishing"));
   document.querySelectorAll("[data-workspace-menu]").forEach((button) => {
     button.addEventListener("click", () => setActiveWorkspace(DEFAULT_WORKSPACE));
   });
