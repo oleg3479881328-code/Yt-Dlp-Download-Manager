@@ -19,7 +19,7 @@ Do not treat the project as a public product unless the owner separately decides
 - Repository is the durable source of truth.
 - Current state lives in `PROJECT_STATE.md`.
 - Historical sequence lives in `logs/PROJECT_LOG.md`.
-- Active workflow lives in `workflow-runs/0003-video-mix-reel-mixer/`.
+- Active workflow lives in `workflow-runs/0004-instagram-extension-refresh/`.
 - Each substantial change should leave one concrete next action.
 
 ## State Separation Rules
@@ -91,4 +91,4 @@ Still not allowed without a separate owner decision:
 
 ## Current Next Action
 
-Use Issue `#41`, PR review and `workflow-runs/0003-video-mix-reel-mixer/25_SIMPLIFIED_SOURCE_TO_MP4_MVP_EXECUTION_REPORT.md` as the review surface for the current Stage 1.8 baseline. Any next pass should stay narrow, keep `whiteboard_studio/` untouched, preserve the existing review flow and keep Quick Mix direct-output behavior explicit rather than implicit.
+Use Issues `#69` and `#70` plus the execution reports in `workflow-runs/0004-instagram-extension-refresh/` as the review surface. Run the stable Windows installer/updater, then validate immediate context-menu download plus automatic folder opening. Keep VIDEO MIX and subtitle modules untouched.

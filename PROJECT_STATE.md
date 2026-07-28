@@ -1,13 +1,50 @@
 ---
 status: review-ready
 project_mode: compact
-current_step: 23_VIDEO_MIX_STAGE_1_8_SIMPLIFIED_SOURCE_TO_MP4_READY_FOR_REVIEW
-current_run: workflow-runs/0003-video-mix-reel-mixer/
-last_updated: 2026-06-27
-next_action: Owner reviews the Stage 1.8 simplified source-to-MP4 execution report and PR linked from GitHub Issue #41.
+current_step: 26_QUICK_DOWNLOADER_STABLE_UPDATER_READY_FOR_REVIEW
+current_run: workflow-runs/0004-instagram-extension-refresh/
+last_updated: 2026-07-27
+next_action: Owner runs the stable Windows installer and updater from GitHub Issue #70, then tests Issue #69.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
+
+## Active Work — Instagram Extension Refresh
+
+- GitHub Issues: `#68`, `#69`, `#70`
+- Workflow: `workflow-runs/0004-instagram-extension-refresh/`
+- Scope: Chrome extension and native host only
+- Status: implemented and locally validated; Windows owner review pending
+
+Validated:
+
+- exact public Instagram Reel downloaded as MP4 with audio
+- `1080x1920`, `9.172993s`
+- `22` focused updater/extension/native-host tests passed
+- Ruff, JavaScript syntax and manifest checks passed
+
+Delivered:
+
+- automatic daily `yt-dlp` update check
+- manual update button
+- default `nightly` update channel
+- optional browser-cookie fallback, disabled by default
+- optional request impersonation, disabled by default
+- improved best-video-plus-audio MP4 command
+- one-click context-menu download without an intermediate page
+- automatic output-folder opening after successful context-menu download
+- Full manual controls preserved through the toolbar popup
+- stable `%LOCALAPPDATA%\QuickDownloader` installation
+- one-command future updates through `UPDATE_QUICK_DOWNLOADER.cmd`
+- saved extension ID and native-host registration preserved across updates
+- user downloads, logs and configuration excluded from replacement
+
+Current next action:
+
+- run `INSTALL_QUICK_DOWNLOADER.cmd` once on Windows
+- load the unpacked extension from `%LOCALAPPDATA%\QuickDownloader\extension`
+- confirm future update through `UPDATE_QUICK_DOWNLOADER.cmd`
+- test the one-click flow from Issue `#69`
 
 VIDEO MIX Stage 1.1 Review UX is accepted and merged.
 

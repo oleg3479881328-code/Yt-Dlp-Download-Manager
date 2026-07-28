@@ -82,14 +82,18 @@ Build output:
 
 - `dist_v2\ytdlp_host\ytdlp_host.exe`
 
-Modes:
+Download entrypoints:
 
-- `Mini`: right click on page/link/video -> `Скачать через yt-dlp`
-- `Full`: the same action opens the extension full page with manual controls
+- context menu: right click on page/link/video -> `Скачать через yt-dlp` -> immediate download -> output folder opens after completion
+- toolbar popup: open the full page when manual controls, metadata preview or transcription options are needed
 
 Standalone extension extras:
 
 - metadata preview before download
+- automatic daily `yt-dlp` update check (default channel: `nightly`)
+- manual `yt-dlp` update button and installed-version diagnostics
+- Instagram single-Reel MP4 video-plus-audio flow
+- optional local browser-cookie fallback for login/CAPTCHA cases (disabled by default)
 - recent local jobs
 - optional transcript generation after download
 - local audio/video file upload for transcription in full mode
@@ -97,11 +101,49 @@ Standalone extension extras:
 - open last completed file
 - local status updates from `_logs\jobs_registry.json`
 
+### Stable Quick Downloader Install And Updates
+
+First installation:
+
+```text
+INSTALL_QUICK_DOWNLOADER.cmd
+```
+
+The installer:
+
+- downloads the current repository version from `master`;
+- validates the extension/native-host package;
+- installs it into `%LOCALAPPDATA%\QuickDownloader`;
+- builds the native host;
+- opens `chrome://extensions` and the stable extension folder;
+- asks for the extension ID once and registers the native host.
+
+Chrome must always load the unpacked extension from:
+
+```text
+%LOCALAPPDATA%\QuickDownloader\extension
+```
+
+Do not move, rename or delete that folder.
+
+All later updates use only:
+
+```text
+%LOCALAPPDATA%\QuickDownloader\UPDATE_QUICK_DOWNLOADER.cmd
+```
+
+The updater downloads and validates the latest `master`, replaces only application
+files, rebuilds and re-registers the native host, and preserves the saved extension
+ID, configuration, downloads and logs. It opens `chrome://extensions` at the end;
+press `Reload` for Quick Downloader if Chrome has not reloaded the unpacked
+extension automatically.
+
 ## Notes
 
 - Downloaded files are stored in `downloads` by default.
 - App state is persisted in `data\app.db`.
 - `yt-dlp` may require `ffmpeg` in `PATH` for merge and audio extraction.
+- Public Instagram Reels should be tested first without cookies. If Instagram requires login or returns a CAPTCHA/403, select the browser where the owner is already signed in under extension settings.
 - Local transcription uses `faster-whisper` and creates `.srt` and `.txt` next to the media file.
 - UI live state is streamed over WebSocket at `/ws/state`.
 - Standalone extension defaults to:

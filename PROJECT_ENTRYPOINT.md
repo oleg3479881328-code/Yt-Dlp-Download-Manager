@@ -24,18 +24,19 @@ Local tool for:
 - mode: `compact`
 - use case: personal local tool only
 - source of truth: this GitHub repository
-- active run: `workflow-runs/0003-video-mix-reel-mixer/`
+- active run: `workflow-runs/0004-instagram-extension-refresh/`
 
 ## Required Read Order
 
 1. `PROJECT_STATE.md`
 2. `PROJECT_RULES.md`
 3. `logs/PROJECT_LOG.md`
-4. `workflow-runs/0003-video-mix-reel-mixer/`
-5. `workflow-runs/0003-video-mix-reel-mixer/25_SIMPLIFIED_SOURCE_TO_MP4_MVP_EXECUTION_REPORT.md`
-6. GitHub Issue `#41`
-7. `workflow-runs/0002-animated-subtitle-module/` only if subtitle/rendering context is needed.
-8. `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` only if needed.
+4. `workflow-runs/0004-instagram-extension-refresh/`
+5. `workflow-runs/0004-instagram-extension-refresh/03_ONE_CLICK_CONTEXT_MENU_EXECUTION_REPORT.md`
+6. `workflow-runs/0004-instagram-extension-refresh/04_STABLE_UPDATER_EXECUTION_REPORT.md`
+7. GitHub Issues `#69` and `#70`
+8. `workflow-runs/0002-animated-subtitle-module/` only if subtitle/rendering context is needed.
+9. `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` only if needed.
 
 ## Verified Current Components
 
@@ -51,6 +52,25 @@ Local tool for:
 - Russian dashboard UI — localized labels, messages and visible statuses for owner-facing review work.
 - simplified Quick Mix workflow — source folder + seconds + count -> ready MP4 outputs.
 - `workflow-runs/0003-video-mix-reel-mixer/` — active VIDEO MIX planning and execution package.
+- `workflow-runs/0004-instagram-extension-refresh/` — current Chrome extension/native host Instagram compatibility refresh.
+
+## Active Work — Instagram Extension Refresh
+
+The current owner-authorized task is a narrow refresh of the existing standalone Chrome extension/native host:
+
+- keep `yt-dlp.exe` current through a rate-limited update check
+- expose manual update and installed-version diagnostics
+- use a current MP4 video-plus-audio command for Instagram Reels
+- support explicit browser-cookie and request-impersonation fallbacks without enabling them by default
+- preserve non-Instagram playlist behavior
+- make context-menu download immediate and open the output folder after successful completion
+- provide a stable local installation and one-command GitHub updater
+
+Coordination and validation:
+
+- GitHub Issues `#68`, `#69` and `#70`
+- `workflow-runs/0004-instagram-extension-refresh/03_ONE_CLICK_CONTEXT_MENU_EXECUTION_REPORT.md`
+- `workflow-runs/0004-instagram-extension-refresh/04_STABLE_UPDATER_EXECUTION_REPORT.md`
 
 ## Active Work — VIDEO MIX
 
@@ -102,13 +122,7 @@ Research only. Implementation is not authorized.
 
 ## Canonical Next Action
 
-Review the Stage 1.8 simplified source-to-MP4 workflow through GitHub Issue `#41`, the linked PR and `25_SIMPLIFIED_SOURCE_TO_MP4_MVP_EXECUTION_REPORT.md`.
-
-If accepted, use the dashboard as the owner-facing entrypoint for both:
-
-- selecting source materials folders;
-- direct Quick Mix MP4 generation;
-- loading existing `work_dir` state for review and export.
+Run the stable Quick Downloader installer/updater on the owner's Windows machine using Issue `#70`, then test the one-click flow from Issue `#69`.
 
 ## Canonical State Rule
 
