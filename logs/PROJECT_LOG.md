@@ -12,6 +12,7 @@
 - Added `UPDATE_QUICK_DOWNLOADER.cmd` for all future GitHub updates.
 - Added `REGISTER_QUICK_DOWNLOADER.cmd` as an extension-ID/native-host recovery helper.
 - Added a cross-platform tested updater that downloads `master`, validates the archive, stages replacement, rebuilds the native host and reuses the saved extension ID.
+- First install validates and uses the bundled repository ZIP, allowing Windows review before the updater code is merged; later updates use `master`.
 - Stable install path is `%LOCALAPPDATA%\QuickDownloader`.
 - Configuration, downloads, logs and generated registration data are preserved.
 - Added GitHub Issue `#70` and execution report `04_STABLE_UPDATER_EXECUTION_REPORT.md`.
@@ -34,6 +35,7 @@
 - The first successful GitHub device login could not be saved because `/root/.config` is read-only. Authentication was repeated with `GH_CONFIG_DIR` pointing to `/tmp/quick-downloader-gh-config`.
 - The repeated login saved credentials but could not update `/root/.gitconfig`. `GIT_CONFIG_GLOBAL` was redirected to `/tmp/quick-downloader-gitconfig`; `gh auth status` and Git credential setup then passed for `oleg3479881328-code`.
 - The first publication-state commit attempt lacked an author identity because the new temporary global Git config was empty. The confirmed identity from implementation commit `d553d80` (`Codex <codex@openai.com>`) was copied into the temporary config before retrying.
+- After the draft PR checks passed, review found a bootstrap gap: the first installer would download `master`, where the updater did not yet exist before merge. `INSTALL_QUICK_DOWNLOADER.cmd` was changed to install its bundled PR ZIP; future updates remain bound to `master`.
 
 ### Current Next Action
 

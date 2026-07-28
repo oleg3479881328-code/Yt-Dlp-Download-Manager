@@ -189,3 +189,8 @@ def test_cmd_entrypoints_call_the_updater_in_expected_mode() -> None:
         source = (ROOT / filename).read_text(encoding="utf-8")
         assert "installer\\quick_downloader_updater.py" in source
         assert f"--mode {mode}" in source
+
+    installer_source = (ROOT / "INSTALL_QUICK_DOWNLOADER.cmd").read_text(
+        encoding="utf-8"
+    )
+    assert '--source-root "%~dp0"' in installer_source

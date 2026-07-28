@@ -50,8 +50,8 @@ Chrome loads the unpacked extension from:
 `INSTALL_QUICK_DOWNLOADER.cmd`:
 
 1. finds Python 3
-2. downloads the current `master` archive from GitHub
-3. validates required extension/native-host/updater files
+2. uses the version bundled with the downloaded repository ZIP
+3. validates required extension/native-host/updater files before installation
 4. installs application files into the stable directory
 5. builds the native host
 6. opens the stable extension folder and `chrome://extensions`
@@ -69,6 +69,9 @@ Chrome loads the unpacked extension from:
 5. rebuilds the native host with rollback protection
 6. re-registers the host using the saved extension ID
 7. opens `chrome://extensions` for the unpacked-extension reload
+
+This separation allows the draft-PR ZIP to be tested before merge. After merge,
+all later updates come from the canonical `master` branch.
 
 `REGISTER_QUICK_DOWNLOADER.cmd` is a recovery helper if Chrome's extension ID
 was not entered during the first install.

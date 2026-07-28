@@ -111,7 +111,7 @@ INSTALL_QUICK_DOWNLOADER.cmd
 
 The installer:
 
-- downloads the current repository version from `master`;
+- validates and installs the version bundled with the downloaded repository ZIP;
 - validates the extension/native-host package;
 - installs it into `%LOCALAPPDATA%\QuickDownloader`;
 - builds the native host;
