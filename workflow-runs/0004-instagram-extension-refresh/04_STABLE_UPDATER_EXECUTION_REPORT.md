@@ -2,7 +2,7 @@
 
 ## Status
 
-`review-ready`
+`owner-validated`
 
 ## GitHub Issue
 
@@ -86,7 +86,7 @@ was not entered during the first install.
 
 ## Validation
 
-- `22` focused tests passed.
+- `24` focused tests passed.
 - Ruff passed.
 - updater source compiled successfully.
 - current repository package passed updater validation.
@@ -122,6 +122,32 @@ was not entered during the first install.
    `%~dp0` ended with a backslash and corrupted the Python `--source-root` argument
    boundary. Both installer entrypoints now pass `%~dp0.` and a regression assertion
    prevents the trailing-backslash form from returning.
+9. Extracting the full repository ZIP on Windows failed with `0x80010135: Path too
+   long` on an unrelated VIDEO MIX workflow file. A compact setup builder now
+   packages only the Quick Downloader extension, native host, updater and CMD
+   entrypoints. Tests exclude workflow/VIDEO MIX trees and cap archive path length.
+10. The temporary isolated pytest/Ruff directory had expired before the compact
+    package validation run. Dependencies were restored and all `23` tests passed.
+11. The temporary global Git config expired before the compact-package commit and
+    removed its author fields. The confirmed `Codex <codex@openai.com>` identity
+    was restored before retrying.
+12. Windows could not route `chrome://extensions` through the default URL handler
+    and displayed a system “Get an app” dialog. The updater now resolves and launches
+    `chrome.exe` directly from standard Windows locations, with a manual-instruction
+    fallback.
+
+## Owner Validation Result
+
+`accepted`
+
+- compact ZIP extracted successfully
+- stable install completed at `%LOCALAPPDATA%\QuickDownloader`
+- native host built and registered
+- extension `0.2.1` loaded and reloaded
+- old extension `0.1.0` disabled
+- owner-triggered Instagram context-menu download completed
+- no intermediate extension page or Start click occurred
+- output folder opened automatically after completion
 
 ## Windows Review Target
 

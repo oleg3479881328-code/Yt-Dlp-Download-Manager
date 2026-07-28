@@ -15,6 +15,16 @@ assert SPEC.loader is not None
 updater = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(updater)
 
+BUILDER_PATH = ROOT / "installer" / "build_setup_zip.py"
+BUILDER_SPEC = importlib.util.spec_from_file_location(
+    "quick_downloader_setup_builder",
+    BUILDER_PATH,
+)
+assert BUILDER_SPEC is not None
+assert BUILDER_SPEC.loader is not None
+setup_builder = importlib.util.module_from_spec(BUILDER_SPEC)
+BUILDER_SPEC.loader.exec_module(setup_builder)
+
 
 def make_source(root: Path, version: str = "0.2.1") -> Path:
     source = root / "source"
@@ -195,3 +205,37 @@ def test_cmd_entrypoints_call_the_updater_in_expected_mode() -> None:
     )
     assert '--source-root "%~dp0."' in installer_source
     assert '--source-root "%~dp0"' not in installer_source
+
+
+def test_compact_setup_zip_contains_runtime_without_long_workflow_paths(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "QuickDownloader-Setup.zip"
+
+    setup_builder.build_setup_zip(output_path)
+
+    with zipfile.ZipFile(output_path) as archive:
+        names = set(archive.namelist())
+
+    prefix = "QuickDownloader-Setup-v0.2.1/"
+    for required in updater.REQUIRED_SOURCE_PATHS:
+        assert f"{prefix}{required}" in names
+    assert not any("workflow-runs/" in name for name in names)
+    assert not any("video_mix/" in name for name in names)
+    assert max(map(len, names)) < 160
+
+
+def test_chrome_executable_is_resolved_from_local_app_data(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    local_app_data = tmp_path / "Local"
+    chrome = local_app_data / "Google" / "Chrome" / "Application" / "chrome.exe"
+    chrome.parent.mkdir(parents=True)
+    chrome.write_bytes(b"chrome")
+    monkeypatch.setenv("LOCALAPPDATA", str(local_app_data))
+    monkeypatch.delenv("PROGRAMFILES", raising=False)
+    monkeypatch.delenv("PROGRAMFILES(X86)", raising=False)
+    monkeypatch.setattr(updater.shutil, "which", lambda _name: None)
+
+    assert updater._find_chrome_executable() == chrome

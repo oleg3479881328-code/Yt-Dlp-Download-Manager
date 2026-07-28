@@ -109,6 +109,10 @@ First installation:
 INSTALL_QUICK_DOWNLOADER.cmd
 ```
 
+Use the compact `QuickDownloader-Setup-vX.Y.Z.zip` package. Do not use the full
+repository archive for Windows installation because unrelated project workflows
+can exceed the legacy Windows path-length limit.
+
 The installer:
 
 - validates and installs the version bundled with the downloaded repository ZIP;
@@ -137,6 +141,16 @@ files, rebuilds and re-registers the native host, and preserves the saved extens
 ID, configuration, downloads and logs. It opens `chrome://extensions` at the end;
 press `Reload` for Quick Downloader if Chrome has not reloaded the unpacked
 extension automatically.
+
+The installer resolves `chrome.exe` from standard Windows install locations before
+opening `chrome://extensions`. If Chrome is installed elsewhere, it prints the
+manual address instead of invoking an unregistered system `chrome:` protocol.
+
+Build the compact setup package:
+
+```text
+python installer\build_setup_zip.py
+```
 
 ## Notes
 

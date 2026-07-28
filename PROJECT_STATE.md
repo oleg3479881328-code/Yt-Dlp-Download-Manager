@@ -1,10 +1,10 @@
 ---
-status: review-ready
+status: owner-validated
 project_mode: compact
 current_step: 26_QUICK_DOWNLOADER_STABLE_UPDATER_READY_FOR_REVIEW
 current_run: workflow-runs/0004-instagram-extension-refresh/
 last_updated: 2026-07-27
-next_action: Owner reviews draft PR #71, runs the stable Windows installer/updater, and tests Issues #69 and #70 before merge.
+next_action: Publish final installer follow-ups, complete PR #71 checks, and merge the owner-validated Quick Downloader refresh into master.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -15,14 +15,17 @@ next_action: Owner reviews draft PR #71, runs the stable Windows installer/updat
 - Draft PR: `#71`
 - Workflow: `workflow-runs/0004-instagram-extension-refresh/`
 - Scope: Chrome extension and native host only
-- Status: implemented and locally validated; Windows owner review pending
+- Status: implemented, locally validated and owner-validated on Windows
 
 Validated:
 
 - exact public Instagram Reel downloaded as MP4 with audio
 - `1080x1920`, `9.172993s`
-- `22` focused updater/extension/native-host tests passed
+- `23` focused updater/extension/native-host/package tests passed
 - Ruff, JavaScript syntax and manifest checks passed
+- compact Windows installer completed successfully
+- native host built and registered for extension `0.2.1`
+- owner confirmed one-click Instagram download and automatic folder opening
 
 Delivered:
 
@@ -42,11 +45,9 @@ Delivered:
 
 Current next action:
 
-- review draft PR `#71`
-- run `INSTALL_QUICK_DOWNLOADER.cmd` once on Windows
-- load the unpacked extension from `%LOCALAPPDATA%\QuickDownloader\extension`
-- confirm future update through `UPDATE_QUICK_DOWNLOADER.cmd`
-- test the one-click flow from Issue `#69`
+- publish final compact-package and Chrome-launcher follow-ups
+- complete PR `#71` checks
+- merge the accepted change to activate `UPDATE_QUICK_DOWNLOADER.cmd` from `master`
 
 VIDEO MIX Stage 1.1 Review UX is accepted and merged.
 

@@ -333,10 +333,56 @@ def _launch_windows_target(target: str) -> None:
     )
 
 
+def _find_chrome_executable() -> Path | None:
+    candidates = []
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    program_files = os.environ.get("PROGRAMFILES")
+    program_files_x86 = os.environ.get("PROGRAMFILES(X86)")
+
+    if local_app_data:
+        candidates.append(
+            Path(local_app_data) / "Google" / "Chrome" / "Application" / "chrome.exe"
+        )
+    if program_files:
+        candidates.append(
+            Path(program_files) / "Google" / "Chrome" / "Application" / "chrome.exe"
+        )
+    if program_files_x86:
+        candidates.append(
+            Path(program_files_x86)
+            / "Google"
+            / "Chrome"
+            / "Application"
+            / "chrome.exe"
+        )
+
+    for command_name in ("chrome.exe", "chrome"):
+        resolved = shutil.which(command_name)
+        if resolved:
+            candidates.append(Path(resolved))
+
+    return next((candidate for candidate in candidates if candidate.is_file()), None)
+
+
+def _open_chrome_extensions() -> None:
+    if os.name != "nt":
+        return
+    chrome_executable = _find_chrome_executable()
+    if chrome_executable is None:
+        print("Chrome could not be opened automatically.")
+        print("Open chrome://extensions manually in Google Chrome.")
+        return
+    subprocess.Popen(
+        [str(chrome_executable), "chrome://extensions"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def open_install_surfaces(stable_root: Path, include_folder: bool) -> None:
     if include_folder:
         _launch_windows_target(str(stable_root / "extension"))
-    _launch_windows_target("chrome://extensions")
+    _open_chrome_extensions()
 
 
 def prompt_for_extension_id(stable_root: Path) -> str | None:
