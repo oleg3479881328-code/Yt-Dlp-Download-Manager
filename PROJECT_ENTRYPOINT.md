@@ -34,7 +34,7 @@ Local tool for:
 4. `workflow-runs/0004-instagram-extension-refresh/`
 5. `workflow-runs/0004-instagram-extension-refresh/03_ONE_CLICK_CONTEXT_MENU_EXECUTION_REPORT.md`
 6. `workflow-runs/0004-instagram-extension-refresh/04_STABLE_UPDATER_EXECUTION_REPORT.md`
-7. GitHub Issues `#69` and `#70`
+7. Draft GitHub PR `#71` and Issues `#69` and `#70`
 8. `workflow-runs/0002-animated-subtitle-module/` only if subtitle/rendering context is needed.
 9. `research/VIDEO_CONTENT_ANALYZER_DONOR_ASSESSMENT.md` only if needed.
 
@@ -69,6 +69,7 @@ The current owner-authorized task is a narrow refresh of the existing standalone
 Coordination and validation:
 
 - GitHub Issues `#68`, `#69` and `#70`
+- Draft GitHub PR `#71`
 - `workflow-runs/0004-instagram-extension-refresh/03_ONE_CLICK_CONTEXT_MENU_EXECUTION_REPORT.md`
 - `workflow-runs/0004-instagram-extension-refresh/04_STABLE_UPDATER_EXECUTION_REPORT.md`
 
@@ -122,7 +123,7 @@ Research only. Implementation is not authorized.
 
 ## Canonical Next Action
 
-Run the stable Quick Downloader installer/updater on the owner's Windows machine using Issue `#70`, then test the one-click flow from Issue `#69`.
+Review draft PR `#71`, run the stable Quick Downloader installer/updater on the owner's Windows machine using Issue `#70`, then test the one-click flow from Issue `#69`.
 
 ## Canonical State Rule
 

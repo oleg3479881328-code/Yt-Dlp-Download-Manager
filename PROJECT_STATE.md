@@ -4,7 +4,7 @@ project_mode: compact
 current_step: 26_QUICK_DOWNLOADER_STABLE_UPDATER_READY_FOR_REVIEW
 current_run: workflow-runs/0004-instagram-extension-refresh/
 last_updated: 2026-07-27
-next_action: Owner runs the stable Windows installer and updater from GitHub Issue #70, then tests Issue #69.
+next_action: Owner reviews draft PR #71, runs the stable Windows installer/updater, and tests Issues #69 and #70 before merge.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
@@ -12,6 +12,7 @@ next_action: Owner runs the stable Windows installer and updater from GitHub Iss
 ## Active Work — Instagram Extension Refresh
 
 - GitHub Issues: `#68`, `#69`, `#70`
+- Draft PR: `#71`
 - Workflow: `workflow-runs/0004-instagram-extension-refresh/`
 - Scope: Chrome extension and native host only
 - Status: implemented and locally validated; Windows owner review pending
@@ -41,6 +42,7 @@ Delivered:
 
 Current next action:
 
+- review draft PR `#71`
 - run `INSTALL_QUICK_DOWNLOADER.cmd` once on Windows
 - load the unpacked extension from `%LOCALAPPDATA%\QuickDownloader\extension`
 - confirm future update through `UPDATE_QUICK_DOWNLOADER.cmd`

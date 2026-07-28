@@ -8,6 +8,12 @@
 
 - `#70 Add stable one-command updater for Quick Downloader`
 
+## Publication
+
+- Branch: `fix/issue-68-instagram-downloads`
+- Implementation commit: `d553d80`
+- Draft PR: `#71 Refresh Quick Downloader and add stable updater`
+
 ## Owner Requirement
 
 Reuse the proven TikTok Research Sorter pattern:
@@ -106,6 +112,9 @@ was not entered during the first install.
    read-only. Authentication and Git credential configuration were redirected to
    dedicated writable `/tmp` paths; authenticated access for
    `oleg3479881328-code` then passed.
+7. The redirected Git config initially lacked commit author fields. The confirmed
+   `Codex <codex@openai.com>` identity from implementation commit `d553d80` was
+   applied to the temporary config before retrying the publication-state commit.
 
 ## Windows Review Target
 

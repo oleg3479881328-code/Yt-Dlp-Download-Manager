@@ -33,10 +33,20 @@
 - GitHub CLI could not open the device-login page because the container has no local browser. The official device URL and one-time code were passed to the owner for manual authorization.
 - The first successful GitHub device login could not be saved because `/root/.config` is read-only. Authentication was repeated with `GH_CONFIG_DIR` pointing to `/tmp/quick-downloader-gh-config`.
 - The repeated login saved credentials but could not update `/root/.gitconfig`. `GIT_CONFIG_GLOBAL` was redirected to `/tmp/quick-downloader-gitconfig`; `gh auth status` and Git credential setup then passed for `oleg3479881328-code`.
+- The first publication-state commit attempt lacked an author identity because the new temporary global Git config was empty. The confirmed identity from implementation commit `d553d80` (`Codex <codex@openai.com>`) was copied into the temporary config before retrying.
 
 ### Current Next Action
 
-Owner runs Issue `#70` on Windows, loads the extension once from the stable path, and confirms that the later update command rebuilds and re-registers Quick Downloader.
+Draft PR `#71` was published from branch `fix/issue-68-instagram-downloads`.
+Owner reviews the PR on Windows, loads the extension once from the stable path,
+and confirms that the later update command rebuilds and re-registers Quick Downloader.
+
+### Publication
+
+- Branch: `fix/issue-68-instagram-downloads`
+- Implementation commit: `d553d80`
+- Draft PR: `#71 Refresh Quick Downloader and add stable updater`
+- PR targets: Issues `#68`, `#69` and `#70`
 
 ---
 
