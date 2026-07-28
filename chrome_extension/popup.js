@@ -1,17 +1,14 @@
 const DEFAULTS = {
-  workMode: "mini",
   defaultMode: "video"
 };
 
 async function loadSettings() {
   const settings = await chrome.storage.local.get(DEFAULTS);
-  document.getElementById("workMode").value = settings.workMode;
   document.getElementById("defaultMode").value = settings.defaultMode;
 }
 
 async function saveSettings() {
   await chrome.storage.local.set({
-    workMode: document.getElementById("workMode").value,
     defaultMode: document.getElementById("defaultMode").value
   });
 }
@@ -33,11 +30,6 @@ async function refreshMiniHistory() {
     </div>
   `).join("") : `<div class="muted">Пока пусто.</div>`;
 }
-
-document.getElementById("workMode").addEventListener("change", async () => {
-  await saveSettings();
-  setStatus("Режим сохранен");
-});
 
 document.getElementById("defaultMode").addEventListener("change", async () => {
   await saveSettings();

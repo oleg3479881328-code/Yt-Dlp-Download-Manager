@@ -1,13 +1,53 @@
 ---
-status: review-ready
+status: owner-validated
 project_mode: compact
-current_step: 23_VIDEO_MIX_STAGE_1_8_SIMPLIFIED_SOURCE_TO_MP4_READY_FOR_REVIEW
-current_run: workflow-runs/0003-video-mix-reel-mixer/
-last_updated: 2026-06-27
-next_action: Owner reviews the Stage 1.8 simplified source-to-MP4 execution report and PR linked from GitHub Issue #41.
+current_step: 26_QUICK_DOWNLOADER_STABLE_UPDATER_READY_FOR_REVIEW
+current_run: workflow-runs/0004-instagram-extension-refresh/
+last_updated: 2026-07-27
+next_action: Publish final installer follow-ups, complete PR #71 checks, and merge the owner-validated Quick Downloader refresh into master.
 ---
 
 # PROJECT STATE — yt-dlp Download Manager
+
+## Active Work — Instagram Extension Refresh
+
+- GitHub Issues: `#68`, `#69`, `#70`
+- Draft PR: `#71`
+- Workflow: `workflow-runs/0004-instagram-extension-refresh/`
+- Scope: Chrome extension and native host only
+- Status: implemented, locally validated and owner-validated on Windows
+
+Validated:
+
+- exact public Instagram Reel downloaded as MP4 with audio
+- `1080x1920`, `9.172993s`
+- `23` focused updater/extension/native-host/package tests passed
+- Ruff, JavaScript syntax and manifest checks passed
+- compact Windows installer completed successfully
+- native host built and registered for extension `0.2.1`
+- owner confirmed one-click Instagram download and automatic folder opening
+
+Delivered:
+
+- automatic daily `yt-dlp` update check
+- manual update button
+- default `nightly` update channel
+- optional browser-cookie fallback, disabled by default
+- optional request impersonation, disabled by default
+- improved best-video-plus-audio MP4 command
+- one-click context-menu download without an intermediate page
+- automatic output-folder opening after successful context-menu download
+- Full manual controls preserved through the toolbar popup
+- stable `%LOCALAPPDATA%\QuickDownloader` installation
+- one-command future updates through `UPDATE_QUICK_DOWNLOADER.cmd`
+- saved extension ID and native-host registration preserved across updates
+- user downloads, logs and configuration excluded from replacement
+
+Current next action:
+
+- publish final compact-package and Chrome-launcher follow-ups
+- complete PR `#71` checks
+- merge the accepted change to activate `UPDATE_QUICK_DOWNLOADER.cmd` from `master`
 
 VIDEO MIX Stage 1.1 Review UX is accepted and merged.
 

@@ -1,11 +1,14 @@
 const DEFAULT_SETTINGS = {
   nativeHostName: "com.oleg.ytdlp",
-  workMode: "mini",
   defaultMode: "video",
   quality: "best",
   outputDirectory: "C:\\yt-dlp\\DOWNLOADS",
   ytDlpPath: "C:\\yt-dlp\\yt-dlp.exe",
   ffmpegPath: "C:\\yt-dlp\\ffmpeg.exe",
+  autoUpdateYtDlp: true,
+  updateChannel: "nightly",
+  cookiesBrowser: "none",
+  impersonateBrowser: false,
   saveHistory: true,
   defaultTranscribeAudio: false,
   defaultTranscriptionLanguage: "auto",
@@ -40,7 +43,8 @@ async function replaceHistoryEntry(jobId, patch) {
 }
 
 function extractUrl(info, tab) {
-  return info.linkUrl || info.srcUrl || info.pageUrl || tab?.url || "";
+  const candidates = [info.linkUrl, info.srcUrl, info.pageUrl, tab?.url];
+  return candidates.find((url) => typeof url === "string" && /^https?:\/\//i.test(url)) || "";
 }
 
 function notify(title, message) {
@@ -115,7 +119,12 @@ async function queueDownload(url, source = "manual", modeOverride = null, qualit
     thumbnail: metadata?.thumbnail || null,
     outputDirectory: settings.outputDirectory,
     ytDlpPath: settings.ytDlpPath,
-    ffmpegPath: settings.ffmpegPath
+    ffmpegPath: settings.ffmpegPath,
+    autoUpdateYtDlp: settings.autoUpdateYtDlp,
+    updateChannel: settings.updateChannel,
+    cookiesBrowser: settings.cookiesBrowser,
+    impersonateBrowser: settings.impersonateBrowser,
+    openFolderOnComplete: source === "context-menu"
   });
   if (!response?.ok) {
     throw new Error(response?.error || "Native host error");
@@ -146,7 +155,12 @@ async function analyzeUrl(url) {
   return callNative({
     action: "analyze",
     url,
-    ytDlpPath: settings.ytDlpPath
+    ytDlpPath: settings.ytDlpPath,
+    outputDirectory: settings.outputDirectory,
+    autoUpdateYtDlp: settings.autoUpdateYtDlp,
+    updateChannel: settings.updateChannel,
+    cookiesBrowser: settings.cookiesBrowser,
+    impersonateBrowser: settings.impersonateBrowser
   });
 }
 
@@ -174,12 +188,6 @@ async function fetchStatuses(jobId = null) {
 
 async function handleContextAction(info, tab) {
   const url = extractUrl(info, tab);
-  const settings = await getSettings();
-  if (settings.workMode === "full") {
-    const page = chrome.runtime.getURL(`app.html?url=${encodeURIComponent(url)}`);
-    await chrome.tabs.create({ url: page });
-    return;
-  }
   try {
     await queueDownload(
       url,
@@ -283,6 +291,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           ytDlpPath: settings.ytDlpPath,
           ffmpegPath: settings.ffmpegPath,
           outputDirectory: settings.outputDirectory
+        });
+        sendResponse(response);
+        return;
+      }
+      if (message.action === "updateYtDlp") {
+        const settings = await getSettings();
+        const response = await callNative({
+          action: "update_ytdlp",
+          ytDlpPath: settings.ytDlpPath,
+          outputDirectory: settings.outputDirectory,
+          updateChannel: settings.updateChannel
         });
         sendResponse(response);
         return;

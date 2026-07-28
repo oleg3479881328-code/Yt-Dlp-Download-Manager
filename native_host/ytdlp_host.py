@@ -7,10 +7,12 @@ import re
 import struct
 import subprocess
 import sys
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 DETACHED_FLAGS = 0
 if os.name == "nt":
@@ -34,6 +36,9 @@ MEDIA_EXTENSIONS = {
 
 MAX_UPLOAD_CHUNK_BYTES = 256 * 1024
 MAX_UPLOAD_TOTAL_BYTES = 500 * 1024 * 1024
+YTDLP_UPDATE_INTERVAL_SECONDS = 24 * 60 * 60
+SUPPORTED_UPDATE_CHANNELS = {"stable", "nightly", "master"}
+SUPPORTED_COOKIE_BROWSERS = {"chrome", "edge", "firefox", "brave", "chromium", "vivaldi"}
 
 
 def configure_binary_stdio() -> None:
@@ -207,6 +212,106 @@ def summarize_status(job: dict[str, Any], output_dir: Path) -> dict[str, Any]:
     return updated
 
 
+def is_instagram_url(url: str) -> bool:
+    hostname = (urlparse(url).hostname or "").lower()
+    return hostname == "instagram.com" or hostname.endswith(".instagram.com")
+
+
+def normalized_cookie_browser(message: dict[str, Any]) -> str | None:
+    browser = str(message.get("cookiesBrowser") or "none").strip().lower()
+    if browser in {"", "none"}:
+        return None
+    if browser not in SUPPORTED_COOKIE_BROWSERS:
+        raise ValueError(f"Unsupported cookies browser: {browser}")
+    return browser
+
+
+def append_browser_access_options(command: list[str], message: dict[str, Any]) -> None:
+    cookie_browser = normalized_cookie_browser(message)
+    if cookie_browser:
+        command.extend(["--cookies-from-browser", cookie_browser])
+    if bool(message.get("impersonateBrowser")):
+        command.extend(["--impersonate", "chrome"])
+
+
+def yt_dlp_version(yt_dlp: Path) -> str:
+    result = subprocess.run(
+        [str(yt_dlp), "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout).strip() or "Unable to read yt-dlp version")
+    return result.stdout.strip()
+
+
+def update_yt_dlp(yt_dlp: Path, channel: str) -> dict[str, Any]:
+    normalized_channel = str(channel or "nightly").strip().lower()
+    if normalized_channel not in SUPPORTED_UPDATE_CHANNELS:
+        raise ValueError(f"Unsupported yt-dlp update channel: {normalized_channel}")
+
+    before = yt_dlp_version(yt_dlp)
+    result = subprocess.run(
+        [str(yt_dlp), "--update-to", normalized_channel],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=180,
+    )
+    output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+    if result.returncode != 0:
+        raise RuntimeError(output or f"yt-dlp update failed with code {result.returncode}")
+    after = yt_dlp_version(yt_dlp)
+    return {
+        "channel": normalized_channel,
+        "versionBefore": before,
+        "versionAfter": after,
+        "message": output or f"yt-dlp is current ({after})",
+    }
+
+
+def update_state_path(output_dir: Path) -> Path:
+    _, log_dir = ensure_output_dirs(output_dir)
+    return log_dir / "ytdlp_update_state.json"
+
+
+def maybe_update_yt_dlp(message: dict[str, Any], yt_dlp: Path, output_dir: Path) -> dict[str, Any] | None:
+    if not bool(message.get("autoUpdateYtDlp", True)):
+        return None
+
+    state_path = update_state_path(output_dir)
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        state = {}
+
+    checked_at = float(state.get("checkedAtEpoch") or 0)
+    if time.time() - checked_at < YTDLP_UPDATE_INTERVAL_SECONDS:
+        return state
+
+    channel = str(message.get("updateChannel") or "nightly")
+    try:
+        result = update_yt_dlp(yt_dlp, channel)
+        state = {
+            **result,
+            "ok": True,
+            "checkedAt": utc_now(),
+            "checkedAtEpoch": time.time(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        state = {
+            "ok": False,
+            "channel": channel,
+            "error": str(exc),
+            "checkedAt": utc_now(),
+            "checkedAtEpoch": time.time(),
+        }
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    return state
+
+
 def build_download_command(message: dict[str, Any]) -> tuple[list[str], Path]:
     yt_dlp = ensure_path(message["ytDlpPath"], "yt-dlp")
     output_dir = Path(message["outputDirectory"])
@@ -217,16 +322,32 @@ def build_download_command(message: dict[str, Any]) -> tuple[list[str], Path]:
     url = message["url"]
     command = [
         str(yt_dlp),
+        "--ignore-config",
+        "--newline",
+        "--windows-filenames",
         "--ffmpeg-location",
         str(ffmpeg.parent),
         "-o",
         str(output_dir / "%(title).180s [%(id)s].%(ext)s"),
     ]
+    append_browser_access_options(command, message)
+    if is_instagram_url(url):
+        command.append("--no-playlist")
     if mode == "audio":
         command.extend(["-x", "--audio-format", "mp3", "--audio-quality", "0"])
     else:
-        command.extend(["-f", quality or "best", "--merge-output-format", "mp4"])
-    command.append(url)
+        format_selector = "bv*+ba/b" if not quality or quality == "best" else quality
+        command.extend(
+            [
+                "-f",
+                format_selector,
+                "--merge-output-format",
+                "mp4",
+                "--remux-video",
+                "mp4",
+            ]
+        )
+    command.extend(["--", url])
     return command, output_dir
 
 
@@ -405,6 +526,9 @@ def queue_transcription_job(
 
 
 def handle_download(message: dict[str, Any]) -> dict[str, Any]:
+    yt_dlp = ensure_path(message["ytDlpPath"], "yt-dlp")
+    output_dir = Path(message["outputDirectory"])
+    update_info = maybe_update_yt_dlp(message, yt_dlp, output_dir)
     command, output_dir = build_download_command(message)
     _, log_dir = ensure_output_dirs(output_dir)
     job_id = str(uuid.uuid4())
@@ -447,7 +571,7 @@ def handle_download(message: dict[str, Any]) -> dict[str, Any]:
         close_fds=False,
     )
     update_job(output_dir, job_id, pid=process.pid, status="started")
-    return {
+    response = {
         "ok": True,
         "jobId": job_id,
         "pid": process.pid,
@@ -455,6 +579,9 @@ def handle_download(message: dict[str, Any]) -> dict[str, Any]:
         "logPath": str(log_path),
         "outputDirectory": str(output_dir),
     }
+    if update_info:
+        response["ytDlpUpdate"] = update_info
+    return response
 
 
 def handle_open_folder(message: dict[str, Any]) -> dict[str, Any]:
@@ -464,23 +591,68 @@ def handle_open_folder(message: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "message": "Folder opened"}
 
 
+def open_completed_download_folder(output_path: str | None, output_dir: Path) -> None:
+    folder = Path(output_path).parent if output_path and Path(output_path).exists() else output_dir
+    os.startfile(str(folder))
+
+
+def maybe_open_completed_download_folder(
+    message: dict[str, Any],
+    output_path: str | None,
+    output_dir: Path,
+    log_path: Path,
+) -> None:
+    if not bool(message.get("openFolderOnComplete")):
+        return
+    try:
+        open_completed_download_folder(output_path, output_dir)
+        write_log_line(log_path, "[runner] Output folder opened")
+    except Exception as exc:  # noqa: BLE001
+        write_log_line(log_path, f"[runner] Could not open output folder: {exc}")
+
+
 def handle_probe(message: dict[str, Any]) -> dict[str, Any]:
     yt_dlp = ensure_path(message["ytDlpPath"], "yt-dlp")
     ffmpeg = ensure_path(message["ffmpegPath"], "ffmpeg")
     output_dir = Path(message["outputDirectory"])
     output_dir.mkdir(parents=True, exist_ok=True)
-    return {"ok": True, "message": f"OK: {yt_dlp.name}, {ffmpeg.name}, output ready"}
+    version = yt_dlp_version(yt_dlp)
+    return {
+        "ok": True,
+        "message": f"OK: yt-dlp {version}, {ffmpeg.name}, output ready",
+        "ytDlpVersion": version,
+    }
+
+
+def handle_update_ytdlp(message: dict[str, Any]) -> dict[str, Any]:
+    yt_dlp = ensure_path(message["ytDlpPath"], "yt-dlp")
+    output_dir = Path(message["outputDirectory"])
+    result = update_yt_dlp(yt_dlp, str(message.get("updateChannel") or "nightly"))
+    state = {
+        **result,
+        "ok": True,
+        "checkedAt": utc_now(),
+        "checkedAtEpoch": time.time(),
+    }
+    update_state_path(output_dir).write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, **result}
 
 
 def handle_analyze(message: dict[str, Any]) -> dict[str, Any]:
     yt_dlp = ensure_path(message["ytDlpPath"], "yt-dlp")
+    output_dir = Path(message.get("outputDirectory") or yt_dlp.parent / "DOWNLOADS")
+    maybe_update_yt_dlp(message, yt_dlp, output_dir)
     command = [
         str(yt_dlp),
+        "--ignore-config",
         "--dump-single-json",
         "--skip-download",
         "--no-warnings",
-        message["url"],
     ]
+    append_browser_access_options(command, message)
+    if is_instagram_url(message["url"]):
+        command.append("--no-playlist")
+    command.extend(["--", message["url"]])
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip() or "Analyze failed")
@@ -685,6 +857,7 @@ def run_download_job(job: dict[str, Any], message: dict[str, Any], command: list
             pid=None,
         )
         write_log_line(log_path, "[runner] Download completed")
+        maybe_open_completed_download_folder(message, output_path, output_dir, log_path)
         return
 
     if not created_files and output_path and Path(output_path).exists():
@@ -761,6 +934,7 @@ def run_download_job(job: dict[str, Any], message: dict[str, Any], command: list
         pid=None,
     )
     write_log_line(log_path, f"[transcribe] completed for {transcript_count} file(s)")
+    maybe_open_completed_download_folder(message, output_path, output_dir, log_path)
 
 
 def run_uploaded_transcription_job(job: dict[str, Any], message: dict[str, Any]) -> None:
@@ -863,6 +1037,9 @@ def main() -> None:
             return
         if action == "probe":
             send_message(handle_probe(message))
+            return
+        if action == "update_ytdlp":
+            send_message(handle_update_ytdlp(message))
             return
         if action == "analyze":
             send_message(handle_analyze(message))

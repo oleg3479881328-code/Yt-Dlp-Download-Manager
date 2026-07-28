@@ -1,5 +1,143 @@
 # PROJECT LOG — yt-dlp Download Manager
 
+## 2026-07-27 — Stable Quick Downloader updater prepared
+
+### Trigger
+
+Олег поручил перенести на Quick Downloader финальную схему обновления TikTok Research Sorter: постоянная локальная папка и один CMD-файл для всех последующих обновлений.
+
+### Changes Made
+
+- Added `INSTALL_QUICK_DOWNLOADER.cmd` for the first stable installation.
+- Added `UPDATE_QUICK_DOWNLOADER.cmd` for all future GitHub updates.
+- Added `REGISTER_QUICK_DOWNLOADER.cmd` as an extension-ID/native-host recovery helper.
+- Added a cross-platform tested updater that downloads `master`, validates the archive, stages replacement, rebuilds the native host and reuses the saved extension ID.
+- First install validates and uses the bundled repository ZIP, allowing Windows review before the updater code is merged; later updates use `master`.
+- Stable install path is `%LOCALAPPDATA%\QuickDownloader`.
+- Configuration, downloads, logs and generated registration data are preserved.
+- Added GitHub Issue `#70` and execution report `04_STABLE_UPDATER_EXECUTION_REPORT.md`.
+
+### Validation
+
+- `22` focused tests passed.
+- Ruff passed.
+- Python compilation and updater package validation passed.
+- Isolated first-install and repeated-update staging passed.
+- `git diff --check` passed.
+
+### Errors And Resolutions
+
+- The former temporary pytest dependency directory no longer existed. A new isolated dependency directory was installed and the complete suite passed.
+- The sandbox rejected recursive cleanup of a dedicated `/tmp` validation folder. No project or owner files were affected. The validation was rerun in a fresh `mktemp` directory without deletion and passed.
+- A documentation search used unescaped Markdown backticks, causing the shell to try to execute `20`. No files were changed. The search was rerun with a safely quoted pattern.
+- The first local GitHub CLI extraction tried to preserve archive ownership and was rejected by the container. The verified archive was extracted again with `--no-same-owner`; GitHub CLI `2.96.0` then launched successfully.
+- GitHub CLI could not open the device-login page because the container has no local browser. The official device URL and one-time code were passed to the owner for manual authorization.
+- The first successful GitHub device login could not be saved because `/root/.config` is read-only. Authentication was repeated with `GH_CONFIG_DIR` pointing to `/tmp/quick-downloader-gh-config`.
+- The repeated login saved credentials but could not update `/root/.gitconfig`. `GIT_CONFIG_GLOBAL` was redirected to `/tmp/quick-downloader-gitconfig`; `gh auth status` and Git credential setup then passed for `oleg3479881328-code`.
+- The first publication-state commit attempt lacked an author identity because the new temporary global Git config was empty. The confirmed identity from implementation commit `d553d80` (`Codex <codex@openai.com>`) was copied into the temporary config before retrying.
+- After the draft PR checks passed, review found a bootstrap gap: the first installer would download `master`, where the updater did not yet exist before merge. `INSTALL_QUICK_DOWNLOADER.cmd` was changed to install its bundled PR ZIP; future updates remain bound to `master`.
+- The first real Windows installer run reported every required package file as missing. Root cause: quoted `%~dp0` ends with a backslash, which can corrupt the Python argv boundary before `--source-root`. The installer now passes `%~dp0.` so the argument ends with a directory component instead of a trailing backslash; regression coverage was added.
+
+### Current Next Action
+
+Draft PR `#71` was published from branch `fix/issue-68-instagram-downloads`.
+Owner reviews the PR on Windows, loads the extension once from the stable path,
+and confirms that the later update command rebuilds and re-registers Quick Downloader.
+
+### Publication
+
+- Branch: `fix/issue-68-instagram-downloads`
+- Implementation commit: `d553d80`
+- Draft PR: `#71 Refresh Quick Downloader and add stable updater`
+- PR targets: Issues `#68`, `#69` and `#70`
+
+---
+
+## 2026-07-27 — Quick Downloader context menu changed to one-click flow
+
+### Trigger
+
+Олег сообщил о лишнем действии: контекстное меню открывало полную страницу расширения, после чего требовалось ещё раз нажимать Start.
+
+### Verified Root Cause
+
+- `handleContextAction` checked the saved `workMode`.
+- `workMode=full` called `chrome.tabs.create` instead of starting the download.
+- Folder opening existed only as a separate manual action.
+
+### Changes Made
+
+- Context menu now always queues the download immediately.
+- Removed obsolete Work mode selectors.
+- Full manual page remains accessible from the toolbar popup.
+- Context-menu jobs explicitly set `openFolderOnComplete=true`.
+- Native runner opens the output folder after successful download/post-processing.
+- Failed jobs do not open the folder.
+- HTTP URL selection now rejects `blob:` sources.
+- Extension version updated to `0.2.1`.
+
+### Validation
+
+- `13` focused tests passed.
+- Ruff passed.
+- JavaScript syntax checks passed.
+- Manifest JSON and `git diff --check` passed.
+
+### Error And Resolution
+
+- First Ruff run found one import-order error in `tests/test_quick_downloader_context_menu.py`.
+- `ruff --fix` corrected it.
+- Full validation passed afterward.
+
+### Current Next Action
+
+Owner tests Issue `#69` on Windows: right-click download must start immediately and open the output folder after completion.
+
+---
+
+## 2026-07-26 — Instagram Chrome extension refresh implemented and locally validated
+
+### Trigger
+
+Олег сообщил, что существующее расширение не скачивает Instagram, хотя проект использует `yt-dlp`, и поручил адаптировать расширение к текущей работе Instagram.
+
+### Verified Root Cause
+
+- Extension/native host used a fixed `C:\yt-dlp\yt-dlp.exe`.
+- No version diagnostics or update path existed.
+- The old command forced the legacy `best` format selector.
+- The current official `yt-dlp` guidance recommends the `nightly` channel for regular users because stable releases can become stale after site changes.
+
+### Changes Made
+
+- Added a daily rate-limited auto-update check and manual update action.
+- Set `nightly` as the default update channel.
+- Added installed-version diagnostics.
+- Added current MP4 best-video-plus-audio command construction.
+- Added Instagram single-item behavior.
+- Added optional browser-cookie and Chrome impersonation fallbacks, both disabled by default.
+- Updated the extension version to `0.2.0`.
+- Updated the repository `yt-dlp` pin to `2026.7.4`.
+- Added focused tests and workflow run `0004-instagram-extension-refresh`.
+
+### Validation
+
+- `9` focused tests passed.
+- Ruff passed.
+- JavaScript syntax and manifest JSON checks passed.
+- Exact owner-provided Instagram Reel downloaded successfully:
+  - MP4
+  - `1080x1920`
+  - VP9 video
+  - AAC audio
+  - `9.172993s`
+
+### Current Next Action
+
+Owner rebuilds the native host on Windows, reloads extension `0.2.0`, and validates the same Reel through the actual Chrome UI.
+
+---
+
 ## 2026-05-25 — Legacy project normalization
 
 ### Trigger

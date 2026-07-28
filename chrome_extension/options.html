@@ -9,22 +9,13 @@
 <body class="ext-shell">
   <div class="ext-card wide">
     <h1>Настройки расширения</h1>
-    <div class="grid-two">
-      <label class="field">
-        <span>Work mode</span>
-        <select id="workMode">
-          <option value="mini">Mini</option>
-          <option value="full">Full</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>Default mode</span>
-        <select id="defaultMode">
-          <option value="video">Video</option>
-          <option value="audio">Audio</option>
-        </select>
-      </label>
-    </div>
+    <label class="field">
+      <span>Default mode</span>
+      <select id="defaultMode">
+        <option value="video">Video</option>
+        <option value="audio">Audio</option>
+      </select>
+    </label>
     <label class="field">
       <span>Quality / format</span>
       <input id="quality" type="text">
@@ -33,6 +24,42 @@
       <span>yt-dlp path</span>
       <input id="ytDlpPath" type="text">
     </label>
+    <div class="grid-two">
+      <label class="field checkbox-field">
+        <span>
+          <input id="autoUpdateYtDlp" type="checkbox">
+          Автоматически обновлять yt-dlp раз в сутки
+        </span>
+      </label>
+      <label class="field">
+        <span>Канал обновлений yt-dlp</span>
+        <select id="updateChannel">
+          <option value="nightly">Nightly — рекомендуется</option>
+          <option value="stable">Stable</option>
+          <option value="master">Master</option>
+        </select>
+      </label>
+    </div>
+    <div class="grid-two">
+      <label class="field">
+        <span>Cookies из браузера — только если Instagram требует вход</span>
+        <select id="cookiesBrowser">
+          <option value="none">Не использовать</option>
+          <option value="chrome">Chrome</option>
+          <option value="edge">Edge</option>
+          <option value="firefox">Firefox</option>
+          <option value="brave">Brave</option>
+          <option value="vivaldi">Vivaldi</option>
+        </select>
+      </label>
+      <label class="field checkbox-field">
+        <span>
+          <input id="impersonateBrowser" type="checkbox">
+          Имитировать запрос Chrome при блокировке
+        </span>
+      </label>
+    </div>
+    <p class="muted">Cookies не копируются и не сохраняются расширением: yt-dlp читает их локально из выбранного браузера только во время запроса.</p>
     <label class="field">
       <span>ffmpeg path</span>
       <input id="ffmpegPath" type="text">
@@ -68,6 +95,7 @@
     <div class="actions">
       <button id="save" class="primary">Сохранить</button>
       <button id="probe">Проверить</button>
+      <button id="updateYtDlp">Обновить yt-dlp сейчас</button>
       <button id="openFolder">Открыть папку</button>
     </div>
     <div id="status" class="status"></div>

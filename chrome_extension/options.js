@@ -1,11 +1,14 @@
 const DEFAULTS = {
   nativeHostName: "com.oleg.ytdlp",
-  workMode: "mini",
   defaultMode: "video",
   quality: "best",
   outputDirectory: "C:\\yt-dlp\\DOWNLOADS",
   ytDlpPath: "C:\\yt-dlp\\yt-dlp.exe",
   ffmpegPath: "C:\\yt-dlp\\ffmpeg.exe",
+  autoUpdateYtDlp: true,
+  updateChannel: "nightly",
+  cookiesBrowser: "none",
+  impersonateBrowser: false,
   defaultTranscribeAudio: false,
   defaultTranscriptionLanguage: "auto",
   defaultTranscriptSecondMarks: true
@@ -14,6 +17,8 @@ const DEFAULTS = {
 const BOOLEAN_FIELDS = new Set([
   "defaultTranscribeAudio",
   "defaultTranscriptSecondMarks",
+  "autoUpdateYtDlp",
+  "impersonateBrowser",
 ]);
 
 function setStatus(message, isError = false) {
@@ -49,6 +54,17 @@ document.getElementById("probe").addEventListener("click", async () => {
   await saveSettings();
   const response = await chrome.runtime.sendMessage({ action: "probe" });
   setStatus(response.ok ? response.message : response.error, !response.ok);
+});
+document.getElementById("updateYtDlp").addEventListener("click", async () => {
+  await saveSettings();
+  setStatus("Обновляю yt-dlp...");
+  const response = await chrome.runtime.sendMessage({ action: "updateYtDlp" });
+  setStatus(
+    response.ok
+      ? `yt-dlp обновлён: ${response.versionBefore} → ${response.versionAfter}`
+      : response.error,
+    !response.ok
+  );
 });
 document.getElementById("openFolder").addEventListener("click", async () => {
   await saveSettings();
