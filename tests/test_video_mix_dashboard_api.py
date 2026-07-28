@@ -375,6 +375,9 @@ def test_video_mix_dashboard_quick_mix_returns_output_paths_and_dashboard(tmp_pa
         "generated_count": 2,
         "video_count": 1,
         "image_count": 1,
+        "quick_mix_warning_count": 0,
+        "quick_mix_warnings": [],
+        "quick_mix_plan_path": "reports/quick_mix_plan.json",
         "photo_support": True,
         "output_paths": ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"],
     }
@@ -396,5 +399,8 @@ def test_video_mix_dashboard_quick_mix_returns_output_paths_and_dashboard(tmp_pa
     assert payload["ok"] is True
     assert payload["generated_count"] == 2
     assert payload["photo_support"] is True
+    assert payload["quick_mix_warning_count"] == 0
+    assert payload["quick_mix_warnings"] == []
+    assert payload["quick_mix_plan_path"] == "reports/quick_mix_plan.json"
     assert payload["output_paths"] == ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"]
     assert payload["dashboard"]["summary"]["candidate_count"] == 1

@@ -10,7 +10,7 @@ from video_mix.core.review import (
     collect_existing_thumbnails,
     write_review_html,
 )
-from video_mix.core.storage import build_asset, build_candidate, build_clip, to_jsonable
+from video_mix.core.storage import build_asset, build_candidate, build_clip, read_json, to_jsonable
 from video_mix.service import (
     _build_video_segment_command,
     output_dimensions,
@@ -322,7 +322,201 @@ def test_quick_mix_source_materials_supports_videos_and_photos(tmp_path: Path, m
     assert result["output_height"] == 1080
     assert result["captions_enabled"] is False
     assert result["caption_position"] == "bottom"
+    assert result["quick_mix_warning_count"] >= 1
+    assert any(warning["code"] == "quick_mix_unique_material_exhausted" for warning in result["quick_mix_warnings"])
+    assert result["quick_mix_plan_path"] == "reports/quick_mix_plan.json"
     assert result["output_paths"] == ["exports/quick_mix_001.mp4", "exports/quick_mix_002.mp4"]
     assert len(rendered_segments) >= 2
     assert len(rendered_outputs) == 2
     assert set(rendered_dimensions) == {(1920, 1080)}
+    quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
+    assert quick_mix_plan["warning_count"] >= 1
+    assert len(quick_mix_plan["outputs"]) == 2
+
+
+def test_quick_mix_source_materials_uses_planner_and_avoids_duplicate_whatsapp_groups(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    whatsapp_primary = source_dir / "WhatsApp Video 2026-07-03 at 10.21.53 PM.jpg"
+    whatsapp_duplicate = source_dir / "WhatsApp Video 2026-07-03 at 10.21.53 PM (1).jpg"
+    cake = source_dir / "cake_detail.jpg"
+    for path in (whatsapp_primary, whatsapp_duplicate, cake):
+        path.write_bytes(b"photo")
+
+    rendered_asset_names: list[str] = []
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.probe_status = "skipped_photo"
+        return assets
+
+    def fake_render_segment(
+        asset: Asset,
+        output_path: Path,
+        *,
+        start_ms: int,
+        duration_ms: int,
+        ffmpeg_path: str,
+        output_width: int = 1080,
+        output_height: int = 1920,
+        caption_text_path: Path | None = None,
+        caption_position: str = "bottom",
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(asset.path.name.encode("utf-8"))
+        rendered_asset_names.append(asset.path.name)
+
+    def fake_render_output(segment_paths: list[Path], output_path: Path, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"ok")
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", fake_render_output)
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=4,
+        output_count=1,
+        project_name="Planner Validation",
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert result["quick_mix_warning_count"] == 0
+    assert result["quick_mix_warnings"] == []
+    assert len(rendered_asset_names) == 2
+    assert "cake_detail.jpg" in rendered_asset_names
+    assert len([name for name in rendered_asset_names if "WhatsApp Video 2026-07-03 at 10.21.53 PM" in name]) == 1
+
+    quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
+    groups = [segment["normalized_source_group"] for segment in quick_mix_plan["outputs"][0]["segments"]]
+    assert len(groups) == len(set(groups))
+    assert quick_mix_plan["warning_count"] == 0
+
+
+def test_quick_mix_source_materials_records_exhaustion_warning_when_unique_material_is_short(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    only_photo = source_dir / "only_photo.jpg"
+    only_photo.write_bytes(b"photo")
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.probe_status = "skipped_photo"
+        return assets
+
+    def fake_render_segment(
+        asset: Asset,
+        output_path: Path,
+        *,
+        start_ms: int,
+        duration_ms: int,
+        ffmpeg_path: str,
+        output_width: int = 1080,
+        output_height: int = 1920,
+        caption_text_path: Path | None = None,
+        caption_position: str = "bottom",
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(asset.path.name.encode("utf-8"))
+
+    def fake_render_output(segment_paths: list[Path], output_path: Path, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"ok")
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", fake_render_output)
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=4,
+        output_count=1,
+        project_name="Warning Validation",
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert result["quick_mix_warning_count"] == 1
+    assert result["quick_mix_warnings"][0]["code"] == "quick_mix_unique_material_exhausted"
+
+    quick_mix_json = read_json(tmp_path / "work" / "reports" / "quick_mix.json")
+    assert quick_mix_json["quick_mix_warning_count"] == 1
+    assert quick_mix_json["quick_mix_plan_path"] == "reports/quick_mix_plan.json"
+    quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
+    assert quick_mix_plan["warning_count"] == 1
+    assert quick_mix_plan["warnings"][0]["code"] == "quick_mix_unique_material_exhausted"
+
+
+def test_quick_mix_source_materials_backfills_short_clip_to_requested_duration(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    names = ["a.mp4", "b.mp4", "c.mp4", "d.mp4"]
+    for name in names:
+        (source_dir / name).write_bytes(b"video")
+
+    durations_by_name = {
+        "a.mp4": 2000,
+        "b.mp4": 2000,
+        "c.mp4": 700,
+        "d.mp4": 2000,
+    }
+    rendered_calls: list[tuple[str, int]] = []
+
+    def fake_probe_assets(assets, ffprobe_path="ffprobe"):
+        for asset in assets:
+            asset.duration_ms = durations_by_name[asset.path.name]
+            asset.width = 1080
+            asset.height = 1920
+            asset.fps = 30.0
+            asset.orientation = Orientation.VERTICAL
+            asset.probe_status = "ok"
+        return assets
+
+    def fake_render_segment(
+        asset: Asset,
+        output_path: Path,
+        *,
+        start_ms: int,
+        duration_ms: int,
+        ffmpeg_path: str,
+        output_width: int = 1080,
+        output_height: int = 1920,
+        caption_text_path: Path | None = None,
+        caption_position: str = "bottom",
+    ) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(f"{asset.path.name}:{duration_ms}".encode())
+        rendered_calls.append((asset.path.name, duration_ms))
+
+    def fake_render_output(segment_paths: list[Path], output_path: Path, ffmpeg_path: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"ok")
+
+    monkeypatch.setattr("video_mix.service.probe_assets", fake_probe_assets)
+    monkeypatch.setattr("video_mix.service._ensure_ffmpeg_available", lambda ffmpeg_path: None)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_segment", fake_render_segment)
+    monkeypatch.setattr("video_mix.service._render_quick_mix_output", fake_render_output)
+
+    result = quick_mix_source_materials(
+        str(source_dir),
+        duration_seconds=6,
+        output_count=1,
+        project_name="Backfill Validation",
+        work_dir=str(tmp_path / "work"),
+    )
+
+    assert result["generated_count"] == 1
+    assert sum(duration_ms for _, duration_ms in rendered_calls) == 6000
+    assert [name for name, _ in rendered_calls] == ["a.mp4", "b.mp4", "c.mp4", "d.mp4"]
+
+    quick_mix_plan = read_json(tmp_path / "work" / "reports" / "quick_mix_plan.json")
+    assert quick_mix_plan["outputs"][0]["planned_duration_ms"] == 6000
+    assert [segment["duration_ms"] for segment in quick_mix_plan["outputs"][0]["segments"]] == [2000, 2000, 700, 1300]

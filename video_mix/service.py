@@ -9,6 +9,7 @@ from .core.candidate_builder import build_candidates
 from .core.duplicate_detection import apply_duplicate_detection
 from .core.media_probe import probe_assets
 from .core.models import Asset, MediaType, Project
+from .core.quick_mix_planner import QuickMixSource, build_quick_mix_plan
 from .core.review import write_review_html
 from .core.scoring import score_assets, score_clips
 from .core.segmenters import (
@@ -28,7 +29,6 @@ from .core.storage import (
 )
 from .core.tagging import apply_filename_tags
 from .packs.wedding import get_wedding_templates
-
 
 QUICK_MIX_SOURCE_START_MS = "quick_mix_source_start_ms"
 QUICK_MIX_SOURCE_ASSET_ID = "quick_mix_source_asset_id"
@@ -308,6 +308,26 @@ def _build_quick_mix_usable_assets(assets: list[Asset], work_dir: Path, *, ffmpe
     return usable_assets, detected_take_count
 
 
+def _build_quick_mix_sources(usable_assets: list[Asset]) -> tuple[list[QuickMixSource], dict[str, Asset]]:
+    sources: list[QuickMixSource] = []
+    assets_by_source_id: dict[str, Asset] = {}
+
+    for asset in usable_assets:
+        source = QuickMixSource(
+            source_id=asset.asset_id,
+            path=asset.path,
+            media_type=asset.media_type.value,
+            duration_ms=asset.duration_ms,
+            source_start_ms=_quick_mix_source_start_ms(asset),
+            base_source_id=asset.metadata.get(QUICK_MIX_SOURCE_ASSET_ID) or asset.asset_id,
+            metadata=dict(asset.metadata),
+        )
+        sources.append(source)
+        assets_by_source_id[source.source_id] = asset
+
+    return sources, assets_by_source_id
+
+
 def _build_video_segment_command(
     asset: Asset,
     output_path: Path,
@@ -473,6 +493,9 @@ def _prepare_quick_mix_workdir(
     output_height: int,
     captions_enabled: bool,
     caption_position: str,
+    quick_mix_warning_count: int,
+    quick_mix_warnings: list[dict],
+    quick_mix_plan_path: str,
 ) -> None:
     save_project(work_dir, project)
     save_assets(work_dir, assets)
@@ -494,6 +517,9 @@ def _prepare_quick_mix_workdir(
             "output_height": output_height,
             "captions_enabled": captions_enabled,
             "caption_position": caption_position,
+            "quick_mix_warning_count": quick_mix_warning_count,
+            "quick_mix_warnings": quick_mix_warnings,
+            "quick_mix_plan_path": quick_mix_plan_path,
             "output_paths": [str(path.relative_to(work_dir)).replace("\\", "/") for path in output_paths],
         },
     )
@@ -538,45 +564,30 @@ def quick_mix_source_materials(
     if not usable_assets:
         raise ValueError("No usable video or photo files were found in the selected source folder.")
 
+    quick_mix_sources, assets_by_source_id = _build_quick_mix_sources(usable_assets)
+    output_plans, quick_mix_warnings = build_quick_mix_plan(
+        quick_mix_sources,
+        target_duration_ms=target_duration_ms,
+        output_count=normalized_output_count,
+    )
+
     exports_dir = resolved_work_dir / "exports"
     segments_dir = resolved_work_dir / "quick_mix_segments"
     exports_dir.mkdir(parents=True, exist_ok=True)
     segments_dir.mkdir(parents=True, exist_ok=True)
-
-    video_offsets: dict[str, int] = {}
-    asset_cursor = 0
     output_paths: list[Path] = []
 
-    for output_index in range(normalized_output_count):
-        remaining_ms = target_duration_ms
+    for output_plan in output_plans:
         segment_paths: list[Path] = []
-        step_index = 0
 
-        while remaining_ms > 0:
-            asset = usable_assets[asset_cursor % len(usable_assets)]
-            asset_cursor += 1
-            preferred_ms = _preferred_segment_ms(asset, remaining_ms)
-            if preferred_ms <= 0:
-                raise ValueError(f"Could not determine a usable segment duration for asset: {asset.path}")
-
-            if asset.media_type == MediaType.VIDEO and asset.duration_ms:
-                segment_ms = min(preferred_ms, asset.duration_ms)
-                max_start = max(0, asset.duration_ms - segment_ms)
-                cursor = video_offsets.get(asset.asset_id, 0)
-                relative_start_ms = min(cursor, max_start)
-                start_ms = _quick_mix_source_start_ms(asset) + relative_start_ms
-                next_cursor = cursor + segment_ms
-                video_offsets[asset.asset_id] = 0 if next_cursor >= max_start and max_start > 0 else next_cursor
-            else:
-                segment_ms = preferred_ms
-                start_ms = 0
-
-            segment_path = segments_dir / f"quick_mix_{output_index + 1:03d}_seg_{step_index + 1:02d}.mp4"
+        for segment in output_plan.segments:
+            asset = assets_by_source_id[segment.source_id]
+            segment_path = segments_dir / f"quick_mix_{output_plan.output_index:03d}_seg_{segment.step_index:02d}.mp4"
             _render_quick_mix_segment(
                 asset,
                 segment_path,
-                start_ms=start_ms,
-                duration_ms=segment_ms,
+                start_ms=segment.source_start_ms,
+                duration_ms=segment.duration_ms,
                 ffmpeg_path=ffmpeg_path,
                 output_width=output_width,
                 output_height=output_height,
@@ -584,14 +595,23 @@ def quick_mix_source_materials(
                 caption_position=normalized_caption_position,
             )
             segment_paths.append(segment_path)
-            remaining_ms -= segment_ms
-            step_index += 1
 
-        output_path = exports_dir / f"quick_mix_{output_index + 1:03d}.mp4"
+        output_path = exports_dir / f"quick_mix_{output_plan.output_index:03d}.mp4"
         _render_quick_mix_output(segment_paths, output_path, ffmpeg_path)
         output_paths.append(output_path)
 
     captions_enabled = caption_text_path is not None
+    quick_mix_plan_path = "reports/quick_mix_plan.json"
+    write_json(
+        resolved_work_dir / quick_mix_plan_path,
+        {
+            "target_duration_ms": target_duration_ms,
+            "output_count": normalized_output_count,
+            "warning_count": len(quick_mix_warnings),
+            "warnings": quick_mix_warnings,
+            "outputs": output_plans,
+        },
+    )
     _prepare_quick_mix_workdir(
         resolved_work_dir,
         project=project,
@@ -606,6 +626,9 @@ def quick_mix_source_materials(
         output_height=output_height,
         captions_enabled=captions_enabled,
         caption_position=normalized_caption_position,
+        quick_mix_warning_count=len(quick_mix_warnings),
+        quick_mix_warnings=quick_mix_warnings,
+        quick_mix_plan_path=quick_mix_plan_path,
     )
 
     return {
@@ -625,6 +648,9 @@ def quick_mix_source_materials(
         "output_height": output_height,
         "captions_enabled": captions_enabled,
         "caption_position": normalized_caption_position,
+        "quick_mix_warning_count": len(quick_mix_warnings),
+        "quick_mix_warnings": quick_mix_warnings,
+        "quick_mix_plan_path": quick_mix_plan_path,
         "photo_support": True,
         "output_paths": [str(path.relative_to(resolved_work_dir)).replace("\\", "/") for path in output_paths],
     }
