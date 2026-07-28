@@ -118,6 +118,10 @@ was not entered during the first install.
 7. The redirected Git config initially lacked commit author fields. The confirmed
    `Codex <codex@openai.com>` identity from implementation commit `d553d80` was
    applied to the temporary config before retrying the publication-state commit.
+8. The first real Windows installer run treated the package root as empty. Quoted
+   `%~dp0` ended with a backslash and corrupted the Python `--source-root` argument
+   boundary. Both installer entrypoints now pass `%~dp0.` and a regression assertion
+   prevents the trailing-backslash form from returning.
 
 ## Windows Review Target
 

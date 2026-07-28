@@ -193,4 +193,5 @@ def test_cmd_entrypoints_call_the_updater_in_expected_mode() -> None:
     installer_source = (ROOT / "INSTALL_QUICK_DOWNLOADER.cmd").read_text(
         encoding="utf-8"
     )
-    assert '--source-root "%~dp0"' in installer_source
+    assert '--source-root "%~dp0."' in installer_source
+    assert '--source-root "%~dp0"' not in installer_source

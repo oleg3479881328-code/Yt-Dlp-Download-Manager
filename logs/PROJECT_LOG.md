@@ -36,6 +36,7 @@
 - The repeated login saved credentials but could not update `/root/.gitconfig`. `GIT_CONFIG_GLOBAL` was redirected to `/tmp/quick-downloader-gitconfig`; `gh auth status` and Git credential setup then passed for `oleg3479881328-code`.
 - The first publication-state commit attempt lacked an author identity because the new temporary global Git config was empty. The confirmed identity from implementation commit `d553d80` (`Codex <codex@openai.com>`) was copied into the temporary config before retrying.
 - After the draft PR checks passed, review found a bootstrap gap: the first installer would download `master`, where the updater did not yet exist before merge. `INSTALL_QUICK_DOWNLOADER.cmd` was changed to install its bundled PR ZIP; future updates remain bound to `master`.
+- The first real Windows installer run reported every required package file as missing. Root cause: quoted `%~dp0` ends with a backslash, which can corrupt the Python argv boundary before `--source-root`. The installer now passes `%~dp0.` so the argument ends with a directory component instead of a trailing backslash; regression coverage was added.
 
 ### Current Next Action
 
