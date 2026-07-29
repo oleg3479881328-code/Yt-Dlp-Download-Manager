@@ -13,7 +13,7 @@ APP_USER="video-review"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y git nginx python3 python3-venv python3-pip rsync
+apt-get install -y git nginx python3 python3-venv python3-pip rsync curl
 
 if ! id "$APP_USER" >/dev/null 2>&1; then
   useradd --system --home "$RUNTIME_ROOT" --shell /usr/sbin/nologin "$APP_USER"
@@ -49,7 +49,7 @@ User=$APP_USER
 Group=$APP_USER
 WorkingDirectory=$APP_ROOT
 EnvironmentFile=/etc/video-review-portal.env
-ExecStart=$APP_ROOT/.venv/bin/python -m uvicorn review_portal.app:app --host 127.0.0.1 --port 8770 --proxy-headers --forwarded-allow-ips=127.0.0.1
+ExecStart=$APP_ROOT/.venv/bin/python -m uvicorn review_portal.aws_app:app --host 127.0.0.1 --port 8770 --proxy-headers --forwarded-allow-ips=127.0.0.1 --no-access-log
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
@@ -67,6 +67,7 @@ server {
     listen [::]:80 default_server;
     server_name _;
 
+    access_log off;
     client_max_body_size 20m;
 
     location / {
@@ -75,6 +76,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Range $http_range;
         proxy_set_header If-Range $http_if_range;
         proxy_buffering off;
