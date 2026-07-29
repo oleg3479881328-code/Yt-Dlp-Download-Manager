@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Замечания к роликам</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="admin-page">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">VIDEO MIX / OPERATOR</p>
+      <h1>Замечания к роликам</h1>
+      <p class="lead">Все текстовые и голосовые комментарии с привязкой к ролику и таймкоду.</p>
+    </div>
+    <div class="admin-toolbar">
+      <label>
+        <span>Статус</span>
+        <select id="status-filter">
+          <option value="">Все</option>
+          <option value="new">Новые</option>
+          <option value="in_progress">В работе</option>
+          <option value="done">Исправлено</option>
+          <option value="dismissed">Отклонено</option>
+        </select>
+      </label>
+      <button id="refresh-comments" class="secondary-button" type="button">Обновить</button>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section class="summary-row" aria-live="polite">
+      <strong id="comment-count">Загрузка замечаний…</strong>
+    </section>
+    <section id="comment-list" class="comment-list" aria-live="polite"></section>
+  </main>
+
+  <template id="comment-card-template">
+    <article class="comment-card">
+      <div class="comment-card-header">
+        <div>
+          <p class="comment-video"></p>
+          <h2 class="comment-title"></h2>
+        </div>
+        <span class="timecode-chip"></span>
+      </div>
+      <blockquote class="comment-text"></blockquote>
+      <div class="comment-audio"></div>
+      <div class="comment-footer">
+        <span class="comment-created"></span>
+        <label>
+          <span>Статус</span>
+          <select class="comment-status-select">
+            <option value="new">Новое</option>
+            <option value="in_progress">В работе</option>
+            <option value="done">Исправлено</option>
+            <option value="dismissed">Отклонено</option>
+          </select>
+        </label>
+      </div>
+    </article>
+  </template>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/static/admin.js"></script>
+</body>
+</html>

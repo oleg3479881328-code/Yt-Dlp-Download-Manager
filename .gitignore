@@ -15,3 +15,5 @@ _video_mix_work/
 video_mix_validation/
 **/reports/review.html
 **/reports/thumbnails/
+review_portal_media/
+data/review_portal/
