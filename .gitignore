@@ -17,3 +17,5 @@ video_mix_validation/
 **/reports/thumbnails/
 review_portal_media/
 data/review_portal/
+deploy/aws-lightsail/deployment-output.json
+deploy/aws-lightsail/*.pem
