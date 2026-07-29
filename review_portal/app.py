@@ -25,6 +25,7 @@ MAX_AUDIO_BYTES = 15 * 1024 * 1024
 COMMENT_STATUSES = {"new", "in_progress", "done", "dismissed"}
 TokenQuery = Annotated[str | None, Query()]
 TokenHeader = Annotated[str | None, Header(alias="X-Review-Token")]
+StatusQuery = Annotated[str | None, Query()]
 
 
 @dataclass(frozen=True)
@@ -392,7 +393,7 @@ def create_app(
 
     @application.get("/api/admin/comments")
     async def admin_comments(
-        status: str | None = Query(default=None),
+        status: StatusQuery = None,
         token: TokenQuery = None,
         x_review_token: TokenHeader = None,
     ) -> dict[str, object]:
@@ -428,7 +429,6 @@ def create_app(
             raise HTTPException(status_code=404, detail="Voice recording not found")
         return FileResponse(
             audio_path,
-            filename=audio_path.name,
             media_type=str(comment.get("audio_mime") or "application/octet-stream"),
         )
 
