@@ -38,6 +38,13 @@ def test_review_page_and_video_list_require_token(tmp_path: Path) -> None:
     assert payload["videos"][0]["filename"] == "01_babushka_v1.mp4"
     assert "path" not in payload["videos"][0]
 
+    stream = client.get(
+        f"/api/review/videos/{payload['videos'][0]['video_id']}/stream?token=client-token"
+    )
+    assert stream.status_code == 200
+    assert stream.content == b"fake-mp4"
+    assert "content-disposition" not in stream.headers
+
 
 def test_text_comment_with_timecode_appears_in_admin_queue(tmp_path: Path) -> None:
     client, _, _ = make_client(tmp_path)
@@ -85,6 +92,7 @@ def test_voice_comment_is_saved_and_playable_for_admin(tmp_path: Path) -> None:
     audio = client.get(f"/api/admin/comments/{comment['id']}/audio?token=admin-token")
     assert audio.status_code == 200
     assert audio.content == audio_bytes
+    assert "content-disposition" not in audio.headers
 
 
 def test_admin_can_update_comment_status(tmp_path: Path) -> None:
