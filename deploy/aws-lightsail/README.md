@@ -43,7 +43,7 @@ The distribution is configured to:
 - use the AWS default HTTPS certificate and technical domain;
 - forward query strings, including the client/admin token;
 - forward `GET`, `HEAD`, `OPTIONS`, `PUT`, `PATCH`, `POST`, and `DELETE` because the portal uses `POST` for comments and `PATCH` for statuses;
-- use zero cache TTL for the dynamic portal;
+- use the `dont-cache` behavior and zero cache TTL for the dynamic portal;
 - keep the current single-page video-card UX unchanged.
 
 ## Why this contour
@@ -80,7 +80,7 @@ Defaults:
 
 - origin region: `us-east-2`;
 - availability zone: `us-east-2a`;
-- instance bundle: `nano_3_0`;
+- least expensive active Linux instance bundle detected automatically;
 - newest active Ubuntu blueprint detected automatically;
 - least expensive active distribution bundle detected automatically;
 - random independent client and admin tokens generated automatically;
@@ -107,6 +107,13 @@ pwsh .\deploy\aws-lightsail\deploy.ps1 `
   -DistributionName olga-review-portal-web
 ```
 
+An explicit Lightsail bundle can be supplied if automatic selection is not desired:
+
+```powershell
+pwsh .\deploy\aws-lightsail\deploy.ps1 `
+  -InstanceBundleId nano_3_0
+```
+
 ## Upload finished videos
 
 ```powershell
@@ -125,6 +132,16 @@ pwsh .\deploy\aws-lightsail\upload-videos.ps1 `
 ```
 
 The portal scans its media directory on each video-list request, so an application restart is not required after upload.
+
+## Update the application later
+
+After a reviewed code change is pushed to the deployment branch:
+
+```powershell
+pwsh .\deploy\aws-lightsail\update-app.ps1
+```
+
+This pulls the selected branch, refreshes dependencies, restarts the service, and checks health. It does not replace videos, comments, or voice notes.
 
 ## Validate
 
@@ -181,6 +198,8 @@ Secrets:     /etc/video-review-portal.env
 - Client and admin tokens are different by default.
 - Both pages remain protected even if someone discovers the technical AWS domain.
 - The origin IP still requires a valid token; the final user-facing link must use HTTPS through the distribution.
+- nginx and Uvicorn access logs are disabled because the shared token is carried in the URL.
+- the public AWS health endpoint returns only `{ "ok": true }` and does not expose internal paths.
 - Rotate tokens by editing `/etc/video-review-portal.env` and restarting the service.
 
 ```bash
@@ -200,6 +219,25 @@ Before production dependence, add scheduled instance snapshots or an object-stor
 ```
 
 A later scale pass can move videos and voice files to object storage and comments to a managed database. That is not required for the first validated Olga workflow.
+
+## Remove the AWS test deployment
+
+AWS resources continue to exist and may continue to incur charges until they are removed.
+
+Preserve any required videos, comments, and voice notes first. Then run:
+
+```powershell
+pwsh .\deploy\aws-lightsail\remove-deployment.ps1 -ConfirmRemoval
+```
+
+The cleanup helper requests deletion of:
+
+- Lightsail distribution;
+- Lightsail instance and its disk;
+- static IP;
+- local `deployment-output.json`.
+
+After removal, verify the Lightsail console and AWS Billing dashboard.
 
 ## Custom domain later
 
