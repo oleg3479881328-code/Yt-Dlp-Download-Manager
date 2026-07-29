@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-
 from review_portal.aws_app import app
 
 
