@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from review_portal.aws_app import app
 
+from review_portal.aws_app import app
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AWS_DEPLOY_DIR = REPO_ROOT / "deploy" / "aws-lightsail"
