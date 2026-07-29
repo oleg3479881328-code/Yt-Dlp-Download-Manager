@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Видео на согласование</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="review-page">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">OLGA POLO / VIDEO REVIEW</p>
+      <h1>Видео на согласование</h1>
+      <p class="lead">Запускайте ролик прямо здесь. Под ним можно написать замечание, отметить конкретный момент или записать голос.</p>
+    </div>
+    <button id="refresh-videos" class="secondary-button" type="button">Обновить</button>
+  </header>
+
+  <main class="page-shell">
+    <section class="summary-row" aria-live="polite">
+      <strong id="video-count">Загрузка роликов…</strong>
+      <span id="secure-note"></span>
+    </section>
+    <section id="video-grid" class="video-grid" aria-live="polite"></section>
+  </main>
+
+  <template id="video-card-template">
+    <article class="video-card">
+      <div class="video-stage">
+        <video controls playsinline preload="metadata"></video>
+      </div>
+      <div class="video-heading">
+        <h2></h2>
+        <span class="video-number"></span>
+      </div>
+      <div class="feedback-panel">
+        <label class="comment-field">
+          <span>Замечание</span>
+          <textarea rows="3" placeholder="Напишите, что нужно изменить…"></textarea>
+        </label>
+        <div class="attachment-row" aria-live="polite"></div>
+        <div class="feedback-actions">
+          <button class="tool-button pin-button" type="button" aria-pressed="false">
+            <span class="tool-icon">📍</span>
+            <span class="tool-label">Отметить момент</span>
+          </button>
+          <button class="tool-button mic-button" type="button" aria-pressed="false">
+            <span class="tool-icon">🎙️</span>
+            <span class="tool-label">Записать голос</span>
+          </button>
+          <button class="primary-button send-button" type="button">Отправить</button>
+        </div>
+        <p class="card-status" role="status"></p>
+      </div>
+    </article>
+  </template>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
