@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
@@ -23,6 +23,8 @@ STATIC_DIR = PACKAGE_DIR / "static"
 SUPPORTED_VIDEO_SUFFIXES = {".mp4", ".mov", ".webm", ".m4v"}
 MAX_AUDIO_BYTES = 15 * 1024 * 1024
 COMMENT_STATUSES = {"new", "in_progress", "done", "dismissed"}
+TokenQuery = Annotated[str | None, Query()]
+TokenHeader = Annotated[str | None, Header(alias="X-Review-Token")]
 
 
 @dataclass(frozen=True)
@@ -33,7 +35,7 @@ class PortalSettings:
     admin_token: str
 
     @classmethod
-    def from_environment(cls) -> "PortalSettings":
+    def from_environment(cls) -> PortalSettings:
         media_dir = Path(
             os.getenv("REVIEW_PORTAL_MEDIA_DIR", str(REPO_ROOT / "review_portal_media"))
         ).expanduser()
@@ -289,8 +291,8 @@ def create_app(
 
     @application.get("/", response_class=HTMLResponse)
     async def review_page(
-        token: str | None = Query(default=None),
-        x_review_token: str | None = Header(default=None),
+        token: TokenQuery = None,
+        x_review_token: TokenHeader = None,
     ) -> HTMLResponse:
         _require_token(
             _extract_token(query_token=token, header_token=x_review_token),
@@ -300,8 +302,8 @@ def create_app(
 
     @application.get("/admin", response_class=HTMLResponse)
     async def admin_page(
-        token: str | None = Query(default=None),
-        x_review_token: str | None = Header(default=None),
+        token: TokenQuery = None,
+        x_review_token: TokenHeader = None,
     ) -> HTMLResponse:
         _require_token(
             _extract_token(query_token=token, header_token=x_review_token),
@@ -311,8 +313,8 @@ def create_app(
 
     @application.get("/api/review/videos")
     async def list_videos(
-        token: str | None = Query(default=None),
-        x_review_token: str | None = Header(default=None),
+        token: TokenQuery = None,
+        x_review_token: TokenHeader = None,
     ) -> dict[str, object]:
         _require_token(
             _extract_token(query_token=token, header_token=x_review_token),
@@ -326,8 +328,8 @@ def create_app(
     @application.get("/api/review/videos/{video_id}/stream")
     async def stream_video(
         video_id: str,
-        token: str | None = Query(default=None),
-        x_review_token: str | None = Header(default=None),
+        token: TokenQuery = None,
+        x_review_token: TokenHeader = None,
     ) -> FileResponse:
         provided = _extract_token(query_token=token, header_token=x_review_token)
         if settings.review_token and provided not in {settings.review_token, settings.admin_token}:
@@ -337,15 +339,14 @@ def create_app(
             raise HTTPException(status_code=404, detail="Video not found")
         return FileResponse(
             path=Path(str(video["path"])),
-            filename=str(video["filename"]),
             media_type="video/mp4" if str(video["filename"]).lower().endswith(".mp4") else None,
         )
 
     @application.post("/api/review/comments")
     async def create_comment(
         payload: CommentCreateRequest,
-        token: str | None = Query(default=None),
-        x_review_token: str | None = Header(default=None),
+        token: TokenQuery = None,
+        x_review_token: TokenHeader = None,
     ) -> dict[str, object]:
         _require_token(
             _extract_token(query_token=token, header_token=x_review_token),
@@ -392,8 +393,8 @@ def create_app(
     @application.get("/api/admin/comments")
     async def admin_comments(
         status: str | None = Query(default=None),
-        token: str | None = Query(default=None),
-        x_review_token: str | None = Header(default=None),
+        token: TokenQuery = None,
+        x_review_token: TokenHeader = None,
     ) -> dict[str, object]:
         _require_token(
             _extract_token(query_token=token, header_token=x_review_token),
@@ -408,8 +409,8 @@ def create_app(
     @application.get("/api/admin/comments/{comment_id}/audio")
     async def admin_comment_audio(
         comment_id: str,
-        token: str | None = Query(default=None),
-        x_review_token: str | None = Header(default=None),
+        token: TokenQuery = None,
+        x_review_token: TokenHeader = None,
     ) -> FileResponse:
         _require_token(
             _extract_token(query_token=token, header_token=x_review_token),
@@ -435,8 +436,8 @@ def create_app(
     async def update_comment_status(
         comment_id: str,
         payload: CommentStatusRequest,
-        token: str | None = Query(default=None),
-        x_review_token: str | None = Header(default=None),
+        token: TokenQuery = None,
+        x_review_token: TokenHeader = None,
     ) -> dict[str, object]:
         _require_token(
             _extract_token(query_token=token, header_token=x_review_token),
