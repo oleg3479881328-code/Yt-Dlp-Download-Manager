@@ -21,6 +21,42 @@ def test_context_menu_always_downloads_without_opening_full_page() -> None:
     assert 'source === "context-menu"' in source
 
 
+def test_context_menu_exposes_video_and_mp3_actions() -> None:
+    source = (REPO_ROOT / "chrome_extension" / "background.js").read_text(encoding="utf-8")
+
+    assert 'id: "download-video-with-ytdlp"' in source
+    assert 'title: "Скачать видео"' in source
+    assert 'id: "download-mp3-with-ytdlp"' in source
+    assert 'title: "Скачать MP3"' in source
+    assert '"download-video-with-ytdlp": "video"' in source
+    assert '"download-mp3-with-ytdlp": "audio"' in source
+    assert "handleContextAction(info, tab, mode)" in source
+
+
+def test_native_host_audio_mode_extracts_best_quality_mp3(tmp_path: Path) -> None:
+    yt_dlp = tmp_path / "yt-dlp.exe"
+    ffmpeg = tmp_path / "ffmpeg.exe"
+    yt_dlp.write_bytes(b"")
+    ffmpeg.write_bytes(b"")
+
+    command, output_dir = ytdlp_host.build_download_command(
+        {
+            "ytDlpPath": str(yt_dlp),
+            "ffmpegPath": str(ffmpeg),
+            "outputDirectory": str(tmp_path / "downloads"),
+            "mode": "audio",
+            "quality": "best",
+            "url": "https://example.com/watch?v=audio",
+        }
+    )
+
+    assert output_dir == tmp_path / "downloads"
+    assert "-x" in command
+    assert command[command.index("--audio-format") + 1] == "mp3"
+    assert command[command.index("--audio-quality") + 1] == "0"
+    assert "--merge-output-format" not in command
+
+
 def test_context_menu_url_extraction_rejects_blob_urls() -> None:
     source = (REPO_ROOT / "chrome_extension" / "background.js").read_text(encoding="utf-8")
     extractor = source.split("function extractUrl", maxsplit=1)[1].split("function notify", maxsplit=1)[0]
