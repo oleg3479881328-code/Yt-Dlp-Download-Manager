@@ -1,8 +1,11 @@
+const LEGACY_OUTPUT_DIRECTORY = "C:\\yt-dlp\\DOWNLOADS";
+const WINDOWS_DOWNLOADS_DIRECTORY = "C:\\Users\\oleg3\\Downloads";
+
 const DEFAULT_SETTINGS = {
   nativeHostName: "com.oleg.ytdlp",
   defaultMode: "video",
   quality: "best",
-  outputDirectory: "C:\\yt-dlp\\DOWNLOADS",
+  outputDirectory: WINDOWS_DOWNLOADS_DIRECTORY,
   ytDlpPath: "C:\\yt-dlp\\yt-dlp.exe",
   ffmpegPath: "C:\\yt-dlp\\ffmpeg.exe",
   autoUpdateYtDlp: true,
@@ -23,8 +26,13 @@ async function getSettings() {
 function createMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: "download-with-ytdlp",
-      title: "Скачать через yt-dlp",
+      id: "download-video-with-ytdlp",
+      title: "Скачать видео",
+      contexts: ["link", "video", "page"]
+    });
+    chrome.contextMenus.create({
+      id: "download-mp3-with-ytdlp",
+      title: "Скачать MP3",
       contexts: ["link", "video", "page"]
     });
   });
@@ -186,13 +194,13 @@ async function fetchStatuses(jobId = null) {
   return response;
 }
 
-async function handleContextAction(info, tab) {
+async function handleContextAction(info, tab, mode) {
   const url = extractUrl(info, tab);
   try {
     await queueDownload(
       url,
       "context-menu",
-      null,
+      mode,
       null,
       null,
       null,
@@ -207,14 +215,23 @@ async function handleContextAction(info, tab) {
 
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.local.get(DEFAULT_SETTINGS);
-  await chrome.storage.local.set({ ...DEFAULT_SETTINGS, ...current });
+  const migrated = { ...DEFAULT_SETTINGS, ...current };
+  if (!current.outputDirectory || current.outputDirectory === LEGACY_OUTPUT_DIRECTORY) {
+    migrated.outputDirectory = WINDOWS_DOWNLOADS_DIRECTORY;
+  }
+  await chrome.storage.local.set(migrated);
   createMenus();
 });
 
 chrome.runtime.onStartup.addListener(createMenus);
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "download-with-ytdlp") {
-    handleContextAction(info, tab);
+  const modeByMenuId = {
+    "download-video-with-ytdlp": "video",
+    "download-mp3-with-ytdlp": "audio"
+  };
+  const mode = modeByMenuId[info.menuItemId];
+  if (mode) {
+    handleContextAction(info, tab, mode);
   }
 });
 

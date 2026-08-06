@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "yt-dlp Quick Downloader",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "Standalone Chrome extension for quick yt-dlp downloads with mini and full modes.",
   "icons": {
     "16": "icons/notify-128.png",
