@@ -1,8 +1,11 @@
+const LEGACY_OUTPUT_DIRECTORY = "C:\\yt-dlp\\DOWNLOADS";
+const WINDOWS_DOWNLOADS_DIRECTORY = "C:\\Users\\oleg3\\Downloads";
+
 const DEFAULT_SETTINGS = {
   nativeHostName: "com.oleg.ytdlp",
   defaultMode: "video",
   quality: "best",
-  outputDirectory: "C:\\yt-dlp\\DOWNLOADS",
+  outputDirectory: WINDOWS_DOWNLOADS_DIRECTORY,
   ytDlpPath: "C:\\yt-dlp\\yt-dlp.exe",
   ffmpegPath: "C:\\yt-dlp\\ffmpeg.exe",
   autoUpdateYtDlp: true,
@@ -212,7 +215,11 @@ async function handleContextAction(info, tab, mode) {
 
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.local.get(DEFAULT_SETTINGS);
-  await chrome.storage.local.set({ ...DEFAULT_SETTINGS, ...current });
+  const migrated = { ...DEFAULT_SETTINGS, ...current };
+  if (!current.outputDirectory || current.outputDirectory === LEGACY_OUTPUT_DIRECTORY) {
+    migrated.outputDirectory = WINDOWS_DOWNLOADS_DIRECTORY;
+  }
+  await chrome.storage.local.set(migrated);
   createMenus();
 });
 
